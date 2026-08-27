@@ -66,11 +66,27 @@ describe('forgotPasswordSchema', () => {
 });
 
 describe('verifyEmailSchema', () => {
-  it('accepts exactly six digits', () => {
-    expect(verifyEmailSchema.safeParse({ code: '123456' }).success).toBe(true);
+  // M1 correction: the backend mints `secrets.token_urlsafe(48)`, not a
+  // six-digit code. The old rule would have rejected every real token.
+  const realShapedToken = 'x7Qv-3kZ_9abcDEFghijKLMnop012345678-_qrstuvWXYZ0123456789ab';
+
+  it('accepts a token of the shape the backend actually mints', () => {
+    expect(verifyEmailSchema.safeParse({ code: realShapedToken }).success).toBe(true);
   });
 
-  it.each(['12345', '1234567', 'abcdef', '12 456'])('rejects %p', (code) => {
-    expect(verifyEmailSchema.safeParse({ code }).success).toBe(false);
+  it('trims surrounding whitespace from a pasted token', () => {
+    const result = verifyEmailSchema.safeParse({ code: `  ${realShapedToken} ` });
+    expect(result.success && result.data.code).toBe(realShapedToken);
   });
+
+  it('rejects a six-digit code, which this backend never issues', () => {
+    expect(verifyEmailSchema.safeParse({ code: '123456' }).success).toBe(false);
+  });
+
+  it.each(['', 'corto', 'tiene espacios en medio aaaaaaaaaaaaaaaa', 'con/barra/aaaaaaaaaaaaaaaa'])(
+    'rejects %p',
+    (code) => {
+      expect(verifyEmailSchema.safeParse({ code }).success).toBe(false);
+    },
+  );
 });

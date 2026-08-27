@@ -6,6 +6,7 @@ import { View } from 'react-native';
 import { useAuth } from '@/auth/auth-provider';
 import { Button, Input, Text } from '@/design-system';
 import { AuthScreenShell } from '@/features/auth/auth-screen-shell';
+import { AuthUnavailableScreen } from '@/features/auth/auth-unavailable';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { useTheme } from '@/theme/theme-provider';
 import { hapticError, hapticSuccess } from '@/utils/haptics';
@@ -24,6 +25,7 @@ import { loginSchema, type LoginFormValues } from '@/validation/auth-schemas';
  * pretending otherwise.
  */
 export default function LoginScreen() {
+  const { policy } = useAuth();
   const theme = useTheme();
   const { signIn, isSubmitting } = useAuth();
 
@@ -37,12 +39,22 @@ export default function LoginScreen() {
     async (values) => {
       // The password is passed straight through and never stored, logged or put
       // into component state that outlives the submit.
-      await signIn(values);
+      // `identifier`, not `email`: the backend's USERNAME_FIELD is `username`
+      // and BR-001 has not settled which one the mobile contract accepts.
+      await signIn({ identifier: values.email, password: values.password });
       hapticSuccess();
       router.replace('/(tabs)');
     },
     () => hapticError(),
   );
+
+  // Placed AFTER every hook: an early return above them would change the
+  // hook order between renders. No auth mechanism in this build means no
+  // form — a field that cannot succeed teaches the user their password is
+  // wrong. See src/auth/auth-policy.ts.
+  if (policy.mode === 'unavailable') {
+    return <AuthUnavailableScreen />;
+  }
 
   return (
     <AuthScreenShell

@@ -27,7 +27,7 @@ Prioridad: **BR-001** y **BR-002** bloquean toda integración real.
 
 | ID | Requerimiento | Prioridad |
 |---|---|---|
-| BR-001 | Autenticación nativa **acotada a `/api/v1/`** | CRÍTICA |
+| BR-001 | Autenticación nativa **acotada a `/api/v1/`** | **PROPUESTA CRÍTICA** |
 | BR-002 | Selección de tenant validada server-side | CRÍTICA |
 | BR-003 | Exponer `fulfillment_status` | ALTA |
 | BR-004 | Paginación opt-in | MEDIA |
@@ -186,6 +186,23 @@ que hoy no existe y no tiene datos administrativos detrás.
   `BLACKLIST_AFTER_ROTATION`); Mobile las respeta.
 - Mobile **nunca** guardará la contraseña ni la registrará en logs.
 
+### Lo que Mobile necesita que Backend confirme (M1)
+
+M1 construyó el lifecycle completo contra estos supuestos. Cada uno necesita una
+respuesta antes de escribir el transporte:
+
+| # | Pregunta | Supuesto actual de Mobile |
+|---|---|---|
+| 1 | **Login request** — ¿`email` o `username`? | Verificado: `master` usa `username` (`TokenObtainPairSerializer` sobre `auth.User`). El formulario Mobile pide **email**. Mobile prefiere que `/api/v1/` acepte email. |
+| 2 | **Login response** — ¿incluye `user`? ¿incluye `role`? | `master` **no** devuelve `role` en el login; solo `/auth/me/` lo añade. Mobile prefiere recibirlo en el login para evitar un segundo round trip. |
+| 3 | **Formato de expiración** | Mobile asume `expires_in` en **segundos**. Se resuelve a instante absoluto al recibirlo. |
+| 4 | **Refresh rotation** — ¿la respuesta trae siempre un refresh nuevo? | Mobile **asume que sí** (`ROTATE_REFRESH_TOKENS`) y persiste el nuevo antes de instalar el access. |
+| 5 | **Logout / revocación** — ¿el refresh va en el body? ¿respuesta? | Mobile asume `POST` con el refresh en el body y trata el fallo como best-effort. |
+| 6 | **Tenant payload** — ¿el contrato entrega empresa(s) validadas? | Mobile tiene `activeCompany` / `availableCompanies` preparados y `null` mientras tanto. Ver BR-002/BR-006. |
+| 7 | **Error shapes** — ¿`{detail}` o `{campo: [...]}` ? | Mobile ya distingue ambos (`parseFieldErrors`). Necesita saber cuál usa cada caso de auth. |
+| 8 | **Rate limits** | `master` aplica `LoginThrottle` 5/min por IP. ¿Se reutiliza en `/api/v1/`? Mobile no reintenta un login automáticamente. |
+| 9 | **Verificación de correo** | Verificado: `AccountToken.make()` emite `secrets.token_urlsafe(48)`. ¿El flujo móvil será deep link? Mobile corrigió su validador, que exigía 6 dígitos. |
+
 **Tests backend sugeridos**
 
 - Login v1 devuelve tokens en el body y **no** setea cookies.
@@ -195,6 +212,9 @@ que hoy no existe y no tiene datos administrativos detrás.
 - Un Bearer inválido o expirado devuelve 401.
 - El login **web** sigue devolviendo cookies y sin tokens en el body.
 - Refresh rotado invalida el refresh anterior.
+- Un refresh **ya rotado** devuelve 401 y no 500 (Mobile lo trata como terminal).
+- El login v1 respeta el throttle y devuelve 429 con una forma de error estable.
+- Logout revoca el refresh y un segundo logout con el mismo token no explota.
 
 ---
 

@@ -5,6 +5,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { useAuth } from '@/auth/auth-provider';
 import { Button, Input } from '@/design-system';
 import { AuthScreenShell } from '@/features/auth/auth-screen-shell';
+import { AuthUnavailableScreen } from '@/features/auth/auth-unavailable';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { hapticError, hapticSuccess } from '@/utils/haptics';
 import { registerSchema, type RegisterFormValues } from '@/validation/auth-schemas';
@@ -19,6 +20,7 @@ import { registerSchema, type RegisterFormValues } from '@/validation/auth-schem
  * against a real server, so the screen stays honest about being unconnected.
  */
 export default function RegisterScreen() {
+  const { policy } = useAuth();
   const { register, isSubmitting } = useAuth();
 
   const { control, handleSubmit } = useForm<RegisterFormValues>({
@@ -41,6 +43,14 @@ export default function RegisterScreen() {
     },
     () => hapticError(),
   );
+
+  // Placed AFTER every hook: an early return above them would change the
+  // hook order between renders. No auth mechanism in this build means no
+  // form — a field that cannot succeed teaches the user their password is
+  // wrong. See src/auth/auth-policy.ts.
+  if (policy.mode === 'unavailable') {
+    return <AuthUnavailableScreen title="Registro temporalmente no disponible" message="Estamos preparando la conexión segura de esta aplicación con tu cuenta." />;
+  }
 
   return (
     <AuthScreenShell

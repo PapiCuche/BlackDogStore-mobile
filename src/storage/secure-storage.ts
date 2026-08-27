@@ -8,9 +8,13 @@ import { Platform } from 'react-native';
  * Preferences and other non-sensitive state go to `preferences-storage.ts`
  * instead — mixing the two is how tokens end up in AsyncStorage.
  *
- * Nothing here is used yet: mobile authentication is PENDIENTE (see
- * docs/MOBILE_AUTH.md). The wrapper exists so that when M1 lands there is one
- * audited place for token storage rather than a `SecureStore` call per feature.
+ * M1 — ONLY the refresh token is persisted here. The access token is
+ * memory-only (`src/auth/tokens/access-token-store.ts`); see the decision
+ * recorded there and in docs/MOBILE_AUTH.md.
+ *
+ * Callers should use `CredentialVault` rather than these primitives: it is the
+ * one place that knows which key holds what, and it converts native failures
+ * into `CredentialStorageError`.
  */
 
 /**
@@ -21,11 +25,18 @@ import { Platform } from 'react-native';
 export type SecureStorageKey = 'bds.auth.access_token' | 'bds.auth.refresh_token';
 
 export const secureStorageKeys = {
-  /** Mobile access token. Written only by the future M1 auth implementation. */
-  accessToken: 'bds.auth.access_token',
-  /** Mobile refresh token. See docs/MOBILE_AUTH.md before using this. */
+  /** The ONLY credential this app persists. */
   refreshToken: 'bds.auth.refresh_token',
 } as const satisfies Record<string, SecureStorageKey>;
+
+/**
+ * RETIRED in M1: the access token is never persisted.
+ *
+ * M0 reserved this key in anticipation. M1 decided the access token lives in
+ * memory only, so the key is kept solely so `clearSecureStorage()` can delete
+ * anything a pre-M1 build might have left behind. Nothing writes it.
+ */
+const RETIRED_ACCESS_TOKEN_KEY: SecureStorageKey = 'bds.auth.access_token';
 
 /**
  * Keychain/Keystore service name. Setting it explicitly keeps our entries
@@ -68,7 +79,16 @@ export async function deleteSecureItem(key: SecureStorageKey): Promise<void> {
   await SecureStore.deleteItemAsync(key, options);
 }
 
-/** Wipe every secret we own. Called on sign-out and on refresh failure. */
+/**
+ * Wipe every secret we own. Called on sign-out and when a refresh is rejected.
+ *
+ * Includes the retired access-token key so an upgrade from a build that had
+ * persisted one cannot leave it sitting in the Keychain forever.
+ */
 export async function clearSecureStorage(): Promise<void> {
-  await Promise.all(Object.values(secureStorageKeys).map((key) => deleteSecureItem(key)));
+  const keys: SecureStorageKey[] = [
+    ...Object.values(secureStorageKeys),
+    RETIRED_ACCESS_TOKEN_KEY,
+  ];
+  await Promise.all(keys.map((key) => deleteSecureItem(key)));
 }

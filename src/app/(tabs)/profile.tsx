@@ -52,8 +52,8 @@ export default function ProfileScreen() {
   const { session, signOut } = useAuth();
   const { preference, setPreference } = useAppTheme();
 
-  const customer = session?.customer ?? null;
-  const name = displayName(customer);
+  const profile = session?.user ?? null;
+  const name = displayName(profile);
 
   const openExternal = (url: string) => {
     void Linking.openURL(url).catch(() => undefined);
@@ -69,14 +69,14 @@ export default function ProfileScreen() {
           paddingBottom: theme.spacing.xl,
         }}
       >
-        <Avatar initials={initials(customer)} size="lg" />
+        <Avatar initials={initials(profile)} size="lg" />
         <View style={{ alignItems: 'center', gap: 2 }}>
           <Text variant="title2" accessibilityRole="header">
             {name ?? 'Invitado'}
           </Text>
-          {customer?.email ? (
+          {profile?.email ? (
             <Text variant="subhead" color="textSecondary">
-              {customer.email}
+              {profile.email}
             </Text>
           ) : null}
         </View>

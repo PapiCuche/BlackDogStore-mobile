@@ -4,7 +4,9 @@ import { Controller, useForm } from 'react-hook-form';
 import { View } from 'react-native';
 
 import { Button, Input, Text } from '@/design-system';
+import { useAuth } from '@/auth/auth-provider';
 import { AuthScreenShell } from '@/features/auth/auth-screen-shell';
+import { AuthUnavailableScreen } from '@/features/auth/auth-unavailable';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { useTheme } from '@/theme/theme-provider';
 import { hapticSuccess } from '@/utils/haptics';
@@ -18,6 +20,7 @@ import { verifyEmailSchema, type VerifyEmailFormValues } from '@/validation/auth
  * on a server setting the app cannot see today. BR-001 covers exposing it.
  */
 export default function VerifyEmailScreen() {
+  const { policy } = useAuth();
   const theme = useTheme();
 
   const { control, handleSubmit, formState } = useForm<VerifyEmailFormValues>({
@@ -31,10 +34,18 @@ export default function VerifyEmailScreen() {
     router.replace('/(tabs)');
   });
 
+  // Placed AFTER every hook: an early return above them would change the
+  // hook order between renders. No auth mechanism in this build means no
+  // form — a field that cannot succeed teaches the user their password is
+  // wrong. See src/auth/auth-policy.ts.
+  if (policy.mode === 'unavailable') {
+    return <AuthUnavailableScreen title="Verificación no disponible" message="Estamos preparando la conexión segura de esta aplicación con tu cuenta." />;
+  }
+
   return (
     <AuthScreenShell
       title="Verifica tu correo"
-      subtitle="Ingresa el código de 6 dígitos que enviamos a tu correo."
+      subtitle="Ingresa el código de verificación que enviamos a tu correo."
       showBrand={false}
       footer={
         <View style={{ alignItems: 'center', gap: theme.spacing.xs }}>
@@ -54,8 +65,8 @@ export default function VerifyEmailScreen() {
             onChangeText={field.onChange}
             onBlur={field.onBlur}
             error={fieldState.error?.message}
-            keyboardType="number-pad"
-            maxLength={6}
+            autoCapitalize="none"
+            autoCorrect={false}
             // Lets iOS offer the code straight from the Messages/Mail banner.
             textContentType="oneTimeCode"
             autoComplete="one-time-code"

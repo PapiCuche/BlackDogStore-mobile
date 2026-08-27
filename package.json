@@ -72,6 +72,9 @@
     ],
     "testMatch": [
       "<rootDir>/__tests__/**/*.test.{ts,tsx}"
-    ]
+    ],
+    "moduleNameMapper": {
+      "^@/assets/(.*)$": "<rootDir>/assets/$1"
+    }
   }
 }

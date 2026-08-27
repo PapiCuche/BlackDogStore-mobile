@@ -4,12 +4,14 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 
+import { authRuntimePolicy, type AuthRuntimePolicy } from './auth-policy';
 import type { AuthRepository } from './auth-repository';
-import { MockAuthRepository } from './mock-auth-repository';
+import { resolveAuthRepository } from './auth-repository-factory';
 import type { AuthSession, AuthStatus, RegistrationDetails, SignInCredentials } from './types';
 
 type AuthContextValue = {
@@ -17,6 +19,8 @@ type AuthContextValue = {
   session: AuthSession | null;
   /** True while a sign-in or registration request is in flight. */
   isSubmitting: boolean;
+  /** How this build authenticates. Drives the login UI. */
+  policy: AuthRuntimePolicy;
   signIn: (credentials: SignInCredentials) => Promise<void>;
   register: (details: RegistrationDetails) => Promise<void>;
   signOut: () => Promise<void>;
@@ -27,88 +31,146 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 /**
  * Session state for the whole app.
  *
- * The repository is injectable so tests — and, later, the real implementation —
- * can be swapped in without touching this component. Default is the mock, which
- * is the only implementation that exists in M0.
+ * M1 adds two things beyond M0's version:
+ *
+ *  1. THE REPOSITORY COMES FROM THE POLICY, not from a default parameter. When
+ *     the policy says `unavailable` there is no repository and the status is
+ *     `unavailable` — a release build cannot fake a login.
+ *
+ *  2. A SESSION EPOCH guards every async completion. Auth is full of races that
+ *     only appear under a slow network, and each one resurrects a session the
+ *     user did not ask for:
+ *       - sign-out lands while a sign-in is in flight;
+ *       - two sign-ins race and the SLOWER one wins;
+ *       - a refresh resolves after sign-out.
+ *     Every mutation bumps the epoch and every completion checks it. A stale
+ *     result is dropped instead of applied.
  */
 export function AuthProvider({
   children,
-  repository = defaultRepository,
+  repository,
+  policy = authRuntimePolicy,
 }: {
   children: ReactNode;
-  repository?: AuthRepository;
+  /** Injected by tests. Omit to let the policy decide. */
+  repository?: AuthRepository | null;
+  policy?: AuthRuntimePolicy;
 }) {
+  const resolvedRepository = useMemo(
+    () => (repository !== undefined ? repository : resolveAuthRepository(policy)),
+    [repository, policy],
+  );
+
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  /**
+   * Monotonic session generation.
+   *
+   * Read only inside callbacks and effects, never during render.
+   */
+  const epochRef = useRef(0);
+
+  /**
+   * The status the app acts on.
+   *
+   * DERIVED, not synced. With no repository the answer is `unavailable` by
+   * definition, so mirroring it into state through an effect would be a second
+   * source of truth that can lag by a render — and an extra render for a value
+   * that was already knowable.
+   */
+  const effectiveStatus: AuthStatus = resolvedRepository ? status : 'unavailable';
+
   useEffect(() => {
+    // Nothing to restore, and nothing to set: `effectiveStatus` already answers.
+    if (!resolvedRepository) return;
+
+    const startedAtEpoch = epochRef.current;
     let cancelled = false;
-    repository
+
+    resolvedRepository
       .restoreSession()
       .then((restored) => {
-        if (cancelled) return;
+        if (cancelled || startedAtEpoch !== epochRef.current) return;
         setSession(restored);
         setStatus(restored ? 'authenticated' : 'unauthenticated');
       })
       .catch(() => {
-        // A failed restore is not an error the user can act on — it means "you
-        // are signed out", which is exactly what we render.
-        if (cancelled) return;
+        // A failed restore is not something the user can act on — it means
+        // "you are signed out", which is exactly what is rendered.
+        if (cancelled || startedAtEpoch !== epochRef.current) return;
         setSession(null);
         setStatus('unauthenticated');
       });
+
     return () => {
       cancelled = true;
     };
-  }, [repository]);
+  }, [resolvedRepository]);
 
-  const signIn = useCallback(
-    async (credentials: SignInCredentials) => {
+  /** Start a new generation and return its id. Any older result is now stale. */
+  const beginTransition = useCallback(() => {
+    epochRef.current += 1;
+    return epochRef.current;
+  }, []);
+
+  const runAuthentication = useCallback(
+    async (operation: (repo: AuthRepository) => Promise<AuthSession>) => {
+      // Defensive: the UI hides the form when auth is unavailable, but a
+      // programmatic caller must not be able to talk itself into a session.
+      // `effectiveStatus` is already `unavailable`, so there is nothing to set.
+      if (!resolvedRepository) return;
+
+      const startedAtEpoch = beginTransition();
       setIsSubmitting(true);
       try {
-        const next = await repository.signIn(credentials);
+        const next = await operation(resolvedRepository);
+        // A newer sign-in — or a sign-out — happened while this was running.
+        // Applying this result would let the SLOWER request win.
+        if (startedAtEpoch !== epochRef.current) return;
         setSession(next);
         setStatus('authenticated');
       } finally {
-        setIsSubmitting(false);
+        if (startedAtEpoch === epochRef.current) setIsSubmitting(false);
       }
     },
-    [repository],
+    [resolvedRepository, beginTransition],
+  );
+
+  const signIn = useCallback(
+    (credentials: SignInCredentials) => runAuthentication((repo) => repo.signIn(credentials)),
+    [runAuthentication],
   );
 
   const register = useCallback(
-    async (details: RegistrationDetails) => {
-      setIsSubmitting(true);
-      try {
-        const next = await repository.register(details);
-        setSession(next);
-        setStatus('authenticated');
-      } finally {
-        setIsSubmitting(false);
-      }
-    },
-    [repository],
+    (details: RegistrationDetails) => runAuthentication((repo) => repo.register(details)),
+    [runAuthentication],
   );
 
   const signOut = useCallback(async () => {
-    // State is cleared FIRST. If the network call fails we still want the
-    // device to stop showing account data — a sign-out that silently does
-    // nothing because the request errored is a real security problem.
+    // ORDER IS DELIBERATE.
+    //
+    // The epoch is bumped and the UI is cleared BEFORE any network call. A
+    // sign-out that leaves the device showing account data because a request
+    // failed is a security problem, and the bump is what stops an in-flight
+    // sign-in or refresh from resurrecting the session afterwards.
+    beginTransition();
     setSession(null);
     setStatus('unauthenticated');
-    await repository.signOut().catch(() => undefined);
-  }, [repository]);
+    setIsSubmitting(false);
+
+    // Best-effort revocation. Its failure changes nothing locally.
+    await resolvedRepository?.signOut().catch(() => undefined);
+  }, [resolvedRepository, beginTransition]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, session, isSubmitting, signIn, register, signOut }),
-    [status, session, isSubmitting, signIn, register, signOut],
+    () => ({ status: effectiveStatus, session, isSubmitting, policy, signIn, register, signOut }),
+    [effectiveStatus, session, isSubmitting, policy, signIn, register, signOut],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;
 }
-
-const defaultRepository: AuthRepository = new MockAuthRepository();
 
 export function useAuth(): AuthContextValue {
   const context = use(AuthContext);

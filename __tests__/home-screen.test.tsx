@@ -29,7 +29,7 @@ beforeEach(() => {
  */
 function signedInAs(firstName: string): AuthRepository {
   const session: AuthSession = {
-    customer: {
+    user: {
       id: 1,
       username: firstName.toLowerCase(),
       email: `${firstName.toLowerCase()}@example.com`,
@@ -40,6 +40,7 @@ function signedInAs(firstName: string): AuthRepository {
     },
     mode: 'mock',
     expiresAt: null,
+    tenant: null,
   };
   return {
     restoreSession: async () => session,

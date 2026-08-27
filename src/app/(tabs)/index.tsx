@@ -48,7 +48,7 @@ export default function HomeScreen() {
   const repairsQuery = useRepairs();
   const ordersQuery = useOrders();
 
-  const name = displayName(session?.customer ?? null);
+  const name = displayName(session?.user ?? null);
   const activeRepair = findActiveRepair(repairsQuery.data ?? []);
   const recentOrder = ordersQuery.data?.[0] ?? null;
 
@@ -90,7 +90,7 @@ export default function HomeScreen() {
         </View>
 
         <Avatar
-          initials={initials(session?.customer ?? null)}
+          initials={initials(session?.user ?? null)}
           accessibilityLabel={name ? `Perfil de ${name}` : 'Perfil'}
         />
       </View>
