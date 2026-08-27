@@ -5,55 +5,131 @@
 **Autoridad final:** equipo Backend
 
 Todo lo que sigue es una **propuesta**. El equipo Mobile no ha modificado —
-ni modificará— nada en `PapiCuche/BlackDogStore-web`. Cada requerimiento nació
-de leer el código real del backend (`store/models.py`, `store/urls.py`,
-`store/views.py`, `store/tenancy.py`, `store/authentication.py`,
-`backend/settings.py`) en modo lectura, no de suposiciones.
+ni modificará— nada en `PapiCuche/BlackDogStore-web`.
 
-El equipo Backend decide si acepta, modifica o rechaza cada punto. Si un
-requerimiento se rechaza, Mobile ajusta su diseño, no el backend.
+## Base de verificación (corregida en M0.1)
 
-Prioridad: **BR-001** y **BR-002** bloquean toda integración real. Sin ellos la
-app no puede autenticarse ni ver un solo producto.
+M0 documentó estos requerimientos leyendo un **working tree local** del repo
+Web. Ese árbol estaba en `feat/tenant-aware-commerce` con cambios sin commitear,
+**no en `master`**. Parte del razonamiento original describía por tanto código
+en progreso.
+
+M0.1 re-verificó todo contra `origin/master` @ `2624d47`. Cada requerimiento
+indica ahora sobre qué se apoya:
+
+- `VERIFIED_STABLE_MASTER` — commiteado en `master`. Es contrato.
+- `OBSERVED_IN_PROGRESS` — visto en una rama/árbol del equipo Web. **No** es contrato.
+
+Ver `API_CONTRACT.md` para el detalle de qué es cada cosa.
+
+Prioridad: **BR-001** y **BR-002** bloquean toda integración real.
+
+| ID | Requerimiento | Prioridad |
+|---|---|---|
+| BR-001 | Autenticación nativa **acotada a `/api/v1/`** | CRÍTICA |
+| BR-002 | Selección de tenant validada server-side | CRÍTICA |
+| BR-003 | Exponer `fulfillment_status` | ALTA |
+| BR-004 | Paginación opt-in | MEDIA |
+| BR-005 | Dominio de reparaciones | ALTA |
+| BR-006 | Endpoint público de marca | MEDIA |
+| BR-007 | Superficie versionada `/api/v1/` | ALTA |
 
 ---
 
-## BR-001 — Contrato de autenticación nativo para Mobile
+## BR-007 — Superficie versionada `/api/v1/` para Mobile
 
-**Estado:** PROPUESTA · **Prioridad:** CRÍTICA · **Bloquea:** auth, pedidos, perfil
+**Estado:** PROPUESTA · **Prioridad:** ALTA · Marco de BR-001 y BR-002
 
 **Motivo**
 
-`store/authentication.py::CookieJWTAuthentication` lee el JWT desde la cookie
-HttpOnly `blackdog_access` y ejecuta `enforce_csrf(request)` en toda petición
-autenticada. `store/auth_views.py::LoginView` escribe los tokens con
-`_set_auth_cookies()` y **no** los devuelve en el body — algo deliberado y
-correcto para un navegador.
+Web y Mobile son dos clientes con necesidades distintas sobre el mismo dominio.
+El contrato actual `/api/` fue diseñado para el frontend Next.js: cookies
+HttpOnly, CSRF, arrays sin paginar, tenant implícito en el host. Modificarlo
+para que sirva también a Mobile significa cambiar un contrato del que ya depende
+producción.
+
+**Propuesta**
+
+Una superficie **aditiva**:
+
+```
+/api/      → contrato legacy actual. Web. NO SE TOCA.
+/api/v1/   → contrato estable para Mobile y futuros clientes.
+```
+
+Reglas que Mobile se compromete a respetar:
+
+- **No renombrar, mover ni modificar nada bajo `/api/`.** Ni las rutas, ni los
+  serializers, ni los permisos, ni la autenticación.
+- `/api/v1/` puede reutilizar los mismos modelos y servicios; lo que cambia es
+  la capa de exposición.
+- Mobile consume **solo** `/api/v1/` una vez exista. El uso actual del catálogo
+  legacy es provisional y así está marcado en `INTEGRATION_STATUS.md`.
+
+**No implementar en Django todavía.** Es una propuesta de forma, para que
+BR-001 y BR-002 tengan dónde vivir sin tocar lo existente.
+
+**Tests backend sugeridos**
+
+- Toda la suite actual de `/api/` sigue verde sin cambios (regresión del web).
+- `/api/v1/` responde de forma independiente de `/api/`.
+
+---
+
+## BR-001 — Contrato de autenticación nativo, acotado a `/api/v1/`
+
+**Estado:** PROPUESTA · **Prioridad:** CRÍTICA · **Bloquea:** auth, pedidos, perfil
+**Base:** `VERIFIED_STABLE_MASTER`
+
+**Motivo**
+
+En `master`, `store/authentication.py::CookieJWTAuthentication` lee el JWT desde
+la cookie HttpOnly `blackdog_access` y ejecuta `enforce_csrf(request)` en toda
+petición autenticada. `store/auth_views.py::LoginView` escribe los tokens con
+`_set_auth_cookies()` y **no** los devuelve en el body — deliberado y correcto
+para un navegador.
 
 Un cliente React Native no puede consumir ese contrato:
 
 - No tiene acceso programático fiable al frasco de cookies del sistema.
 - `CSRF_COOKIE_HTTPONLY = False` permite que **JavaScript de una página** lea
   `csrftoken`; una app nativa no tiene esa página.
-- La protección CSRF existe contra un vector — envío automático de cookies por
-  el navegador entre orígenes — que en una app nativa no existe.
+- El vector que CSRF mitiga —el navegador adjuntando cookies solo entre
+  orígenes— no existe en una app nativa.
 
 **Lo que Mobile NO pide**
 
-- No pedimos que `/api/auth/login/` devuelva los JWT en el body. Eso debilitaría
-  el contrato web existente.
-- No pedimos mover tokens web a `localStorage`.
-- No pedimos desactivar CSRF en ninguna ruta existente.
+- ❌ Que `/api/auth/login/` devuelva los JWT en el body.
+- ❌ Mover tokens web a `localStorage`.
+- ❌ Desactivar CSRF en ninguna ruta existente.
+- ❌ **Añadir autenticación Bearer a `DEFAULT_AUTHENTICATION_CLASSES`.**
 
-**Propuesta: un endpoint paralelo, separado del web**
+### Corrección de M0.1: nada de Bearer global
 
-| | |
-|---|---|
-| Endpoint | `POST /api/auth/mobile/login/` |
-| Permisos | `AllowAny` |
-| Throttle | reutilizar `LoginThrottle` (5/min) |
+La versión anterior de BR-001 proponía añadir una clase Bearer a
+`REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES`, "junto a"
+`CookieJWTAuthentication`. **Mobile retira esa propuesta.**
 
-Request:
+Motivo: `DEFAULT_AUTHENTICATION_CLASSES` aplica a **todas** las vistas del
+proyecto, incluidas las ~30 rutas `/api/admin/*` (usuarios, roles, inventario,
+notas de venta, empresas) y las `/api/me/*`. Añadir ahí un mecanismo Bearer
+significaría que cada una de esas vistas acepta de golde una vía de
+autenticación nueva, **sin CSRF**, que hoy no acepta. Eso es una ampliación de
+superficie de ataque que Mobile no necesita y que nadie pidió: un fallo en la
+validación del token pasaría a ser explotable contra la administración, no solo
+contra el catálogo.
+
+### Propuesta acotada
+
+**Endpoints nuevos, bajo `/api/v1/` (BR-007):**
+
+| Method | Endpoint | Permisos | Throttle |
+|---|---|---|---|
+| POST | `/api/v1/auth/login/` | `AllowAny` | reutilizar `LoginThrottle` (5/min) |
+| POST | `/api/v1/auth/refresh/` | `AllowAny` | — |
+| POST | `/api/v1/auth/logout/` | `IsAuthenticated` | — |
+
+Request de login:
 
 ```json
 { "email": "cliente@example.com", "password": "..." }
@@ -70,141 +146,192 @@ Response `200`:
 }
 ```
 
-Endpoints hermanos: `POST /api/auth/mobile/refresh/` (refresh en el body,
-respeta `ROTATE_REFRESH_TOKENS`) y `POST /api/auth/mobile/logout/` (blacklist).
-
 **Autenticación de las peticiones**
 
-Una clase DRF adicional que lea `Authorization: Bearer <token>` **sin CSRF**,
-añadida a `DEFAULT_AUTHENTICATION_CLASSES` **junto a** `CookieJWTAuthentication`,
-no en su lugar. Las dos conviven: web sigue por cookie, Mobile por header.
+Una clase DRF que lea `Authorization: Bearer <token>` sin CSRF, declarada
+**por vista**, y **solo** en las vistas de `/api/v1/`:
+
+```python
+class MobileTokenAuthentication(BaseAuthentication):
+    ...
+
+# En cada vista de /api/v1/, nunca en settings.DEFAULT_AUTHENTICATION_CLASSES
+class V1OrderViewSet(viewsets.ReadOnlyModelViewSet):
+    authentication_classes = [MobileTokenAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+```
+
+**Se mantienen intactos:**
+
+- `/api/auth/login/`, `/api/auth/refresh/`, `/api/auth/logout/` y el resto de `/api/auth/*`
+- `CookieJWTAuthentication` como única clase por defecto
+- CSRF en todo el contrato existente
+- Todo `/api/admin/*`
+- El frontend Next.js
+
+**Por qué esto minimiza el riesgo de regresión**
+
+El alcance del cambio es exactamente el conjunto de vistas nuevas. Ninguna vista
+existente cambia de clase de autenticación, de permisos ni de comportamiento, y
+por tanto ninguna suite existente puede romperse por este requerimiento. Si la
+clase Bearer resultara tener un fallo, su radio de impacto sería `/api/v1/` —
+que hoy no existe y no tiene datos administrativos detrás.
 
 **Seguridad**
 
-- Es imprescindible que la clase Bearer **no** se aplique a las vistas de
-  administración por accidente: si se añade globalmente, revisar que
-  `store/admin_views.py` y `store/access_views.py` sigan exigiendo lo mismo.
 - `SIMPLE_JWT.ACCESS_TOKEN_LIFETIME` de 30 min es corto para móvil; Mobile
   almacenará el refresh en Keychain/Keystore (`expo-secure-store`) y renovará.
-- Mobile **nunca** guardará la contraseña, ni la registrará en logs.
+- Rotación + blacklist ya están activadas (`ROTATE_REFRESH_TOKENS`,
+  `BLACKLIST_AFTER_ROTATION`); Mobile las respeta.
+- Mobile **nunca** guardará la contraseña ni la registrará en logs.
 
 **Tests backend sugeridos**
 
-- Login móvil devuelve tokens en el body y **no** setea cookies.
-- Un Bearer válido autentica sin cabecera CSRF.
-- Un Bearer inválido/expirado devuelve 401.
-- El login **web** sigue devolviendo cookies y **sigue sin** exponer tokens en el body.
-- Refresh rotado invalida el refresh anterior (blacklist).
+- Login v1 devuelve tokens en el body y **no** setea cookies.
+- Un Bearer válido autentica en `/api/v1/` sin cabecera CSRF.
+- Un Bearer válido **NO** autentica en `/api/admin/*` ni en `/api/auth/me/`
+  (la prueba que demuestra el acotamiento).
+- Un Bearer inválido o expirado devuelve 401.
+- El login **web** sigue devolviendo cookies y sin tokens en el body.
+- Refresh rotado invalida el refresh anterior.
 
 ---
 
-## BR-002 — Selector de tenant para clientes sin dominio propio
+## BR-002 — Selección de tenant validada en el servidor
 
 **Estado:** PROPUESTA · **Prioridad:** CRÍTICA · **Bloquea:** catálogo
 
-**Motivo**
+**Motivo — corregido en M0.1**
 
-`store/tenancy.py::resolve_storefront_company` resuelve la empresa pública así:
+Este requerimiento sigue siendo necesario, pero por un motivo **distinto** al
+documentado en M0, porque M0 describía código en progreso.
 
-1. `resolve_company_from_host(request.get_host())` — subdominio → `Company.slug`.
-2. `settings.DEFAULT_STOREFRONT_COMPANY_SLUG`.
-3. Solo en `DEBUG`, si existe exactamente **una** empresa activa.
+**En `master` (`VERIFIED_STABLE_MASTER`):** el catálogo público **no está
+tenantizado en absoluto**. `ProductViewSet.get_queryset` es
+`Product.objects.filter(is_active=True)` y `CategoryViewSet` es
+`Category.objects.all()`. Un cliente móvil recibiría **todos los productos de la
+instalación**, mezclando empresas. Para el piloto de una sola tienda funciona;
+para un SaaS no.
 
-`resolve_company_from_host` **descarta explícitamente** los subdominios
-`www`, `api`, `admin` y `app`. Una app móvil que llame a `api.blackdogstore.pe`
-cae en ese descarte, ninguna regla posterior aplica en producción, y
-`storefront_products()` devuelve `Product.objects.none()`.
+**En el árbol observado (`OBSERVED_IN_PROGRESS`):** el equipo Web está añadiendo
+`Product.company` y `resolve_storefront_company`, que resuelve la empresa por
+**Host** y descarta los subdominios `www`, `api`, `admin` y `app`. Si eso llega
+tal cual, un cliente móvil que llame a `api.<dominio>` pasaría a recibir
+**catálogo vacío**.
 
-Consecuencia concreta: **el catálogo se ve vacío en la app**, y el backend está
-comportándose correctamente según su propio diseño. Esto no es un bug del
-backend; es que el contrato asume un navegador con dominio de tenant.
+Los dos extremos son inservibles para Mobile. En ambos casos hace falta lo
+mismo: **una forma explícita de decir de qué empresa es este cliente, validada
+en el servidor.**
 
-**Propuesta**
+### La regla, y no es negociable
 
-Aceptar una cabecera `X-Company-Slug` **únicamente en el flujo público de
-storefront**, después del host y antes del `DEFAULT_STOREFRONT_COMPANY_SLUG`:
+> **Un selector enviado por Mobile NO es autoridad.**
 
-```
-X-Company-Slug: blackdog
-```
+El propio `store/tenancy.py` ya lo documenta para el flujo de staff: el input
+del cliente es *dato a validar*, nunca la respuesta a "¿qué empresa es esta?".
+Mobile se adhiere a esa regla sin excepción.
 
-Reglas que Mobile propone respetar sin excepción:
+El mecanismo concreto es decisión del equipo Backend. Cualquiera sirve:
 
-- El valor se **valida** contra `Company.objects.filter(slug=..., is_active=True)`;
-  si no resuelve, se devuelve catálogo vacío, nunca el de otra empresa.
-- Se usa **solo** para el storefront público (`ProductViewSet`, `CategoryViewSet`).
-  **Jamás** para resolver el tenant de una petición autenticada de staff:
-  ahí sigue mandando `resolve_company_for_user`, que parte de las `Membership`
-  del propio usuario.
-- No amplía permisos. Es un selector de *qué catálogo público mostrar*, no una
-  credencial.
+- una cabecera (`X-Company-Slug`)
+- un segmento de ruta (`/api/v1/storefront/<slug>/products/`)
+- un query param (`?company=<slug>`)
+- un endpoint dedicado
 
-Esto es consistente con la regla que el propio `tenancy.py` documenta: el input
-del cliente se trata como *dato a validar*, nunca como la respuesta a "¿qué
-empresa es esta?".
+Mobile **no** tiene preferencia y **no** implementará ninguno hasta que Backend
+elija. En M0.1 se **retiró** del cliente HTTP la cabecera `X-Company-Slug` que
+M0 enviaba en todas las peticiones, precisamente porque anticipaba un contrato
+inexistente.
 
-**Alternativa aceptable para Mobile:** exponer un endpoint público
-`GET /api/storefront/?slug=<slug>` que devuelva el catálogo de un tenant
-explícito. Cualquiera de las dos sirve.
+### Superficie PÚBLICA (catálogo, marca)
+
+Seleccionar una `Company` **activa** es aceptable, con estas garantías:
+
+- El valor se **valida** contra `Company.objects.filter(slug=..., is_active=True)`.
+- Si no resuelve → catálogo **vacío**, nunca el de otra empresa. El fallo seguro
+  es no mostrar nada.
+- No amplía permisos. Es "qué escaparate mostrar", no una credencial.
+
+### Superficie PRIVADA (pedidos, reparaciones, cotizaciones, garantías, perfil)
+
+Aquí el selector del cliente **nunca** basta. El tenant debe validarse siempre
+contra **identidad, propiedad y permisos** en el servidor:
+
+- El `queryset` nace filtrado por el usuario autenticado
+  (`filter(user=request.user)`), no se filtra después.
+- Si el usuario nombra una empresa, se valida contra sus propias `Membership`
+  activas — exactamente lo que `resolve_company_for_user` ya hace.
+- Un recurso que no pertenece al solicitante devuelve **404**, no 403: distinguir
+  "no existe" de "no es tuyo" filtra la existencia de datos ajenos.
+- Un cliente sin membresía en la empresa solicitada obtiene un queryset **vacío**,
+  nunca el sin filtrar.
+
+Dicho de otro modo: el selector puede elegir **entre** lo que el usuario ya
+puede ver. Nunca puede ampliar lo que puede ver.
 
 **Tests backend sugeridos**
 
-- `X-Company-Slug` de una empresa activa devuelve su catálogo.
+- Un slug de empresa activa devuelve su catálogo público.
 - Un slug inexistente o de empresa inactiva devuelve lista vacía, no 500.
-- La cabecera **no** cambia el tenant en ningún endpoint `admin/*` ni `me/*`.
-- Un host con subdominio de tenant sigue teniendo prioridad sobre la cabecera.
+- El selector **no** cambia el tenant en ningún endpoint `admin/*` ni `me/*`.
+- Un usuario que envía el slug de otra empresa **no** ve pedidos ni reparaciones
+  de esa empresa.
+- Un recurso privado ajeno devuelve 404.
+- Un host con subdominio de tenant sigue teniendo prioridad sobre el selector.
 
 ---
 
 ## BR-003 — Exponer `fulfillment_status` en `OrderSerializer`
 
 **Estado:** PROPUESTA · **Prioridad:** ALTA · **Bloquea:** pedidos
+**Base:** `VERIFIED_STABLE_MASTER`
 
 **Motivo**
 
 `Order` tiene dos campos independientes: `status` (pago) y `fulfillment_status`
-(operativo). `OrderSerializer.fields` incluye `status` pero **no**
-`fulfillment_status`, así que `GET /api/orders/` no permite saber si un pedido
-pagado está `preparing`, `shipped` o `delivered`.
+(operativo). Ambos existen en el modelo **en `master`**. Pero
+`OrderSerializer.fields` incluye `status` y **no** `fulfillment_status`, así que
+`GET /api/orders/` no permite saber si un pedido pagado está `preparing`,
+`shipped` o `delivered`.
 
-La app muestra ambos estados por separado (nunca fusionados). Hoy, sin el campo,
-renderiza "Sin información" en lugar de adivinar `pending`.
+La app muestra ambos estados por separado y nunca los fusiona. Hoy, sin el
+campo, renderiza "Sin información" en lugar de adivinar `pending`.
 
 **Propuesta**
 
 Añadir `fulfillment_status` a `OrderSerializer.fields` y a `read_only_fields`.
-Es un campo que el cliente ya puede ver en el correo de confirmación; no expone
-nada nuevo.
+El cliente ya lo ve en el correo de confirmación; no expone nada nuevo.
 
-Opcionalmente, `delivery_method` y `receipt_type`, que ya existen en el modelo y
+Opcionalmente `delivery_method` y `receipt_type`, que ya existen en el modelo y
 son datos del propio pedido del cliente.
 
 **Tests backend sugeridos**
 
 - `GET /api/orders/` incluye `fulfillment_status` para el dueño del pedido.
 - El campo es de solo lectura: un PATCH no lo modifica.
-- Un usuario no puede ver pedidos de otro (regresión de `OrderViewSet.get_queryset`).
+- Un usuario no puede ver pedidos de otro.
 
 ---
 
-## BR-004 — Paginación en el catálogo público
+## BR-004 — Paginación opt-in en el catálogo público
 
-**Estado:** PROPUESTA · **Prioridad:** MEDIA
+**Estado:** PROPUESTA · **Prioridad:** MEDIA · **Base:** `VERIFIED_STABLE_MASTER`
 
 **Motivo**
 
-`REST_FRAMEWORK` desactiva la paginación global con el comentario
-"frontend expects raw arrays". Con seis productos no pasa nada; con un catálogo
-real, la app descarga todo el inventario en cada apertura de la pestaña Tienda —
-en datos móviles y sin scroll infinito posible.
+`REST_FRAMEWORK` desactiva la paginación global con el comentario "frontend
+expects raw arrays". Con seis productos no pasa nada; con un catálogo real, la
+app descarga todo el inventario en cada apertura de la pestaña Tienda — en datos
+móviles y sin scroll infinito posible.
 
 **Propuesta**
 
-Paginación **opcional y opt-in**, para no romper el frontend Next.js actual:
+Paginación **opcional y opt-in**, para no romper el frontend Next.js:
 `?page=1&page_size=20` devuelve `{count, next, previous, results}`; sin el
-parámetro, se sigue devolviendo el array plano de siempre.
+parámetro, se sigue devolviendo el array plano.
 
-Mobile adaptará su mapeador para aceptar ambas formas.
+Si BR-007 avanza, `/api/v1/` puede pagina por defecto y `/api/` quedarse como
+está — que es más limpio que un flag.
 
 **Tests backend sugeridos**
 
@@ -217,33 +344,31 @@ Mobile adaptará su mapeador para aceptar ambas formas.
 ## BR-005 — Dominio de reparaciones (servicio técnico)
 
 **Estado:** PROPUESTA · **Prioridad:** ALTA · **Bloquea:** reparaciones
+**Base:** `VERIFIED_STABLE_MASTER` (verificado también en el árbol en progreso)
 
 **Motivo**
 
 **No existe ningún modelo de reparación en el backend.** Verificado leyendo
-todas las clases de `store/models.py`: `Category`, `Product`, `Coupon`, `Order`,
-`OrderItem`, `CartItem`, `Review`, `UserProfile`, `AdminAuditLog`,
-`AccountToken`, `StockMovement`, `SalesNote`, `Company`, `Branch`, `Membership`,
-`CompanyArea`, `CompanyRole`, `MembershipRoleAssignment`. Ninguna es una
-reparación.
+todas las clases de `store/models.py` en `master`: `Category`, `Product`,
+`Coupon`, `Order`, `OrderItem`, `CartItem`, `Review`, `UserProfile`,
+`AdminAuditLog`, `AccountToken`, `StockMovement`, `SalesNote`, `Company`,
+`Branch`, `Membership`, `CompanyArea`, `CompanyRole`,
+`MembershipRoleAssignment`. Ninguna es una reparación.
 
 Sí existen los permisos: `UserProfile.ROLE_TECHNICIAN` y la capacidad
-`service.manage` en `store/capabilities.py`. Es decir, hay autorización para una
-funcionalidad que aún no está construida.
-
-Mientras tanto, toda la pestaña Reparaciones de la app corre sobre fixtures y lo
-declara en pantalla.
+`service.manage` en `store/capabilities.py`. Hay autorización para una
+funcionalidad que no está construida.
 
 **Propuesta de modelo** (Mobile propone, Backend decide)
 
-`RepairOrder`, propiedad de una `Company` (como `Product` desde la Fase 2B):
+`RepairOrder`, propiedad de una `Company`:
 
 | Campo | Tipo | Nota |
 |---|---|---|
 | `company` | FK Company, PROTECT | tenant, obligatorio |
 | `branch` | FK Branch, null | sucursal que recibe |
 | `customer` | FK User, null | null para cliente sin cuenta |
-| `code` | CharField unique per company | "REP-1042" |
+| `code` | CharField, único **por empresa** | "REP-1042" |
 | `device_name` | CharField | 'MacBook Pro 14"' |
 | `device_kind` | CharField | "Mac", "iPhone"… no enum: se atiende lo que llegue |
 | `serial_or_imei` | CharField blank | **dato sensible**, ver seguridad |
@@ -265,24 +390,25 @@ cancelled  (desde cualquier etapa; no es un paso de la secuencia)
 `created_at`. La app construye el timeline con estos eventos y **muestra también
 las etapas futuras**, porque el cliente quiere saber cuánto falta.
 
-**Endpoints propuestos**
+**Endpoints propuestos** (bajo `/api/v1/`, por BR-007)
 
 | Method | Endpoint | Permisos |
 |---|---|---|
-| GET | `/api/repairs/` | `IsAuthenticated`; devuelve solo las del propio usuario |
-| GET | `/api/repairs/{id}/` | `IsAuthenticated` + dueño, o staff con `service.manage` |
-| GET | `/api/admin/repairs/` | capacidad `service.manage` en la empresa |
-| PATCH | `/api/admin/repairs/{id}/status/` | capacidad `service.manage`; crea un `RepairEvent` |
+| GET | `/api/v1/repairs/` | `IsAuthenticated`; solo las del propio usuario |
+| GET | `/api/v1/repairs/{id}/` | dueño, o staff con `service.manage` |
+| GET | `/api/v1/admin/repairs/` | capacidad `service.manage` en la empresa |
+| PATCH | `/api/v1/admin/repairs/{id}/status/` | `service.manage`; crea un `RepairEvent` |
 
 **Seguridad**
 
 - Un cliente solo ve **sus** reparaciones. El `queryset` debe nacer filtrado por
   `customer=request.user`, no filtrarse después — el mismo criterio que
-  `tenancy.py` ya aplica al catálogo.
+  `tenancy.py` ya aplica.
+- Una reparación ajena devuelve **404**, no 403.
 - `serial_or_imei` identifica un equipo de forma única y es útil para un robo:
   **no** debería serializarse completo hacia el cliente. Mobile propone
   devolverlo enmascarado (`****1234`) o no devolverlo.
-- El endpoint de cambio de estado debe quedar en `AdminAuditLog`.
+- El cambio de estado debe quedar en `AdminAuditLog`.
 
 **Tests backend sugeridos**
 
@@ -296,25 +422,27 @@ las etapas futuras**, porque el cliente quiere saber cuánto falta.
 
 ## BR-006 — Endpoint público de marca por empresa
 
-**Estado:** PROPUESTA · **Prioridad:** MEDIA
+**Estado:** PROPUESTA · **Prioridad:** MEDIA · **Base:** `VERIFIED_STABLE_MASTER`
 
 **Motivo**
 
-`Company` existe (`id`, `name`, `legal_name`, `tax_id`, `slug`, `is_active`) pero
-no tiene campos de marca, y `CompanySerializer` solo se expone en rutas
-`admin/*`. La app ya está construida sobre una abstracción `CompanyBrand`, con
-los datos del piloto como fixture; sin backend, cada tenant necesitaría un
-build distinto con sus datos incrustados.
+`Company` existe en `master` (`id`, `name`, `legal_name`, `tax_id`, `slug`,
+`is_active`) pero no tiene campos de marca, y `CompanySerializer` solo se expone
+en rutas `admin/*`.
+
+Mobile ya está construida sobre una abstracción `CompanyBrand`. Desde M0.1, un
+build que **no** es el piloto **no recibe branding en absoluto** — no hereda el
+de Black Dog Store, porque eso sería mostrar la identidad de un cliente dentro
+de la app de otro. Sin este endpoint, cada tenant necesitaría un build distinto
+con sus datos incrustados.
 
 **Propuesta**
 
 | | |
 |---|---|
-| Endpoint | `GET /api/storefront/brand/` |
+| Endpoint | `GET /api/v1/storefront/brand/` |
 | Permisos | `AllowAny` |
 | Tenant | por host, o por el selector de BR-002 |
-
-Response `200`:
 
 ```json
 {
@@ -334,8 +462,8 @@ Response `200`:
 
 **Seguridad**
 
-Solo datos **comerciales públicos**. Nunca `tax_id`, `legal_name`, ni ningún
-dato de facturación: eso ya está — correctamente — detrás de `admin/*`.
+Solo datos **comerciales públicos**. Nunca `tax_id` ni `legal_name`: eso ya está
+—correctamente— detrás de `admin/*`.
 
 **Tests backend sugeridos**
 
@@ -346,9 +474,6 @@ dato de facturación: eso ya está — correctamente — detrás de `admin/*`.
 ---
 
 ## Notas de entorno (no requieren cambio de código)
-
-Estas no son propuestas de código, solo cosas que el equipo Backend debe saber
-para el desarrollo local:
 
 - **`ALLOWED_HOSTS`**: para probar contra un Django local desde el simulador o
   un dispositivo, el host de la Mac debe estar permitido. En `DEBUG` el default

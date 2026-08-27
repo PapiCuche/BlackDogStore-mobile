@@ -34,9 +34,10 @@ export type ScreenProps = {
  * inconsistent forever:
  *
  *  1. SAFE AREA. Only the TOP and the horizontal edges are consumed here. The
- *     bottom is left to the tab bar, which is a native `UITabBar` and already
- *     insets for the home indicator — adding `insets.bottom` on top of it
- *     produces a visible dead band above the tab bar on every notched iPhone.
+ *     bottom belongs to the tab bar: Expo Router's tabs navigator sits below
+ *     the scene and applies the home-indicator inset itself, so the scene
+ *     already ends above it. Adding `insets.bottom` here as well would produce
+ *     a visible dead band above the tab bar on every notched iPhone.
  *  2. BACKGROUND. Painted from tokens so a theme switch cannot leave a white
  *     gutter behind a dark page.
  *  3. KEYBOARD. `padding` on iOS and `height` on Android is the pairing that

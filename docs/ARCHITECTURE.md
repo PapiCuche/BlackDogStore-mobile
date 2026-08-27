@@ -90,14 +90,74 @@ Expo Router, file-based, con la raíz en `src/app`.
 - **Raíz:** `Stack` sin header. Reparte el tema resuelto al nivel **nativo**
   (header, fondo del contenedor, barra de estado). Sin eso, un push en modo
   oscuro muestra un destello blanco: JS pinta oscuro mientras UIKit sigue claro.
-- **`(tabs)`:** `NativeTabs` (`expo-router/unstable-native-tabs`) — `UITabBar`
-  real en iOS, bottom navigation de Material en Android. Trae gratis el inset
-  del home indicator, `minimizeBehavior` en iOS 26, scroll-to-top al retocar la
-  pestaña, y el ripple/back de Android.
+- **`(tabs)`:** navegador de tabs **estable** de Expo Router
+  (`expo-router/js-tabs`). Ver DEC-MOBILE-001 más abajo.
 - **Detalles:** rutas hermanas de `(tabs)`, con header nativo, para que el gesto
   de retroceso y el título los gestione el sistema.
 - **Iconos:** SF Symbols en iOS, Material Symbols en Android, desde una sola
   declaración en `src/design-system/icon.tsx`.
+
+### DEC-MOBILE-001 — Stable tab navigation over alpha native tabs
+
+**Fecha:** 2026-08-27 (M0.1) · **Estado:** ACEPTADA · **Reemplaza:** la elección de M0
+
+**Contexto**
+
+M0 construyó el tab bar principal sobre
+`expo-router/unstable-native-tabs`, que renderiza un `UITabBar` real en iOS y un
+bottom navigation de Material en Android.
+
+**Problema**
+
+1. La API sigue bajo el namespace `unstable` y la guía oficial de Expo la
+   clasifica como **alpha**. Su forma puede cambiar entre versiones menores del
+   SDK.
+2. Su prop `hidden` **remonta el navigator y reinicia el estado de navegación**
+   (documentado en los propios tipos del paquete).
+
+El segundo punto choca de frente con el modelo SaaS: las pestañas se derivan de
+`enabledFeatures` del tenant, un valor que puede resolverse un instante después
+del arranque. Con `hidden`, ese cambio reiniciaría toda la pila de navegación
+del usuario.
+
+Una API alpha combinada con pestañas dinámicas por tenant no es una fundación.
+
+**Decisión**
+
+Migrar la navegación principal al navegador de tabs **estable y público** de
+Expo Router: `import { Tabs } from 'expo-router/js-tabs'`.
+
+- Es un entry point de **Expo Router**, no un import directo de
+  `@react-navigation/*` — SDK 56+ prohíbe lo segundo en código de aplicación.
+- El mismo `Tabs` se re-exporta desde la raíz `expo-router`, pero marcado
+  `@deprecated` en favor de esta ruta; usamos la no deprecada.
+- El feature-gating por tenant usa **`href: null`**, que oculta la pestaña de la
+  barra y bloquea la navegación hacia ella **sin** tocar la lista de screens del
+  navigator. Alternar una pestaña ya no cuesta estado.
+
+**Consecuencias**
+
+Se pierde: el `UITabBar` nativo, el minimize-on-scroll de iOS 26, y el
+scroll-to-top nativo al retocar la pestaña.
+
+Se gana: una API que seguirá existiendo en el próximo SDK, y visibilidad de
+pestañas que no reinicia la app.
+
+El diseño sigue siendo limpio y con tokens: colores, tipografía y hairline del
+tab bar salen del theme, y los iconos siguen siendo SF Symbols en iOS y Material
+Symbols en Android.
+
+**Reevaluación**
+
+Native Tabs merece volver a mirarse **en cuanto Expo retire el prefijo
+`unstable`**. El coste del cambio es bajo por diseño: el tab bar es un archivo
+(`src/app/(tabs)/_layout.tsx`) y ninguna pantalla depende de él.
+
+**Alcance**
+
+Esta decisión aplica a la navegación principal. No prohíbe usar APIs `unstable`
+en piezas aisladas y fácilmente reemplazables; prohíbe construir **la
+navegación de largo plazo** sobre una de ellas.
 
 ## Multiempresa
 
@@ -110,8 +170,58 @@ con facilidad:
   tiene el mismo ciclo, el dinero es dinero.
 
 `enabledFeatures` gobierna de verdad: `(tabs)/_layout.tsx` construye el tab bar
-a partir de él. Un tenant sin taller no compila una pestaña de Reparaciones que
-luego se esconde — no la tiene.
+a partir de él, vía `href: null` (ver DEC-MOBILE-001).
+
+### Aislamiento entre tenants (M0.1)
+
+`useCompanyBrand()` devuelve un `CompanyBrandState`
+(`loading` | `ready` | `unavailable`), no un `CompanyBrand` incondicional.
+
+M0 usaba `pilotCompanyBrand` como `initialData` universal, de modo que el primer
+frame siempre tenía nombre de empresa. Eso es correcto para el piloto y **falso
+para cualquier otro tenant**: un build para otra compañía habría mostrado "Black
+Dog Store" antes de cargar su propia marca.
+
+Las reglas ahora:
+
+- El fixture del piloto se siembra **solo** cuando el build es del tenant piloto
+  **y** está en modo mock (`isPilotTenant && useMockData`).
+- El logo empaquetado se dibuja **solo** cuando `source === 'pilot-fixture'`.
+  `BrandLockup` lo comprueba explícitamente.
+- Mientras la marca no resuelve, la UI es **neutral** (placeholder), no la de
+  otro cliente.
+- Las features disponibles caen a `DEFAULT_ENABLED_FEATURES`, una constante
+  tenant-neutral — **no** a `pilotCompanyBrand.enabledFeatures`.
+
+## Configuración a prueba de fallos (M0.1)
+
+`src/config/env.ts` resuelve el entorno con una regla única: **una variable
+ausente en un release se resuelve al valor estricto, nunca al permisivo.**
+
+| | Variable sin definir | Resultado |
+|---|---|---|
+| `EXPO_PUBLIC_APP_ENV` | release | `production` (el más estricto de los dos) |
+| `EXPO_PUBLIC_USE_MOCK_DATA` | development | mocks ON |
+| | staging | mocks **OFF** |
+| | production | mocks **OFF**, y no hay valor que los active |
+| `EXPO_PUBLIC_COMPANY_SLUG` | development | `blackdog` (piloto) |
+| | staging / production | `{ status: 'missing' }` — **nunca** el piloto |
+
+Dos consecuencias en el código, no solo en la documentación:
+
+1. **`repositories.repairs`, `.orders` y `.company` son nulables.** Antes se
+   instanciaban con sus mocks incondicionalmente, lo que anulaba el interruptor:
+   un build de producción habría mostrado reparaciones y pedidos inventados. Hoy
+   un repositorio existe solo si el build puede servirlo; si no, la query
+   rechaza con `FeatureUnavailableError` y la pantalla dice "Próximamente".
+2. **`configurationIssues`** recoge los problemas (tenant ausente, API sin
+   configurar, mocks en release) y el Perfil los muestra. Se **reporta**, no se
+   lanza: tirar abajo un build de tienda por una variable es peor que
+   diagnosticarlo con claridad.
+
+Las reglas son funciones puras (`resolveMockDataPolicy`, `resolveTenant`,
+`collectConfigurationIssues`) precisamente para poder probarlas —
+`__tests__/env-config.test.ts`.
 
 ## Estados de pantalla
 
@@ -129,11 +239,16 @@ un error 500.
 | Decisión | Motivo |
 |---|---|
 | Expo Router file-based | Es el router de SDK 57. Las rutas tipadas (`typedRoutes`) detectan un enlace roto en compilación. |
-| `NativeTabs` en vez de tab bar en JS | Safe areas, gestos y comportamiento del sistema correctos sin reimplementarlos. |
+| Tabs estables de Expo Router (`js-tabs`) | DEC-MOBILE-001: la API `unstable` es alpha y su `hidden` remonta el navigator. |
+| Feature-gating con `href: null` | Oculta la pestaña sin reiniciar el estado de navegación. |
 | TanStack Query como único estado de servidor | Evita duplicar datos remotos en un store cliente. |
 | React Hook Form + Zod | Un solo esquema produce la validación y el tipo TypeScript. |
 | Tipografía del sistema | Es la única que trae todos los pesos y tamaños ópticos que Dynamic Type necesita. |
 | Repositorios por feature | La única forma de avanzar sin backend sin acabar con arrays dentro de las pantallas. |
+| Repositorios **nulables** | Un build que no puede servir mocks no debe tener de dónde sacarlos. |
+| Config estricta por defecto en release | Una variable olvidada no puede volver permisivo un build de tienda. |
+| Sin `X-Company-Slug` en el cliente | BR-002 no está aprobado; no se finge un contrato inexistente. |
+| Clasificación de timeout por flag, no por excepción | La forma del error de un abort no es portable entre runtimes. |
 | `Animated` en vez de Reanimated para el Skeleton | Una opacidad en bucle no necesita worklets. |
 | `noUncheckedIndexedAccess` | Encontró errores reales durante M0: indexar un array es `T \| undefined`. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |

@@ -114,9 +114,10 @@ Detalles con intención:
 - **`Text`** es la única forma de escribir texto. Usar el `Text` de React Native
   es cómo entra un `fontSize: 15` a mano en un proyecto que tiene una escala.
 - **`Screen`** posee safe area, fondo, teclado y ancho máximo de línea. Consume
-  el inset **superior** y los laterales, pero **no el inferior**: el tab bar es
-  un `UITabBar` nativo que ya lo hace, y sumarlo otra vez deja una banda muerta
-  visible en cualquier iPhone con notch.
+  el inset **superior** y los laterales, pero **no el inferior**: el navegador
+  de tabs se sitúa bajo la escena y aplica él mismo el inset del home indicator,
+  así que la escena ya termina por encima. Sumarlo otra vez deja una banda
+  muerta visible en cualquier iPhone con notch.
 - **`IconButton`** exige `accessibilityLabel` como prop **obligatoria**. Un
   control solo-icono es invisible para un lector de pantalla sin ella; hacerla
   requerida convierte el olvido en un error de compilación.
@@ -124,10 +125,30 @@ Detalles con intención:
   Y siempre lleva la palabra: el color no es el único portador de significado.
 - **`Skeleton`** deja de pulsar bajo Reduce Motion.
 
+## Tabs
+
+El tab bar usa el navegador estable `expo-router/js-tabs` — ver DEC-MOBILE-001
+en `ARCHITECTURE.md`. Está estilado enteramente con tokens:
+
+| Aspecto | Token |
+|---|---|
+| Fondo | `colors.background` |
+| Borde superior | `colors.border`, con `sizes.hairline` |
+| Icono/etiqueta activos | `colors.textPrimary` |
+| Icono/etiqueta inactivos | `colors.textTertiary` |
+
+Los iconos siguen siendo **SF Symbols en iOS y Material Symbols en Android**,
+con variante rellena cuando la pestaña está activa. `tabBarHideOnKeyboard` se
+activa solo en Android, donde el teclado se superpone al tab bar; en iOS el
+sistema ya lo aparta y activarlo produce un salto visible.
+
+Las pestañas que un tenant no tiene habilitadas se ocultan con `href: null`, que
+no reinicia el navigator.
+
 ## iOS
 
 - Safe area, notch y Dynamic Island vía `react-native-safe-area-context`.
-- Home indicator: gestionado por el `UITabBar` nativo.
+- Home indicator: gestionado por el navegador de tabs.
 - Teclado: `KeyboardAvoidingView` con `padding` en iOS y `height` en Android
   (comportamientos distintos; un solo valor rompe uno de los dos), más
   `keyboardDismissMode="interactive"`.
@@ -142,6 +163,8 @@ Misma marca, misma jerarquía, mismas funciones — con comportamiento del siste
 
 - Bottom navigation de Material, con su ripple.
 - Botón/gesto de retroceso del sistema, gestionado por el navegador nativo.
+- **Predictive back deshabilitado** (`predictiveBackGestureEnabled: false`), por
+  compatibilidad y no por estética — ver README > Android.
 - Material Symbols en vez de SF Symbols.
 - Elevación en vez de sombras iOS.
 - Icono adaptativo con capa monocroma (iconos temáticos de Android 13+).
@@ -167,8 +190,13 @@ Misma marca, misma jerarquía, mismas funciones — con comportamiento del siste
 
 Sutil y funcional. Feedback en la pulsación (cambio de relleno, no de opacidad:
 bajar la opacidad de una tarjeta apaga también su texto y se lee como
-"desactivada"), transiciones nativas del stack, `minimizeBehavior` del tab bar
-en iOS 26.
+"desactivada") y transiciones nativas del stack.
+
+El tab bar es el navegador **estable** de Expo Router (DEC-MOBILE-001), no el
+`UITabBar` nativo: no hay minimize-on-scroll de iOS 26 ni scroll-to-top nativo
+al retocar la pestaña. Es el precio consciente de no construir la navegación
+principal sobre una API alpha; sus colores, tipografía y hairline salen de los
+mismos tokens que el resto.
 
 Haptics con moderación (`src/utils/haptics.ts`): selección, éxito, error. Nada
 vibra al desplazarse ni al navegar.

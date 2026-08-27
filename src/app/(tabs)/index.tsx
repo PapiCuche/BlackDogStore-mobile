@@ -42,7 +42,7 @@ import { formatCurrency, formatRelativeTime, greetingForHour } from '@/utils/for
  */
 export default function HomeScreen() {
   const theme = useTheme();
-  const brand = useCompanyBrand();
+  const brandState = useCompanyBrand();
   const { session } = useAuth();
 
   const repairsQuery = useRepairs();
@@ -78,7 +78,14 @@ export default function HomeScreen() {
             {greetingForHour()}
           </Text>
           <Text variant="title1" accessibilityRole="header">
-            {name ? `Hola, ${name}` : brand.name}
+            {/* Falls back to the company name only when the brand has actually
+                resolved. An unresolved brand shows a neutral greeting rather
+                than another tenant's name. */}
+            {name
+              ? `Hola, ${name}`
+              : brandState.status === 'ready'
+                ? brandState.brand.name
+                : 'Hola'}
           </Text>
         </View>
 

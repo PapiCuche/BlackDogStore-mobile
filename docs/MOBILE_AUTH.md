@@ -2,17 +2,17 @@
 
 ## AUTENTICACIÓN MOBILE REAL: PENDIENTE
 
-En M0 **no existe** autenticación contra Django. La app entra en modo mock, y
-cada pantalla de sesión lo dice en su propia interfaz.
+En M0/M0.1 **no existe** autenticación contra Django. La app entra en modo mock,
+y cada pantalla de sesión lo dice en su propia interfaz.
 
 ---
 
 ## Por qué no se conectó
 
-No es una tarea que faltó hacer. Es que el contrato actual del backend no puede
-ser consumido por un cliente nativo, y **cambiarlo no es decisión de Mobile**.
+No es una tarea que faltó hacer. El contrato actual del backend no puede ser
+consumido por un cliente nativo, y **cambiarlo no es decisión de Mobile**.
 
-Lo verificado leyendo el código:
+Verificado en `origin/master` @ `2624d47`:
 
 **`store/authentication.py::CookieJWTAuthentication`**
 
@@ -21,9 +21,6 @@ raw_token = request.COOKIES.get(settings.JWT_COOKIE_ACCESS_NAME)  # 'blackdog_ac
 ...
 enforce_csrf(request)
 ```
-
-El token se lee de una cookie HttpOnly y **toda** petición autenticada pasa por
-CSRF.
 
 **`store/auth_views.py::LoginView`**
 
@@ -38,6 +35,7 @@ propio código como decisión intencional.
 **`backend/settings.py`**
 
 ```python
+DEFAULT_AUTHENTICATION_CLASSES = ('store.authentication.CookieJWTAuthentication',)
 JWT_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = False   # para que fetchWithAuth pueda leer csrftoken
 ```
@@ -45,9 +43,9 @@ CSRF_COOKIE_HTTPONLY = False   # para que fetchWithAuth pueda leer csrftoken
 `CSRF_COOKIE_HTTPONLY = False` existe para que el **JavaScript de una página
 web** lea el token. Una app nativa no tiene esa página.
 
-### Por qué esto es correcto para web y no sirve para móvil
+### Por qué es correcto para web y no sirve para móvil
 
-Para un navegador, este diseño es el bueno: un token HttpOnly no es robable por
+Para un navegador este diseño es el bueno: un token HttpOnly no es robable por
 XSS, y CSRF cubre el envío automático de cookies entre orígenes.
 
 Para una app nativa:
@@ -56,9 +54,47 @@ Para una app nativa:
 - No hay página desde la que leer `csrftoken`.
 - El vector que CSRF mitiga —el navegador adjuntando cookies solo— **no existe**.
 
-Replicar el contrato desde React Native significaría gestionar un frasco de
-cookies que no podemos inspeccionar y un token CSRF que no podemos leer. Sería
-frágil, y fallaría de formas difíciles de diagnosticar en producción.
+---
+
+## Diseño propuesto para M1 (BR-001, revisado en M0.1)
+
+### Lo que Mobile ya NO propone
+
+M0 proponía añadir una clase Bearer a
+`REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES`, "junto a"
+`CookieJWTAuthentication`. **Esa propuesta fue retirada en M0.1.**
+
+`DEFAULT_AUTHENTICATION_CLASSES` aplica a **todas** las vistas del proyecto,
+incluidas las ~30 rutas `/api/admin/*` y las `/api/me/*`. Añadir ahí un
+mecanismo Bearer sin CSRF habría ampliado la superficie de autenticación de toda
+la administración para resolver un problema del catálogo y los pedidos de un
+cliente. El radio de impacto de cualquier fallo en esa clase habría incluido la
+gestión de usuarios, roles, inventario y notas de venta.
+
+### Lo que Mobile propone ahora
+
+Una superficie **nueva y acotada**, sin tocar nada de lo existente:
+
+```
+POST /api/v1/auth/login/      → { access, refresh, expires_in, user }
+POST /api/v1/auth/refresh/    → refresh en el body
+POST /api/v1/auth/logout/     → blacklist del refresh
+```
+
+Y una clase `MobileTokenAuthentication` que lea `Authorization: Bearer`,
+declarada **por vista** en `authentication_classes`, **solo** en las vistas de
+`/api/v1/`. Nunca en `settings`.
+
+**Se mantienen intactos**, y esto es la mitad del punto:
+
+- `/api/auth/login/`, `/api/auth/refresh/`, `/api/auth/logout/`
+- `CookieJWTAuthentication` como única clase por defecto
+- CSRF en todo el contrato existente
+- `/api/admin/*` completo
+- El frontend Next.js
+
+La prueba que demuestra el acotamiento: *un Bearer válido NO autentica en
+`/api/admin/*` ni en `/api/auth/me/`.*
 
 ---
 
@@ -69,13 +105,15 @@ frágil, y fallaría de formas difíciles de diagnosticar en producción.
 - ❌ No propuso mover tokens web a `localStorage`.
 - ❌ No desactivó CSRF en ninguna ruta.
 - ❌ No implementó un refresh token real ni guardó ningún token.
+- ❌ **(M0.1)** No envía ninguna cabecera de un contrato no aprobado. El cliente
+  HTTP ya no manda `X-Company-Slug` — ver BR-002.
 
 `src/api/client.ts` envía `credentials: 'omit'` de forma explícita, con el
 motivo comentado en el propio archivo.
 
 ---
 
-## Lo que sí existe en M0 (arquitectura preparatoria)
+## Lo que sí existe (arquitectura preparatoria)
 
 | Pieza | Archivo | Qué hace |
 |---|---|---|
@@ -93,8 +131,8 @@ Detalles con intención:
   falsa no debe sobrevivir a un relanzamiento y confundirse con una real.
 - **`signOut()` limpia el estado antes de la llamada de red.** Si la petición
   falla, el dispositivo ya dejó de mostrar datos de cuenta.
-- **`AuthMode` es `'mock' | 'backend'`**, no un booleano oculto: cualquier
-  pantalla puede comprobarlo, y el Perfil muestra el badge correspondiente.
+- **`AuthMode` es `'mock' | 'backend'`**, no un booleano oculto: el Perfil
+  muestra el badge correspondiente.
 
 ---
 
@@ -118,14 +156,15 @@ de firma.
 
 ---
 
-## Ruta propuesta para M1
+## Ruta para M1
 
-1. El equipo Backend evalúa **BR-001**.
-2. Si se acepta: `ApiAuthRepository` implementa `AuthRepository`, guarda tokens
-   con `SecureStorage`, y `src/api/client.ts` añade `Authorization: Bearer`.
+1. El equipo Backend evalúa **BR-007** (superficie `/api/v1/`) y **BR-001**.
+2. Si se aceptan: `ApiAuthRepository` implementa `AuthRepository`, guarda tokens
+   con `SecureStorage`, y `src/api/client.ts` añade `Authorization: Bearer`
+   **solo** para rutas `/api/v1/`.
 3. Refresh transparente ante un 401, con una sola renovación en vuelo.
 4. Cierre de sesión que hace blacklist del refresh y llama a `clearSecureStorage()`.
 5. Biometría (`expo-local-authentication`) como reapertura, **nunca** como
    sustituto de la autenticación.
 
-Nada de esto empieza antes de que Backend se pronuncie sobre BR-001.
+Nada de esto empieza antes de que Backend se pronuncie.

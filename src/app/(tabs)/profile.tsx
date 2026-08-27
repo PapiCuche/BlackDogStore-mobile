@@ -3,7 +3,15 @@ import * as Linking from 'expo-linking';
 import { View } from 'react-native';
 
 import { useAuth } from '@/auth/auth-provider';
-import { apiBaseUrl, appEnvironment, isApiConfigured, useMockData } from '@/config/env';
+import {
+  apiBaseUrl,
+  appEnvironment,
+  configurationIssues,
+  isApiConfigured,
+  mockDataPolicy,
+  tenant,
+  useMockData,
+} from '@/config/env';
 import { featureIntegration } from '@/config/integration-status';
 import {
   Avatar,
@@ -39,7 +47,7 @@ const themeLabels: Record<ThemePreference, string> = {
  */
 export default function ProfileScreen() {
   const theme = useTheme();
-  const brand = useCompanyBrand();
+  const brandState = useCompanyBrand();
   const { session, signOut } = useAuth();
   const { preference, setPreference } = useAppTheme();
 
@@ -116,52 +124,75 @@ export default function ProfileScreen() {
         </View>
 
         {/* ── Support ───────────────────────────────────────────────────── */}
-        <View>
-          <SectionHeader title="Soporte" eyebrow={brand.name} />
-          <Card padded={false}>
-            {brand.supportPhone ? (
-              <ListRow
-                label="WhatsApp"
-                value={brand.supportPhone}
-                icon={icons.phone}
-                onPress={() =>
-                  openExternal(`https://wa.me/${brand.supportPhone.replace(/\D/g, '')}`)
-                }
-                accessibilityHint="Abre WhatsApp"
-              />
-            ) : null}
-
-            {/* Hidden rather than shown empty: the brand master document lists
-                no support email, and inventing one would be worse than omitting
-                it. See PENDIENTE BRANDING in docs/DESIGN_SYSTEM.md. */}
-            {brand.supportEmail ? (
-              <>
-                <Divider inset={theme.spacing.md} />
+        {brandState.status === 'ready' ? (
+          <View>
+            <SectionHeader title="Soporte" eyebrow={brandState.brand.name} />
+            <Card padded={false}>
+              {brandState.brand.supportPhone ? (
                 <ListRow
-                  label="Correo"
-                  value={brand.supportEmail}
-                  icon={icons.mail}
-                  onPress={() => openExternal(`mailto:${brand.supportEmail}`)}
+                  label="WhatsApp"
+                  value={brandState.brand.supportPhone}
+                  icon={icons.phone}
+                  onPress={() =>
+                    openExternal(
+                      `https://wa.me/${brandState.brand.supportPhone.replace(/\D/g, '')}`,
+                    )
+                  }
+                  accessibilityHint="Abre WhatsApp"
                 />
-              </>
-            ) : null}
+              ) : null}
 
-            {brand.address ? (
-              <>
-                <Divider inset={theme.spacing.md} />
-                <ListRow label="Tienda" description={brand.address} icon={icons.pin} />
-              </>
-            ) : null}
+              {/* Hidden rather than shown empty: the brand master document lists
+                  no support email, and inventing one would be worse than
+                  omitting it. See PENDIENTE BRANDING in docs/DESIGN_SYSTEM.md. */}
+              {brandState.brand.supportEmail ? (
+                <>
+                  <Divider inset={theme.spacing.md} />
+                  <ListRow
+                    label="Correo"
+                    value={brandState.brand.supportEmail}
+                    icon={icons.mail}
+                    onPress={() => openExternal(`mailto:${brandState.brand.supportEmail}`)}
+                  />
+                </>
+              ) : null}
 
-            <Divider inset={theme.spacing.md} />
-            <ListRow
-              label="Sitio web"
-              icon={icons.globe}
-              onPress={() => openExternal(brand.website)}
-              accessibilityHint="Abre el sitio web en el navegador"
-            />
-          </Card>
-        </View>
+              {brandState.brand.address ? (
+                <>
+                  <Divider inset={theme.spacing.md} />
+                  <ListRow
+                    label="Tienda"
+                    description={brandState.brand.address}
+                    icon={icons.pin}
+                  />
+                </>
+              ) : null}
+
+              {brandState.brand.website ? (
+                <>
+                  <Divider inset={theme.spacing.md} />
+                  <ListRow
+                    label="Sitio web"
+                    icon={icons.globe}
+                    onPress={() => openExternal(brandState.brand.website)}
+                    accessibilityHint="Abre el sitio web en el navegador"
+                  />
+                </>
+              ) : null}
+            </Card>
+          </View>
+        ) : brandState.status === 'unavailable' ? (
+          // No invented contact details. A build whose tenant brand has not
+          // resolved has nothing truthful to put here.
+          <View>
+            <SectionHeader title="Soporte" />
+            <Card variant="outlined">
+              <Text variant="footnote" color="textSecondary">
+                {brandState.reason}
+              </Text>
+            </Card>
+          </View>
+        ) : null}
 
         {/* ── Integration status ────────────────────────────────────────── */}
         <View>
@@ -196,11 +227,45 @@ export default function ProfileScreen() {
                 <Text variant="caption" color="textTertiary">
                   Entorno: {appEnvironment}
                   {useMockData ? ' · mocks activos' : ' · API activa'}
+                  {' · '}
+                  {mockDataPolicy.reason}
+                </Text>
+                <Text variant="caption" color="textTertiary">
+                  Empresa: {tenant.status === 'resolved' ? tenant.slug : 'sin configurar'}
                 </Text>
                 <Text variant="caption" color="textTertiary">
                   API: {isApiConfigured ? apiBaseUrl : 'sin configurar'}
                 </Text>
               </View>
+
+              {/* Only ever non-empty in a misconfigured release build. Shown
+                  rather than thrown: crashing a store build over a missing
+                  variable is worse than reporting it clearly. */}
+              {configurationIssues.length > 0 ? (
+                <View
+                  accessible
+                  accessibilityRole="alert"
+                  style={{
+                    gap: 4,
+                    padding: theme.spacing.sm,
+                    borderRadius: theme.radius.sm,
+                    backgroundColor: theme.colors.statusDangerSurface,
+                  }}
+                >
+                  <Text variant="caption" style={{ color: theme.colors.statusDanger }}>
+                    Configuración inválida
+                  </Text>
+                  {configurationIssues.map((issue) => (
+                    <Text
+                      key={issue.code}
+                      variant="caption"
+                      style={{ color: theme.colors.statusDanger }}
+                    >
+                      • {issue.message}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
             </View>
           </Card>
         </View>
@@ -217,9 +282,12 @@ export default function ProfileScreen() {
           accessibilityHint="Cierra la sesión y vuelve a la pantalla de inicio de sesión"
         />
 
-        <Text variant="caption" color="textTertiary" center>
-          {brand.name} · {brand.tagline}
-        </Text>
+        {brandState.status === 'ready' ? (
+          <Text variant="caption" color="textTertiary" center>
+            {brandState.brand.name}
+            {brandState.brand.tagline ? ` · ${brandState.brand.tagline}` : ''}
+          </Text>
+        ) : null}
       </View>
     </Screen>
   );

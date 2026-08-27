@@ -28,14 +28,14 @@ export function AuthScreenShell({
   showBrand?: boolean;
 }) {
   const theme = useTheme();
-  const brand = useCompanyBrand();
+  const brandState = useCompanyBrand();
 
   return (
     <Screen scrollable avoidKeyboard contentContainerStyle={{ flexGrow: 1 }}>
       <View style={{ flex: 1, justifyContent: 'center', paddingVertical: theme.spacing.xl }}>
         {showBrand ? (
           <View style={{ marginBottom: theme.spacing.xxl }}>
-            <BrandLockup brand={brand} />
+            <BrandLockup state={brandState} />
           </View>
         ) : null}
 

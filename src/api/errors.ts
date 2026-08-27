@@ -61,6 +61,11 @@ export class ApiError extends Error {
  * and a small information disclosure.
  */
 export function userFacingMessage(error: unknown): string {
+  // A feature with no data source carries its own explanation, and it is
+  // written for the customer. Retrying would not change it.
+  if (error instanceof Error && error.name === 'FeatureUnavailableError') {
+    return error.message;
+  }
   if (!(error instanceof ApiError)) {
     return 'Ocurrió un error inesperado. Vuelve a intentarlo.';
   }

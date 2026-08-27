@@ -32,7 +32,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   catalog: {
     label: 'Catálogo',
     status: 'API_READY',
-    note: 'GET /api/products/ y /api/categories/ existen y están verificados, pero resuelven el tenant por Host y no devuelven nada a un cliente móvil. Bloqueado por BR-002.',
+    note: 'GET /api/products/ y /api/categories/ existen en master, pero NO están tenantizados: devuelven el catálogo de todas las empresas. Bloqueado por BR-002.',
   },
   orders: {
     label: 'Pedidos',
@@ -47,12 +47,12 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   auth: {
     label: 'Autenticación',
     status: 'MOCK',
-    note: 'El backend usa JWT en cookies HttpOnly + CSRF, un contrato pensado para navegador. Mobile necesita un contrato nativo: BR-001.',
+    note: 'El backend usa JWT en cookies HttpOnly + CSRF, un contrato pensado para navegador. Mobile necesita un contrato nativo acotado a /api/v1/: BR-001 y BR-007.',
   },
   companyBrand: {
     label: 'Marca / multiempresa',
     status: 'MOCK',
-    note: 'Company existe en Django pero no expone campos de marca ni un endpoint público. Propuesta en BR-006.',
+    note: 'Company existe en Django pero no expone campos de marca ni un endpoint público. Un build que no sea el piloto no recibe branding. Propuesta en BR-006.',
   },
 };
 

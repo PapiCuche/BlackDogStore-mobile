@@ -124,13 +124,19 @@ export type ErrorStateProps = {
  */
 export function ErrorState({ error, onRetry, title }: ErrorStateProps) {
   const isOffline = error instanceof ApiError && error.kind === 'offline';
-  const canRetry = !(error instanceof ApiError) || error.isRetryable;
+  // A feature with no backend is not a failure the user caused or can retry —
+  // it reads as "todavía no", not as "algo salió mal".
+  const isUnavailable = error instanceof Error && error.name === 'FeatureUnavailableError';
+  const canRetry = !isUnavailable && (!(error instanceof ApiError) || error.isRetryable);
 
   return (
     <CenteredState
-      icon={isOffline ? icons.offline : icons.warning}
-      tone={isOffline ? 'neutral' : 'danger'}
-      title={title ?? (isOffline ? 'Sin conexión' : 'Algo salió mal')}
+      icon={isUnavailable ? icons.info : isOffline ? icons.offline : icons.warning}
+      tone={isUnavailable || isOffline ? 'neutral' : 'danger'}
+      title={
+        title ??
+        (isUnavailable ? 'Próximamente' : isOffline ? 'Sin conexión' : 'Algo salió mal')
+      }
       message={userFacingMessage(error)}
       actionLabel={onRetry && canRetry ? 'Reintentar' : undefined}
       onAction={onRetry}

@@ -1,0 +1,104 @@
+# Mobile CI — Black Dog Store
+#
+# Scope is deliberately narrow: the checks that a laptop-free machine can run in
+# under two minutes. No Xcode, no Android SDK, no secrets, no .ipa/.apk. Those
+# belong in an EAS build workflow, which is a separate concern with separate
+# credentials.
+#
+# This repository is developed in parallel with PapiCuche/BlackDogStore-web by a
+# different team. This workflow covers ONLY the mobile repository.
+name: Mobile CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Lets the team run it by hand against any branch before opening a PR.
+  workflow_dispatch:
+
+# A new push to the same PR supersedes the run in flight.
+concurrency:
+  group: mobile-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck · Lint · Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the Node version the project is developed and built against
+          # (see eas.json > build.base.node).
+          node-version: '24.16.0'
+          cache: npm
+
+      # `npm ci`, never `npm install`: it installs exactly what
+      # package-lock.json pins and fails if the lockfile is out of sync, which
+      # is the property that makes CI meaningful.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm run test:ci
+
+  doctor:
+    name: Expo Doctor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Runs alongside `verify` rather than gating it: Doctor resolves the SDK
+    # version matrix over the network, so a registry hiccup should not be able
+    # to fail a pull request whose code is fine.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Expo Doctor
+        run: npx expo-doctor@latest
+
+  bundle:
+    name: Metro bundle (iOS + Android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.16.0'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The strongest check available without a native toolchain: it compiles
+      # the whole route graph through Metro and Hermes for both platforms, so a
+      # broken import or a bad route fails here rather than on someone's device.
+      # No Xcode and no Android SDK are involved.
+      - name: Export bundles
+        run: npx expo export --platform ios --platform android --output-dir ./dist-ci
