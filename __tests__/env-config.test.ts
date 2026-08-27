@@ -124,6 +124,7 @@ describe('collectConfigurationIssues', () => {
       tenant: { status: 'missing' },
       apiConfigured: false,
       mockPolicy: { enabled: true, reason: 'development-default' },
+      legacyCatalogRequested: false,
     });
     expect(issues).toEqual([]);
   });
@@ -134,6 +135,7 @@ describe('collectConfigurationIssues', () => {
       tenant: { status: 'missing' },
       apiConfigured: false,
       mockPolicy: okPolicy,
+      legacyCatalogRequested: false,
     });
     expect(issues.map((issue) => issue.code)).toEqual(['missing-tenant', 'missing-api-url']);
   });
@@ -144,6 +146,7 @@ describe('collectConfigurationIssues', () => {
       tenant: { status: 'resolved', slug: 'acme', source: 'environment' },
       apiConfigured: true,
       mockPolicy: { enabled: true, reason: 'staging-explicit-opt-in' },
+      legacyCatalogRequested: false,
     });
     expect(issues.map((issue) => issue.code)).toEqual(['mocks-in-release']);
   });
@@ -154,6 +157,7 @@ describe('collectConfigurationIssues', () => {
       tenant: { status: 'resolved', slug: 'acme', source: 'environment' },
       apiConfigured: true,
       mockPolicy: okPolicy,
+      legacyCatalogRequested: false,
     });
     expect(issues).toEqual([]);
   });

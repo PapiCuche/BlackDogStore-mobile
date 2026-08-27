@@ -31,8 +31,10 @@ export type FeatureIntegration = {
 export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   catalog: {
     label: 'Catálogo',
-    status: 'API_READY',
-    note: 'GET /api/products/ y /api/categories/ existen en master, pero NO están tenantizados: devuelven el catálogo de todas las empresas. Bloqueado por BR-002.',
+    // NOT API_READY. The endpoint exists and works, but it returns every
+    // company's products, so it is not a contract this app may ship against.
+    status: 'API_PENDING',
+    note: 'El catálogo legacy de /api/products/ existe en master pero NO está aislado por empresa: devuelve productos de todas las empresas. Solo se puede usar en desarrollo y con opt-in explícito. Bloqueado por BR-002.',
   },
   orders: {
     label: 'Pedidos',

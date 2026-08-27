@@ -129,7 +129,8 @@ del bundle y es público.** Nunca poner secretos ahí.
 |---|---|---|
 | `EXPO_PUBLIC_API_BASE_URL` | derivada de Metro en dev | Raíz de la API de Django, sin barra final |
 | `EXPO_PUBLIC_COMPANY_SLUG` | `blackdog` **solo en dev** | Tenant de este build (ver BR-002) |
-| `EXPO_PUBLIC_USE_MOCK_DATA` | ver tabla | `false` apunta la app a la API real |
+| `EXPO_PUBLIC_USE_MOCK_DATA` | ver tabla | `false` apaga los mocks |
+| `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` | `false` | Catálogo legacy **solo desarrollo** — ver abajo |
 | `EXPO_PUBLIC_APP_ENV` | — | `staging` marca un build de release como no productivo |
 
 ### Regla a prueba de fallos
@@ -167,6 +168,48 @@ integración, y ninguna marca se renderiza.
 
 **Entorno** (`EXPO_PUBLIC_APP_ENV`): sin definir en un release →
 `production` (el más estricto de los dos).
+
+### Catálogo legacy
+
+`EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` habilita los endpoints reales
+`/api/products/` y `/api/categories/`. Existen, son públicos y funcionan — y en
+el backend estable **no están aislados por empresa**:
+
+```python
+# ProductViewSet.get_queryset  @ origin/master 2624d478
+Product.objects.select_related('category').prefetch_related('reviews').filter(is_active=True)
+
+# CategoryViewSet
+Category.objects.all()
+```
+
+Ninguno de los dos modelos tiene campo `company` en `master`. Un cliente SaaS
+apuntado ahí recibiría el catálogo de **todas** las empresas: un riesgo
+cross-tenant, aunque el endpoint sea público.
+
+Por eso el catálogo real solo se activa cuando **las tres** condiciones se
+cumplen a la vez:
+
+```
+appEnvironment === 'development'
+  AND EXPO_PUBLIC_USE_MOCK_DATA=false
+  AND EXPO_PUBLIC_ENABLE_LEGACY_CATALOG=true
+```
+
+| Entorno | mocks | flag legacy | Catálogo |
+|---|---|---|---|
+| development | ON | cualquiera | mocks |
+| development | OFF | sin definir | **no disponible** |
+| development | OFF | `true` | legacy (con aviso) |
+| staging | OFF | `true` | **BLOQUEADO** |
+| production | OFF | `true` | **BLOQUEADO** |
+
+En staging y production el flag se **ignora** y se reporta como
+`legacy-catalog-forbidden` en Perfil → Estado de integración. No es un
+interruptor que un release pueda accionar.
+
+Cuando el backend publique un catálogo tenant-safe estable (BR-002), este gate y
+`LegacyApiCatalogRepository` se **eliminan**; no se adaptan.
 
 ### `localhost` significa cosas distintas según dónde corra el JS
 
@@ -225,6 +268,8 @@ fixtures **en development**. Reglas:
   concluye que una feature está integrada.
 - **En release los mocks no se sirven** (ver "Regla a prueba de fallos"), y en
   production están prohibidos.
+- **El catálogo real legacy tampoco se sirve en release** — ver "Catálogo
+  legacy". Apagar los mocks NO equivale a tener un catálogo seguro.
 - El estado real de cada feature está en `src/config/integration-status.ts`, que
   la app lee en tiempo de ejecución, y se ve en Perfil → Estado de integración.
 
@@ -249,8 +294,9 @@ Dos cosas que conviene tener presentes al leer esa documentación:
   etiquetó cada afirmación como `VERIFIED_STABLE_MASTER`,
   `OBSERVED_IN_PROGRESS` o `PROPOSED`.
 - **`/api/v1/` es una propuesta** (BR-007), no algo que exista. El catálogo
-  legacy `/api/products/` funciona hoy, pero **no se considera todavía el
-  contrato SaaS definitivo de Mobile**.
+  legacy `/api/products/` funciona hoy, pero **no está aislado por empresa** y
+  por tanto no es el contrato SaaS de Mobile. Está bloqueado fuera de
+  desarrollo.
 
 ## Seguridad
 

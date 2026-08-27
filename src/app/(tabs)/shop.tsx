@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useDeferredValue, useState } from 'react';
 import { FlatList, View } from 'react-native';
 
+import { useMockData } from '@/config/env';
 import {
   AppHeader,
   EmptyState,
@@ -14,8 +15,8 @@ import {
 import { CategoryChips } from '@/features/catalog/category-chips';
 import { ProductCard } from '@/features/catalog/product-card';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
-import { useMockData } from '@/config/env';
-import { useCategories, useProducts } from '@/hooks/use-catalog';
+import { isCatalogAvailable, useCategories, useProducts } from '@/hooks/use-catalog';
+import { FeatureUnavailableError } from '@/repositories/errors';
 import { screenGutter } from '@/theme';
 import { useTheme } from '@/theme/theme-provider';
 
@@ -30,6 +31,16 @@ import { useTheme } from '@/theme/theme-provider';
  *
  * `useDeferredValue` keeps typing responsive: the field updates on every
  * keystroke while the query lags a frame behind, with no debounce timer to tune.
+ *
+ * M0.2 — THREE outcomes, not two. The screen must tell apart:
+ *
+ *   UNAVAILABLE  this build has no catalogue source at all
+ *   EMPTY        there is a catalogue, and it has nothing to show
+ *   NOT FOUND    there is a catalogue, and the filters matched nothing
+ *
+ * Collapsing the first into the second would tell a shopper "esta tienda no
+ * tiene productos" when the truth is that the app cannot reach a safe catalogue
+ * yet. That is a statement about the business, and it would be false.
  */
 export default function ShopScreen() {
   const theme = useTheme();
@@ -38,6 +49,8 @@ export default function ShopScreen() {
 
   const deferredSearch = useDeferredValue(search);
 
+  const catalogAvailable = isCatalogAvailable();
+
   const categoriesQuery = useCategories();
   const productsQuery = useProducts({
     search: deferredSearch.trim() || undefined,
@@ -45,6 +58,27 @@ export default function ShopScreen() {
   });
 
   const hasFilters = search.trim().length > 0 || categorySlug !== null;
+  const isUnavailable = productsQuery.error instanceof FeatureUnavailableError;
+
+  // No catalogue means no searching and no filtering. Leaving a search field on
+  // screen invites the shopper to type into something that cannot answer.
+  if (isUnavailable || !catalogAvailable) {
+    return (
+      <Screen scrollable contentContainerStyle={{ flexGrow: 1 }}>
+        <AppHeader title="Tienda" eyebrow="Catálogo" />
+        <ErrorState
+          error={
+            productsQuery.error ??
+            new FeatureUnavailableError(
+              'catalog',
+              'Estamos preparando la conexión segura con el catálogo de esta empresa. Vuelve a intentarlo más adelante.',
+            )
+          }
+          title="Catálogo no disponible todavía"
+        />
+      </Screen>
+    );
+  }
 
   const header = (
     <View style={{ gap: theme.spacing.sm }}>
@@ -62,7 +96,7 @@ export default function ShopScreen() {
 
       {useMockData ? (
         <View style={{ marginTop: theme.spacing.xxs, marginBottom: theme.spacing.xs }}>
-          <MockDataNotice message="Datos de ejemplo. Los endpoints de catálogo existen, pero resuelven la empresa por dominio web." />
+          <MockDataNotice message="Datos de ejemplo. El catálogo real todavía no está integrado." />
         </View>
       ) : null}
     </View>

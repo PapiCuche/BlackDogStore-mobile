@@ -159,6 +159,127 @@ export const companySlug: string | null = tenant.status === 'resolved' ? tenant.
 export const isPilotTenant: boolean =
   tenant.status === 'resolved' && tenant.slug === PILOT_COMPANY_SLUG;
 
+// ─── Legacy catalog gate ────────────────────────────────────────────────────
+
+/**
+ * Where the catalogue may come from in this build.
+ *
+ * M0.2 added this because "not mock" did NOT mean "safe". The composition root
+ * used to read `useMockData ? Mock : Api`, so a single
+ * `EXPO_PUBLIC_USE_MOCK_DATA=false` was enough to point a RELEASE build at the
+ * legacy Django catalogue.
+ *
+ * That endpoint is public and works — and it is NOT tenant-safe. Verified on
+ * `PapiCuche/BlackDogStore-web` @ `origin/master` `2624d478`:
+ *
+ *   ProductViewSet.get_queryset  →  Product.objects…filter(is_active=True)
+ *   CategoryViewSet.queryset     →  Category.objects.all()
+ *
+ * Neither `Product` nor `Category` has a `company` field there, and the
+ * backend's own docstring says of its host-based resolver: "DESIGNED, not yet
+ * wired up … no public view calls it yet". So a multi-tenant mobile client
+ * pointed at it would receive EVERY company's products — a cross-tenant leak,
+ * even though the endpoint is public.
+ *
+ * The gate therefore FAILS CLOSED: the legacy catalogue is reachable only from
+ * a development build that asks for it by name.
+ */
+export type CatalogSource =
+  /** Bundled fixtures. */
+  | 'mock'
+  /** The real, legacy, NOT tenant-safe Django catalogue. */
+  | 'legacy-api'
+  /** No catalogue at all in this build. */
+  | 'none';
+
+export type LegacyCatalogDecision =
+  /** Mocks are on; the legacy flag is irrelevant. */
+  | 'mock-active'
+  /** Development build that explicitly opted in. */
+  | 'legacy-development-explicit'
+  /** Development build that did not opt in. */
+  | 'legacy-disabled'
+  /** Release build. Refused regardless of the flag. */
+  | 'legacy-forbidden-release';
+
+export type LegacyCatalogPolicy = {
+  source: CatalogSource;
+  decision: LegacyCatalogDecision;
+  /** Diagnostic sentence for Profile. Not shown to customers. */
+  reason: string;
+};
+
+/**
+ * Decide where the catalogue comes from.
+ *
+ * | Environment | mocks | `ENABLE_LEGACY_CATALOG` | Result |
+ * |---|---|---|---|
+ * | development | on   | any    | `mock` |
+ * | development | off  | unset  | `none` |
+ * | development | off  | `true` | `legacy-api` |
+ * | staging     | off  | `true` | **`none`** |
+ * | production  | off  | `true` | **`none`** |
+ *
+ * The release rows are the point: the flag is not a switch a release can flip.
+ * It is ignored there, and `collectConfigurationIssues` reports the attempt.
+ */
+export function resolveLegacyCatalogPolicy(input: {
+  environment: AppEnvironment;
+  mocksEnabled: boolean;
+  legacyFlag: string | undefined;
+}): LegacyCatalogPolicy {
+  if (input.mocksEnabled) {
+    return {
+      source: 'mock',
+      decision: 'mock-active',
+      reason: 'El catálogo usa datos de ejemplo.',
+    };
+  }
+
+  // Checked BEFORE the flag, so no value of the flag can reach the legacy
+  // branch in a release.
+  if (input.environment !== 'development') {
+    return {
+      source: 'none',
+      decision: 'legacy-forbidden-release',
+      reason:
+        'El catálogo legacy no está aislado por empresa y está bloqueado fuera de desarrollo.',
+    };
+  }
+
+  if (input.legacyFlag?.trim().toLowerCase() === 'true') {
+    return {
+      source: 'legacy-api',
+      decision: 'legacy-development-explicit',
+      reason:
+        'Catálogo legacy habilitado explícitamente para desarrollo. NO está aislado por empresa.',
+    };
+  }
+
+  return {
+    source: 'none',
+    decision: 'legacy-disabled',
+    reason:
+      'El catálogo real está desactivado. Actívalo con EXPO_PUBLIC_ENABLE_LEGACY_CATALOG=true (solo desarrollo).',
+  };
+}
+
+export const legacyCatalogPolicy: LegacyCatalogPolicy = resolveLegacyCatalogPolicy({
+  environment: appEnvironment,
+  mocksEnabled: mockDataPolicy.enabled,
+  legacyFlag: process.env.EXPO_PUBLIC_ENABLE_LEGACY_CATALOG,
+});
+
+/** Whether this build may call the legacy, non-tenant-safe catalogue. */
+export const isLegacyCatalogAllowed: boolean = legacyCatalogPolicy.source === 'legacy-api';
+
+/**
+ * Whether the build ASKED for the legacy catalogue, regardless of the answer.
+ * Used only to report a refused request as a configuration issue.
+ */
+export const legacyCatalogRequested: boolean =
+  process.env.EXPO_PUBLIC_ENABLE_LEGACY_CATALOG?.trim().toLowerCase() === 'true';
+
 // ─── API base URL ───────────────────────────────────────────────────────────
 
 /**
@@ -201,7 +322,7 @@ export const apiTimeoutMs = 15_000;
 // ─── Configuration health ───────────────────────────────────────────────────
 
 export type ConfigurationIssue = {
-  code: 'missing-tenant' | 'missing-api-url' | 'mocks-in-release';
+  code: 'missing-tenant' | 'missing-api-url' | 'mocks-in-release' | 'legacy-catalog-forbidden';
   message: string;
 };
 
@@ -218,9 +339,21 @@ export function collectConfigurationIssues(input: {
   tenant: TenantConfig;
   apiConfigured: boolean;
   mockPolicy: MockDataPolicy;
+  legacyCatalogRequested: boolean;
 }): ConfigurationIssue[] {
   const issues: ConfigurationIssue[] = [];
   if (input.environment === 'development') return issues;
+
+  if (input.legacyCatalogRequested) {
+    // The request was already refused by resolveLegacyCatalogPolicy. Reporting
+    // it matters because it means someone shipped a build believing the legacy
+    // catalogue was on — and it is not.
+    issues.push({
+      code: 'legacy-catalog-forbidden',
+      message:
+        'EXPO_PUBLIC_ENABLE_LEGACY_CATALOG=true fue ignorado: el catálogo legacy no está aislado por empresa y no puede usarse en un release.',
+    });
+  }
 
   if (input.tenant.status === 'missing') {
     issues.push({
@@ -249,6 +382,7 @@ export const configurationIssues: readonly ConfigurationIssue[] = collectConfigu
   tenant,
   apiConfigured: isApiConfigured,
   mockPolicy: mockDataPolicy,
+  legacyCatalogRequested,
 });
 
 export const isConfigurationValid: boolean = configurationIssues.length === 0;

@@ -209,11 +209,12 @@ ausente en un release se resuelve al valor estricto, nunca al permisivo.**
 
 Dos consecuencias en el código, no solo en la documentación:
 
-1. **`repositories.repairs`, `.orders` y `.company` son nulables.** Antes se
-   instanciaban con sus mocks incondicionalmente, lo que anulaba el interruptor:
-   un build de producción habría mostrado reparaciones y pedidos inventados. Hoy
-   un repositorio existe solo si el build puede servirlo; si no, la query
-   rechaza con `FeatureUnavailableError` y la pantalla dice "Próximamente".
+1. **`repositories.repairs`, `.orders`, `.company` — y desde M0.2 también
+   `.catalog` — son nulables.** Antes se instanciaban incondicionalmente, lo que
+   anulaba el interruptor: un build de producción habría mostrado reparaciones y
+   pedidos inventados. Hoy un repositorio existe solo si el build puede
+   servirlo; si no, la query rechaza con `FeatureUnavailableError` y la pantalla
+   lo dice.
 2. **`configurationIssues`** recoge los problemas (tenant ausente, API sin
    configurar, mocks en release) y el Perfil los muestra. Se **reporta**, no se
    lanza: tirar abajo un build de tienda por una variable es peor que
@@ -222,6 +223,39 @@ Dos consecuencias en el código, no solo en la documentación:
 Las reglas son funciones puras (`resolveMockDataPolicy`, `resolveTenant`,
 `collectConfigurationIssues`) precisamente para poder probarlas —
 `__tests__/env-config.test.ts`.
+
+### El gate del catálogo legacy (M0.2)
+
+El catálogo era el caso peligroso porque **sí** tenía implementación real:
+
+```ts
+catalog: useMockData ? new MockCatalogRepository() : new ApiCatalogRepository()
+```
+
+Un solo `EXPO_PUBLIC_USE_MOCK_DATA=false` bastaba para apuntar un release al
+catálogo legacy de Django — que es público, funciona, y devuelve **los productos
+de todas las empresas** (verificado en `origin/master` `2624d478`). Se estaba
+tratando *"no es mock"* como *"es seguro"*, y no son lo mismo.
+
+`resolveLegacyCatalogPolicy` decide ahora la fuente, y **falla cerrado**:
+
+| Fuente | Cuándo |
+|---|---|
+| `mock` | mocks activos |
+| `legacy-api` | `development` + mocks off + `ENABLE_LEGACY_CATALOG=true` |
+| `none` | todo lo demás — incluido cualquier release |
+
+Dos capas, a propósito:
+
+1. **Composition root** — un release no recibe repositorio de catálogo.
+2. **`assertLegacyCatalogAllowed()`** — se ejecuta dentro del repositorio y de
+   cada función de endpoint, justo antes de la red. Un sitio que decide es un
+   sitio a un `refactor` de equivocarse; la segunda comprobación hace que una
+   build bloqueada no pueda emitir la petición ni construyendo la clase a mano.
+
+`ApiCatalogRepository` se renombró a **`LegacyApiCatalogRepository`**: el nombre
+anterior parecía "el contrato API oficial del producto", y así es como algo así
+acaba encendido en un release.
 
 ## Estados de pantalla
 
@@ -248,6 +282,8 @@ un error 500.
 | Repositorios **nulables** | Un build que no puede servir mocks no debe tener de dónde sacarlos. |
 | Config estricta por defecto en release | Una variable olvidada no puede volver permisivo un build de tienda. |
 | Sin `X-Company-Slug` en el cliente | BR-002 no está aprobado; no se finge un contrato inexistente. |
+| Catálogo legacy bloqueado fuera de desarrollo | El endpoint estable no aísla por empresa: sería una fuga cross-tenant. |
+| Guardia repetida antes de la llamada de red | El composition root es un solo punto de decisión, y por tanto un solo punto de fallo. |
 | Clasificación de timeout por flag, no por excepción | La forma del error de un abort no es portable entre runtimes. |
 | `Animated` en vez de Reanimated para el Skeleton | Una opacidad en bucle no necesita worklets. |
 | `noUncheckedIndexedAccess` | Encontró errores reales durante M0: indexar un array es `T \| undefined`. |

@@ -18,9 +18,12 @@ M0.1 corrige eso. Cada afirmación lleva ahora una de estas tres etiquetas:
 
 **Referencia de la verificación**
 
-- `origin/master` @ `2624d47` — *merge: company-aware internal control dashboard*
-- Árbol observado: rama `feat/tenant-aware-commerce` @ `6d8c3e0`, más ~20
-  archivos modificados sin commitear y las migraciones `0021`–`0026`.
+- `origin/master` @ `2624d478af5cd3cc90c4b65d9aa4c81bb2439cfc`
+  — *merge: company-aware internal control dashboard* (reauditado en M0.2, sin
+  cambios respecto a M0.1).
+- Árbol observado: rama `feat/tenant-aware-commerce` @
+  `6d8c3e0270c51e24c20e76489ea92829048a39cf`, **no mergeada en `master`**, más
+  cambios sin commitear encima y las migraciones `0021`–`0026`.
 
 M1 debe **volver a inspeccionar `master`** cuando el equipo Web cierre su fase;
 hasta entonces, lo etiquetado como `OBSERVED_IN_PROGRESS` no debe usarse para
@@ -33,7 +36,20 @@ Superficie propuesta para Mobile: `/api/v1/` — ver **BR-007**.
 
 ## Catálogo
 
-### `GET /api/products/` · `VERIFIED_STABLE_MASTER`
+### `GET /api/products/`
+
+```
+VERIFIED_STABLE_MASTER
+LEGACY
+PUBLIC
+NOT_TENANT_SAFE
+NOT_APPROVED_FOR_MOBILE_RELEASE
+```
+
+**No es `API_READY` para Mobile.** Desde la perspectiva de integración Mobile
+está en `API_PENDING`: el endpoint existe y funciona, pero **no cumple la
+frontera de aislamiento SaaS**, así que no es un contrato contra el que esta app
+pueda publicarse.
 
 `ProductViewSet` (`ReadOnlyModelViewSet`; permiso global `AllowAny`).
 
@@ -91,12 +107,37 @@ vacía. **Eso describía código en progreso, no `master`.** En `master`,
 `resolve_storefront_company`, `storefront_products` y `Product.company` **no
 existen**.
 
+`resolve_company_from_host` **sí** existe en `master`, pero no está conectado a
+nada. Lo dice el propio backend, en su docstring:
+
+> `Map a request host to a Company via its slug (DESIGNED, not yet wired up).`
+
+y en la cabecera de `tenancy.py`:
+
+> `resolve_company_from_host implements the lookup; no public view calls it yet`
+
+Los tests de `CrossTenantError` de `master` cubren la superficie **admin** y las
+membresías, no el catálogo público: los tests de `/api/products/` solo verifican
+filtros y slugs, sin ninguna aserción de aislamiento.
+
 Consecuencia real, y es la contraria a la documentada en M0: contra `master`, un
 cliente móvil recibiría **todos los productos de la instalación**, sin ninguna
 separación entre empresas. Para un piloto de una sola tienda funciona; para un
-SaaS multiempresa no es un contrato utilizable.
+SaaS multiempresa es un **riesgo cross-tenant**, aunque el endpoint sea público.
 
-### `GET /api/categories/` · `VERIFIED_STABLE_MASTER`
+#### Consecuencia en Mobile (M0.2)
+
+La app **no puede** consumir este catálogo en staging ni en production, ni
+siquiera con `EXPO_PUBLIC_USE_MOCK_DATA=false`. El gate falla cerrado y solo se
+abre con las tres condiciones a la vez: entorno `development`, mocks apagados y
+`EXPO_PUBLIC_ENABLE_LEGACY_CATALOG=true`. Ver README > "Catálogo legacy".
+
+### `GET /api/categories/`
+
+```
+VERIFIED_STABLE_MASTER · LEGACY · PUBLIC · NOT_TENANT_SAFE
+NOT_APPROVED_FOR_MOBILE_RELEASE
+```
 
 `CategoryViewSet`, `queryset = Category.objects.all()`. Array plano de
 `{ id, name, slug }`. Igualmente global.

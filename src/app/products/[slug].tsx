@@ -18,6 +18,7 @@ import { productAvailability } from '@/domain/products/types';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { useMockData } from '@/config/env';
 import { useProduct } from '@/hooks/use-catalog';
+import { FeatureUnavailableError } from '@/repositories/errors';
 import { useTheme } from '@/theme/theme-provider';
 import { formatCurrency } from '@/utils/format';
 
@@ -29,6 +30,14 @@ import { formatCurrency } from '@/utils/format';
  * goes through Stripe Checkout in a web context. Putting a buy button here
  * would be a promise the app cannot keep in M0. Purchasing is an M1+ decision
  * that needs a real contract first.
+ *
+ * M0.2 — "no hay catálogo" and "ese producto no existe" are separate outcomes
+ * and are rendered separately. The first is about the app, the second is about
+ * one product; telling a shopper their link is dead when the app simply has no
+ * catalogue source would send them looking for a problem that is not theirs.
+ *
+ * When the catalogue is unavailable the query never reaches the network: the
+ * repository is null, so `useProduct` rejects before any request is made.
  */
 export default function ProductDetailScreen() {
   const theme = useTheme();
@@ -43,6 +52,18 @@ export default function ProductDetailScreen() {
     );
   }
 
+  // FEATURE UNAVAILABLE — the app has no catalogue at all in this build.
+  if (error instanceof FeatureUnavailableError) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Tienda' }} />
+        <Screen scrollable contentContainerStyle={{ flexGrow: 1 }}>
+          <ErrorState error={error} title="Catálogo no disponible todavía" />
+        </Screen>
+      </>
+    );
+  }
+
   if (isError) {
     return (
       <Screen scrollable contentContainerStyle={{ flexGrow: 1 }}>
@@ -51,6 +72,7 @@ export default function ProductDetailScreen() {
     );
   }
 
+  // NOT FOUND — there IS a catalogue; this particular product is not in it.
   if (!product) {
     return (
       <Screen contentContainerStyle={{ flexGrow: 1 }}>

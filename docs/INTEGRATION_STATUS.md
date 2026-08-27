@@ -12,8 +12,8 @@ archivo discrepan, **el archivo tiene razón**.
 
 | Feature | Mobile UI | Backend | Integration | Tests | Estado |
 |---|---|---|---|---|---|
-| Catálogo (tienda) | IMPLEMENTADO | API_READY (legacy) | MOCK | TESTED UI | PARCIAL |
-| Detalle de producto | IMPLEMENTADO | API_READY (legacy) | MOCK | TESTED UI | PARCIAL |
+| Catálogo (tienda) | IMPLEMENTADO | API_PENDING (legacy no tenant-safe) | MOCK | TESTED UI | PARCIAL |
+| Detalle de producto | IMPLEMENTADO | API_PENDING (legacy no tenant-safe) | MOCK | TESTED UI | PARCIAL |
 | Pedidos | IMPLEMENTADO | API_PENDING | MOCK | TESTED UI | PARCIAL |
 | Detalle de pedido | IMPLEMENTADO | API_PENDING | MOCK | TESTED UI | PARCIAL |
 | Reparaciones | IMPLEMENTADO | MOCK | MOCK | TESTED UI | PARCIAL |
@@ -34,7 +34,7 @@ Con la configuración a prueba de fallos, **el entorno decide qué datos existen
 
 | Feature | development | staging | production |
 |---|---|---|---|
-| Catálogo | mock (o API con `USE_MOCK_DATA=false`) | API legacy | API legacy |
+| Catálogo | mock · o legacy **con opt-in explícito** | *no disponible* | *no disponible* |
 | Pedidos | mock | *no disponible* | *no disponible* |
 | Reparaciones | mock | *no disponible* | *no disponible* |
 | Marca | fixture del piloto | *no disponible* (BR-006) | *no disponible* (BR-006) |
@@ -47,24 +47,57 @@ propia cuenta.
 
 ## Detalle
 
-### Catálogo — `API_READY`, no integrado
+### Catálogo — legacy existente, **no apto para release**
+
+Estado detallado:
+
+```
+Mobile UI:                 IMPLEMENTADO
+Backend legacy:            IMPLEMENTADO   (existe y funciona en master)
+Backend tenant-safe:       PENDIENTE      (OBSERVED_IN_PROGRESS en una rama Web)
+Integration:               MOCK
+Release-safe integration:  PENDIENTE
+```
+
+**No está `INTEGRATED` y no puede estarlo todavía.**
 
 `GET /api/products/` y `/api/categories/` existen en `master`, son públicos y
-están verificados. `ApiCatalogRepository` está **escrito y listo**, y se activa
-con `EXPO_PUBLIC_USE_MOCK_DATA=false`.
+están verificados. Pero **no están aislados por empresa**:
 
-No es el default, y M0.1 corrige el motivo que M0 daba:
+```python
+# ProductViewSet.get_queryset  @ origin/master 2624d478
+Product.objects.select_related('category').prefetch_related('reviews').filter(is_active=True)
 
-- **En `master`** el catálogo **no está tenantizado**: `ProductViewSet` devuelve
-  `Product.objects.filter(is_active=True)`, global. Un cliente móvil recibiría
-  el catálogo de **todas** las empresas.
-- **En el árbol en progreso** del equipo Web se está añadiendo resolución por
-  Host, que descartaría a un cliente móvil y devolvería **vacío**.
+# CategoryViewSet
+Category.objects.all()
+```
 
-Ninguno de los dos es un contrato SaaS utilizable. **Bloqueado por BR-002.**
+Ni `Product` ni `Category` tienen campo `company` en `master`, y el resolvedor
+por host que sí existe está documentado por el propio backend como *"DESIGNED,
+not yet wired up … no public view calls it yet"*.
 
-> Este catálogo legacy **no se considera todavía el contrato SaaS definitivo de
-> Mobile**. Ver BR-007 (`/api/v1/`).
+Un cliente SaaS apuntado ahí recibe el catálogo de **todas** las empresas. Eso es
+un **riesgo cross-tenant**, aunque el endpoint sea público. **Bloqueado por
+BR-002.**
+
+#### El gate (M0.2)
+
+`LegacyApiCatalogRepository` (antes `ApiCatalogRepository`) solo se construye
+cuando **las tres** condiciones se cumplen:
+
+```
+appEnvironment === 'development'
+  AND mocks apagados
+  AND EXPO_PUBLIC_ENABLE_LEGACY_CATALOG === 'true'
+```
+
+En cualquier otro caso `repositories.catalog` es `null` y la pantalla muestra
+*"Catálogo no disponible todavía"*. En staging y production el flag se **ignora**
+y se reporta como `legacy-catalog-forbidden` en el diagnóstico de configuración.
+
+Hay además una segunda defensa: `assertLegacyCatalogAllowed()` se ejecuta dentro
+del repositorio y de cada función de endpoint, así que una build bloqueada no
+puede emitir la petición ni construyendo la clase a mano.
 
 ### Pedidos — `API_PENDING`
 
@@ -95,7 +128,7 @@ y renderiza neutral. **BR-006.**
 
 | Feature | Bloqueo | Trabajo Mobile una vez desbloqueado |
 |---|---|---|
-| Catálogo | BR-002 (+ BR-007) | Cambiar el default en `src/repositories/index.ts`. El repositorio ya existe. |
+| Catálogo | BR-002 (+ BR-007) | Escribir el repositorio tenant-safe y **borrar** `LegacyApiCatalogRepository` junto con su gate. No se adapta: se reemplaza. |
 | Pedidos | BR-001, BR-003 | Escribir `ApiOrderRepository` (el mapeador es directo). |
 | Reparaciones | BR-005 | Escribir `ApiRepairRepository`; el dominio ya está modelado. |
 | Auth | BR-001, BR-007 | Escribir `ApiAuthRepository` + Bearer para `/api/v1/` + refresh. |
@@ -107,8 +140,19 @@ repositorios.
 
 ## Nota de verificación
 
-Lo documentado en `API_CONTRACT.md` se re-verificó en M0.1 contra
-`origin/master` @ `2624d47`. M0 había leído un working tree en la rama
-`feat/tenant-aware-commerce` con cambios sin commitear, y algunas afirmaciones
-describían código que **no es contrato estable**. M1 debe volver a inspeccionar
-`master` cuando el equipo Web cierre su fase.
+Lo documentado en `API_CONTRACT.md` se re-verificó en M0.2 contra
+`origin/master` @ `2624d478af5cd3cc90c4b65d9aa4c81bb2439cfc` — sin cambios
+respecto a la auditoría de M0.1.
+
+M0 había leído un working tree en la rama `feat/tenant-aware-commerce` con
+cambios sin commitear, y algunas afirmaciones describían código que **no es
+contrato estable**.
+
+La rama `feat/tenant-aware-commerce` @ `6d8c3e0` **sigue sin mergearse en
+`master`**. Aparentemente contiene `Product.company`, `Category.company` y los
+helpers de storefront tenant-aware, pero eso es `OBSERVED_IN_PROGRESS`: la
+existencia de código en una rama no es una API estable. Mobile **no** se integra
+contra ella.
+
+El orden es: rama Web → tests → merge a `master` → Mobile reaudita `master` →
+recién entonces integra.

@@ -14,8 +14,9 @@ Web. Ese árbol estaba en `feat/tenant-aware-commerce` con cambios sin commitear
 **no en `master`**. Parte del razonamiento original describía por tanto código
 en progreso.
 
-M0.1 re-verificó todo contra `origin/master` @ `2624d47`. Cada requerimiento
-indica ahora sobre qué se apoya:
+M0.1 re-verificó todo contra `origin/master`; M0.2 volvió a auditar el catálogo
+contra el mismo SHA — `2624d478af5cd3cc90c4b65d9aa4c81bb2439cfc`, sin cambios.
+Cada requerimiento indica sobre qué se apoya:
 
 - `VERIFIED_STABLE_MASTER` — commiteado en `master`. Es contrato.
 - `OBSERVED_IN_PROGRESS` — visto en una rama/árbol del equipo Web. **No** es contrato.
@@ -32,7 +33,7 @@ Prioridad: **BR-001** y **BR-002** bloquean toda integración real.
 | BR-004 | Paginación opt-in | MEDIA |
 | BR-005 | Dominio de reparaciones | ALTA |
 | BR-006 | Endpoint público de marca | MEDIA |
-| BR-007 | Superficie versionada `/api/v1/` | ALTA |
+| BR-007 | Superficie versionada `/api/v1/` (sigue siendo **PROPUESTA**) | ALTA |
 
 ---
 
@@ -206,12 +207,25 @@ que hoy no existe y no tiene datos administrativos detrás.
 Este requerimiento sigue siendo necesario, pero por un motivo **distinto** al
 documentado en M0, porque M0 describía código en progreso.
 
-**En `master` (`VERIFIED_STABLE_MASTER`):** el catálogo público **no está
-tenantizado en absoluto**. `ProductViewSet.get_queryset` es
-`Product.objects.filter(is_active=True)` y `CategoryViewSet` es
-`Category.objects.all()`. Un cliente móvil recibiría **todos los productos de la
-instalación**, mezclando empresas. Para el piloto de una sola tienda funciona;
-para un SaaS no.
+**En `master` (`VERIFIED_STABLE_MASTER`, reauditado en M0.2 @ `2624d478`):** el
+catálogo público **no está tenantizado en absoluto**.
+
+```python
+# ProductViewSet.get_queryset
+Product.objects.select_related('category').prefetch_related('reviews').filter(is_active=True)
+
+# CategoryViewSet
+Category.objects.all()
+```
+
+Ni `Product` ni `Category` tienen campo `company`. `resolve_company_from_host`
+existe pero el propio backend lo documenta como *"DESIGNED, not yet wired up"* y
+*"no public view calls it yet"*. No hay tests de aislamiento para el catálogo
+público — los de `CrossTenantError` cubren la superficie admin y las membresías.
+
+Un cliente móvil recibiría **todos los productos de la instalación**, mezclando
+empresas. Es un **riesgo cross-tenant**, aunque el endpoint sea público. Para el
+piloto de una sola tienda funciona; para un SaaS no.
 
 **En el árbol observado (`OBSERVED_IN_PROGRESS`):** el equipo Web está añadiendo
 `Product.company` y `resolve_storefront_company`, que resuelve la empresa por
@@ -242,6 +256,36 @@ Mobile **no** tiene preferencia y **no** implementará ninguno hasta que Backend
 elija. En M0.1 se **retiró** del cliente HTTP la cabecera `X-Company-Slug` que
 M0 enviaba en todas las peticiones, precisamente porque anticipaba un contrato
 inexistente.
+
+### Mientras tanto: qué hizo Mobile (M0.2)
+
+Mobile no puede arreglar esto desde su lado, así que se protegió de ello:
+
+- El catálogo legacy está **bloqueado en staging y production**, sin excepción.
+- En desarrollo requiere un opt-in explícito
+  (`EXPO_PUBLIC_ENABLE_LEGACY_CATALOG=true`) que advierte de que el contrato no
+  es tenant-safe.
+- Hay una segunda defensa antes de la llamada de red, para que una build
+  bloqueada no pueda emitir la petición ni saltándose el composition root.
+
+Esto **no sustituye** a BR-002. Solo evita que Mobile publique una app que
+filtre catálogo entre empresas mientras el requerimiento se resuelve.
+
+### Cuándo se puede declarar resuelto
+
+**No antes del merge a `master` y de una reauditoría.** Cuando
+`feat/tenant-aware-commerce` (o su sucesora) llegue a `master`, Mobile deberá
+volver a auditar, como mínimo:
+
+- el **modelo** (`Product.company`, `Category.company` o estrategia equivalente);
+- las **migraciones** y su backfill;
+- la **resolución del tenant** para el flujo público;
+- el **endpoint** y su comportamiento cuando el tenant no resuelve;
+- el **aislamiento** real entre empresas;
+- los **tests** de aislamiento del catálogo público;
+- los **serializers** y las **URLs**.
+
+Hasta entonces BR-002 permanece **CRÍTICA** y abierta.
 
 ### Superficie PÚBLICA (catálogo, marca)
 

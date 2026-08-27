@@ -1,6 +1,6 @@
-import { isPilotTenant, useMockData } from '@/config/env';
+import { isPilotTenant, legacyCatalogPolicy, useMockData } from '@/config/env';
 
-import { ApiCatalogRepository } from './api/api-catalog-repository';
+import { LegacyApiCatalogRepository } from './api/legacy-api-catalog-repository';
 import { MockCatalogRepository } from './mock/mock-catalog-repository';
 import { MockCompanyRepository } from './mock/mock-company-repository';
 import { MockOrderRepository } from './mock/mock-order-repository';
@@ -20,27 +20,44 @@ import type {
  * themselves, which is what keeps "are we on mocks?" a single answerable
  * question instead of something scattered across the app.
  *
- * M0.1 CHANGE — mock-only features are now NULLABLE.
+ * M0.1 — mock-only features became NULLABLE. Repairs, orders and company brand
+ * were wired to their mocks unconditionally, which quietly defeated the mock
+ * switch: a production build would still have shown fabricated data.
  *
- * Previously repairs, orders and company brand were wired to their mock
- * implementations unconditionally. That quietly defeated the whole point of the
- * mock switch: a production build, where `useMockData` is false, would still
- * have shown fabricated repairs and orders to a real customer.
+ * M0.2 — THE CATALOGUE JOINED THEM.
  *
- * Now a repository exists only when this build is actually allowed to serve it.
- * `null` means "no data source in this build", the hooks surface it as a
- * `FeatureUnavailableError`, and the screens say so. Repairs, orders and brand
- * have no `Api*` sibling on purpose — writing one would mean inventing an
- * endpoint. They stay unavailable until the matching backend requirement is
- * accepted (BR-005, BR-001/BR-003, BR-006).
+ * It used to read `useMockData ? Mock : Api`, so turning mocks off was enough
+ * to point a release at the legacy Django catalogue. That catalogue is public,
+ * it works, and it returns **every company's products** — verified on
+ * `origin/master` `2624d478`. "Not mock" was being treated as "safe", and the
+ * two are not the same thing.
+ *
+ * Now the source comes from `legacyCatalogPolicy`, which fails closed:
+ *
+ *   mock                     → MockCatalogRepository
+ *   legacy-api (dev + flag)  → LegacyApiCatalogRepository
+ *   none                     → null
+ *
+ * There is no path from a release build to the legacy catalogue.
  */
+function resolveCatalogRepository(): CatalogRepository | null {
+  switch (legacyCatalogPolicy.source) {
+    case 'mock':
+      return new MockCatalogRepository();
+    case 'legacy-api':
+      return new LegacyApiCatalogRepository();
+    case 'none':
+      return null;
+  }
+}
+
 export const repositories: {
-  catalog: CatalogRepository;
+  catalog: CatalogRepository | null;
   repairs: RepairRepository | null;
   orders: OrderRepository | null;
   company: CompanyRepository | null;
 } = {
-  catalog: useMockData ? new MockCatalogRepository() : new ApiCatalogRepository(),
+  catalog: resolveCatalogRepository(),
   repairs: useMockData ? new MockRepairRepository() : null,
   orders: useMockData ? new MockOrderRepository() : null,
   // Also gated on the tenant: the bundled brand belongs to the pilot, so a
