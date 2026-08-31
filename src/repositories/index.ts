@@ -1,8 +1,11 @@
 import { authRuntimePolicy } from '@/auth/auth-policy';
 import { getAuthRuntime } from '@/auth/auth-runtime';
-import { catalogPolicy, isPilotTenant, useMockData } from '@/config/env';
+import {
+  catalogPolicy, companySlug, isApiConfigured, isPilotTenant, useMockData,
+} from '@/config/env';
 
 import { V1ApiCatalogRepository } from './api/v1-api-catalog-repository';
+import { V1CompanyRepository } from './api/v1-company-repository';
 import { V1CustomerOrderRepository } from './api/v1-customer-order-repository';
 import { MockCatalogRepository } from './mock/mock-catalog-repository';
 import { MockCompanyRepository } from './mock/mock-company-repository';
@@ -91,6 +94,28 @@ function resolveOrderRepository(): OrderRepository | null {
   }
 }
 
+/**
+ * Where this build's branding comes from.
+ *
+ * M5 — BR-006 landed, so there is finally a real source. Before it, the only
+ * option was a bundled fixture belonging to the pilot, which is why a non-pilot
+ * build received NOTHING: one company's identity inside another company's app
+ * is worse than a neutral screen.
+ *
+ *   mocks on + pilot  → MockCompanyRepository  (the bundled pilot fixture)
+ *   tenant + API url  → V1CompanyRepository    (/api/v1/storefront/<slug>/config/)
+ *   otherwise         → null
+ *
+ * The pilot fixture keeps its narrow gate rather than being deleted: it is what
+ * makes the app runnable straight after a clone, with no server.
+ */
+function resolveCompanyRepository(): CompanyRepository | null {
+  if (useMockData) {
+    return isPilotTenant ? new MockCompanyRepository() : null;
+  }
+  return companySlug && isApiConfigured ? new V1CompanyRepository() : null;
+}
+
 export const repositories: {
   catalog: CatalogRepository | null;
   repairs: RepairRepository | null;
@@ -100,9 +125,7 @@ export const repositories: {
   catalog: resolveCatalogRepository(),
   repairs: useMockData ? new MockRepairRepository() : null,
   orders: resolveOrderRepository(),
-  // Also gated on the tenant: the bundled brand belongs to the pilot, so a
-  // build configured for any other company must not receive it.
-  company: useMockData && isPilotTenant ? new MockCompanyRepository() : null,
+  company: resolveCompanyRepository(),
 };
 
 export { FeatureUnavailableError, featureUnavailable } from './errors';

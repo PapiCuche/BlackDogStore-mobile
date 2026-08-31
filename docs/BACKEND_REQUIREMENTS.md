@@ -34,7 +34,7 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | BR-003 | Exponer `fulfillment_status` | **IMPLEMENTADO para v1** |
 | BR-004 | Paginación opt-in | MEDIA |
 | BR-005 | Dominio de reparaciones | ALTA |
-| BR-006 | Endpoint público de marca | MEDIA |
+| BR-006 | Endpoint público de marca | **IMPLEMENTADO** |
 | BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — catálogo + auth + pedidos de cliente; superficie INTERNA pendiente |
 | BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
 
@@ -552,7 +552,26 @@ las etapas futuras**, porque el cliente quiere saber cuánto falta.
 
 ## BR-006 — Endpoint público de marca por empresa
 
-**Estado:** PROPUESTA · **Prioridad:** MEDIA · **Base:** `VERIFIED_STABLE_MASTER`
+**Estado:** **IMPLEMENTADO** · **Prioridad:** MEDIA
+
+Resuelto en M5, y **no exactamente como se propuso**: en vez de un endpoint nuevo
+`GET /api/v1/storefront/brand/`, el backend ya tenía
+`GET /api/storefront/config/` resuelto por Host para la web. M5 extrajo su
+constructor de payload y añadió la variante por slug —
+`GET /api/v1/storefront/<company_slug>/config/` — que devuelve **exactamente lo
+mismo**, con un test que compara ambas respuestas byte a byte.
+
+Diferencia con la propuesta original: el payload **sí** incluye `legal_name` y
+`tax_id`. Esta propuesta pedía excluirlos por considerarlos internos; en la
+práctica ambos aparecen en cada boleta y factura que emite el negocio, y el
+equipo Web ya los publicaba. Se respetó su decisión en vez de crear un segundo
+payload que dijera otra cosa.
+
+Integrado por Mobile: marca, colores, contacto, políticas y el enlace de WhatsApp
+que hasta M5 dejaba el botón del detalle de producto deliberadamente inerte.
+
+El motivo original se conserva abajo.
+
 
 **Motivo**
 

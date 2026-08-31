@@ -80,6 +80,8 @@ export const queryKeys = {
   categories: (scope: QueryScope) => [...scopePrefix(scope, 'public'), 'categories'] as const,
   companyBrand: (scope: QueryScope) =>
     [...scopePrefix(scope, 'public'), 'company-brand'] as const,
+  storefrontConfig: (scope: QueryScope) =>
+    [...scopePrefix(scope, 'public'), 'storefront-config'] as const,
 
   // ── tenant + user private, CUSTOMER audience ─────────────────────────────
   //

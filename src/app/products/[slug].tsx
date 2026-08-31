@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
 import {
@@ -14,7 +14,11 @@ import {
   Screen,
   Text,
 } from '@/design-system';
+import { useCart } from '@/cart/cart-provider';
+import { useStorefrontConfig } from '@/hooks/use-storefront-config';
 import { productAvailability } from '@/domain/products/types';
+import { openExternalLink } from '@/utils/external-links';
+import { hapticSuccess } from '@/utils/haptics';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { useMockData } from '@/config/env';
 import { useProduct } from '@/hooks/use-catalog';
@@ -25,24 +29,24 @@ import { formatCurrency } from '@/utils/format';
 /**
  * Product detail.
  *
- * Read-only. There is no "add to cart" button, and that is deliberate: Django's
- * cart is keyed on a `session_key` issued to a browser session, and checkout
- * goes through Stripe Checkout in a web context. Putting a buy button here
- * would be a promise the app cannot keep in M0. Purchasing is an M1+ decision
- * that needs a real contract first.
+ * M5 — this can finally BUY. Adding to the basket needs no session
+ * (DEC-MOBILE-006): browsing and choosing are public, and the login is asked
+ * for at the moment of payment, not at the door.
  *
- * M0.2 — "no hay catálogo" and "ese producto no existe" are separate outcomes
- * and are rendered separately. The first is about the app, the second is about
- * one product; telling a shopper their link is dead when the app simply has no
- * catalogue source would send them looking for a problem that is not theirs.
- *
- * When the catalogue is unavailable the query never reaches the network: the
- * repository is null, so `useProduct` rejects before any request is made.
+ * The basket is local intent (DEC-MOBILE-009). The price shown here is what the
+ * catalogue reported; the server recomputes every figure at checkout, so a
+ * price that moved between browsing and paying is caught there rather than
+ * honoured from a stale local copy.
  */
 export default function ProductDetailScreen() {
   const theme = useTheme();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { data: product, isPending, isError, error, refetch } = useProduct(slug);
+  // Hooks first, unconditionally: the early returns below would otherwise change
+  // the hook order between renders.
+  const { add, tenantSlug } = useCart();
+  const { whatsappLink } = useStorefrontConfig();
+  const canAddToCart = tenantSlug !== null;
 
   if (isPending) {
     return (
@@ -172,20 +176,33 @@ export default function ProductDetailScreen() {
           ) : null}
 
           <Button
-            label="Consultar por WhatsApp"
+            label={isOutOfStock ? 'Sin stock' : 'Agregar al carrito'}
             variant="primary"
             fullWidth
-            disabled={isOutOfStock}
+            disabled={isOutOfStock || !canAddToCart}
             onPress={() => {
-              // Intentionally inert in M0. Wiring this to the tenant's support
-              // channel needs the brand endpoint (BR-006) so it is not the
-              // pilot's number hardcoded into every tenant's build.
+              add(product);
+              hapticSuccess();
+              router.push('/cart');
             }}
-            accessibilityHint="Disponible en una próxima versión"
+            accessibilityHint="Agrega este producto a tu carrito"
           />
 
+          {/* BR-006 CLOSED. The link is the tenant's own, published by the
+              server — never the pilot's number hardcoded into every build. It
+              is only rendered when that tenant actually published one. */}
+          {whatsappLink ? (
+            <Button
+              label="Consultar por WhatsApp"
+              variant="secondary"
+              fullWidth
+              onPress={() => void openExternalLink(whatsappLink)}
+              accessibilityHint="Abre WhatsApp con la tienda"
+            />
+          ) : null}
+
           {useMockData ? (
-            <MockDataNotice message="Producto de ejemplo. La compra desde la app aún no está disponible." />
+            <MockDataNotice message="Producto de ejemplo. No es una compra real." />
           ) : null}
         </View>
       </Screen>

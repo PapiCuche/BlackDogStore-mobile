@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@/auth/auth-provider';
+import { CartProvider } from '@/cart/cart-provider';
 import { ConnectivityProvider } from '@/connectivity/connectivity-provider';
 import { DeepLinkProvider } from '@/linking/deep-link-provider';
 import { AppThemeProvider } from '@/theme/theme-provider';
@@ -44,7 +45,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
           <AppThemeProvider>
             <AuthProvider>
               <QueryLifecycleBridges />
-              <DeepLinkProvider>{children}</DeepLinkProvider>
+              {/* The basket sits INSIDE auth but is not owned by it: browsing
+                  and adding to a cart never require a session (DEC-MOBILE-006),
+                  and signing in must not empty what someone already chose. It is
+                  inside only so a screen can read both from one tree. */}
+              <CartProvider>
+                <DeepLinkProvider>{children}</DeepLinkProvider>
+              </CartProvider>
             </AuthProvider>
           </AppThemeProvider>
         </QueryClientProvider>

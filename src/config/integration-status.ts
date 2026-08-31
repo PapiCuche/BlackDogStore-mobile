@@ -55,8 +55,8 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   },
   companyBrand: {
     label: 'Marca / multiempresa',
-    status: 'MOCK',
-    note: 'Company existe en Django pero no expone campos de marca ni un endpoint público. Un build que no sea el piloto no recibe branding. Propuesta en BR-006.',
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/storefront/<empresa>/config/ — mismo payload que la web, resuelto por slug. Cubierto por tests.',
   },
 };
 

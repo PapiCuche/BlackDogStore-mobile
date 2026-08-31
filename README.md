@@ -479,6 +479,46 @@ Estado de pago y **estado de entrega** por separado (BR-003), con las etiquetas
 que renderiza el servidor. No llegan identificadores de Stripe, diagnósticos
 operativos ni claves de sesión.
 
+## Carrito y compra
+
+**Navegar y armar carrito no piden cuenta. Pagar sí** (DEC-MOBILE-006).
+
+```
+producto → agregar → carrito → «Ir a pagar» → login si hace falta
+        → Stripe Checkout alojado → vuelta a la app → refetch del pedido
+```
+
+### El carrito es intención local
+
+**DEC-MOBILE-009.** Vive en el dispositivo, sin backend. Guarda slug y cantidad,
+más nombre, imagen y último precio visto **solo para dibujar**. Todo importe que
+muestra es una **estimación**, y la pantalla lo dice: el servidor recalcula todo
+al pagar.
+
+Está en AsyncStorage, **no en SecureStore** — no contiene credenciales ni
+autorización, y el Keychain es para secretos. Es **por empresa**: dos tiendas son
+dos carritos. **Sobrevive al login y al logout**, porque quien entra para pagar y
+falla no debe perder lo que eligió.
+
+### El pago
+
+Sin campo de tarjeta en la app, y no debe haberlo: que los datos de tarjeta nunca
+toquen el cliente es la razón entera de que exista la página alojada de Stripe.
+La app abre una URL HTTPS que el servidor emitió y **valida que sea de Stripe**
+antes de abrirla.
+
+**«El navegador volvió» no es un pago.** Al volver a primer plano la app
+**pregunta al servidor** por el pedido, que lo sabe por el webhook de Stripe. El
+carrito solo se vacía cuando el pago se confirma; cancelar, expirar o quedarse
+sin red lo conservan.
+
+### Marca del tenant
+
+Desde M5 la marca, el contacto, las políticas y el enlace de WhatsApp vienen de
+`/api/v1/storefront/<empresa>/config/` (**BR-006** cerrado). El botón de WhatsApp
+del detalle de producto, inerte desde M0, ahora abre el canal **de esa tienda** —
+nunca un número escrito a mano en el código.
+
 ## EAS
 
 Perfiles en `eas.json`:

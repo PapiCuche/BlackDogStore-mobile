@@ -38,7 +38,7 @@ archivo discrepan, **el archivo tiene razón**.
 | Política de reintentos | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Cache persistente offline | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
 | Cola de mutaciones offline | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
-| Marca / multiempresa | IMPLEMENTADO | MOCK | MOCK | TESTED | PARCIAL |
+| Marca / multiempresa | IMPLEMENTADO | **API_READY** (`/api/v1/.../config/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Design system | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Tema claro/oscuro/sistema | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Navegación (tabs estables) | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
@@ -58,9 +58,11 @@ archivo discrepan, **el archivo tiene razón**.
 | Gate de acción privada | IMPLEMENTADO | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
 | Área interna (shell) | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
 | APIs internas de negocio | NO IMPLEMENTADO | PENDIENTE | n/a | n/a | **PENDIENTE** |
-| Carrito móvil | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** → M5 |
-| Checkout autenticado móvil | NO IMPLEMENTADO | PENDIENTE | n/a | n/a | **PENDIENTE** → M5 |
-| Compra / pagos | NO IMPLEMENTADO | existe (web) | — | — | PENDIENTE |
+| Carrito móvil (público) | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
+| Checkout autenticado móvil | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Stripe Checkout alojado | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
+| Confirmación de pago | **IMPLEMENTADO** | **API_READY** (webhook + refetch) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Compra / pagos | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 
 ## Qué sirve cada build (M0.1)
 
@@ -71,7 +73,7 @@ Con la configuración a prueba de fallos, **el entorno decide qué datos existen
 | Catálogo | mock · o **real `/api/v1/`** con mocks off | **real `/api/v1/`** | **real `/api/v1/`** |
 | Pedidos | mock · o **real `/api/v1/customer/`** con mocks off | **real** | **real** |
 | Reparaciones | mock | *no disponible* | *no disponible* |
-| Marca | fixture del piloto | *no disponible* (BR-006) | *no disponible* (BR-006) |
+| Marca | fixture del piloto · o **real** con mocks off | **real `/api/v1/`** | **real `/api/v1/`** |
 
 *"No disponible"* significa que `repositories.<feature>` es `null` y la pantalla
 muestra un estado **"Próximamente"** explícito. No una lista vacía: "todavía no
@@ -202,7 +204,7 @@ y renderiza neutral. **BR-006.**
 | Reparaciones | BR-005 | Escribir `ApiRepairRepository`; el dominio ya está modelado. |
 | Auth (sesión) | ~~BR-001, BR-007~~ **DESBLOQUEADO** | **Hecho en M3.** `DjangoAuthTransport` + `ApiAuthRepository` escritos, `isBackendAuthAvailable = true` en el mismo commit. El coordinator, el vault y el pipeline no se tocaron: la apuesta de M1 se sostuvo. |
 | Auth (cuenta) | **BR-001B** | Escribir los flujos de registro/verificación/reset cuando existan endpoints nativos. Hoy la app los oculta en modo backend. |
-| Marca | BR-006 | Escribir `ApiCompanyRepository`; el fixture queda como fallback del piloto. |
+| Marca | ~~BR-006~~ **DESBLOQUEADO** | **Hecho en M5.** `V1CompanyRepository` sobre `/api/v1/storefront/<empresa>/config/`; el fixture del piloto queda solo para desarrollo con mocks. |
 
 El patrón es el mismo en los cinco casos: **una clase nueva y una línea en el
 composition root**. Ninguna pantalla cambia. Esa es la razón de la capa de
@@ -322,6 +324,32 @@ así que solo pudo existir después de M3.
 
 Lo que **no** cambió: reparaciones, marca, seguimiento y todo lo interno. Que un
 empleado pueda entrar a la app no le da acceso a nada de la empresa desde aquí.
+
+## Carrito y compra (M5)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master 0b184d3)
+Carrito local tenant-scoped    IMPLEMENTADO / TESTED
+Persistencia no sensible       IMPLEMENTADO / TESTED
+Agregar sin sesión             IMPLEMENTADO / TESTED
+Gate de sesión en el pago      IMPLEMENTADO / TESTED
+Checkout v1 idempotente        INTEGRADO / TESTED
+Stripe Checkout alojado        IMPLEMENTADO / TESTED
+Validación de la URL de pago   IMPLEMENTADO / TESTED
+Refetch del pedido al volver   IMPLEMENTADO / TESTED
+Vaciar solo tras pago pagado   IMPLEMENTADO / TESTED
+Config pública por slug        INTEGRADO / TESTED   (BR-006 cerrado)
+Enlace de WhatsApp del tenant  INTEGRADO / TESTED
+Reserva de stock               NO IMPLEMENTADO — deuda
+Área interna                   PENDIENTE
+Reparaciones                   PENDIENTE / BR-005
+```
+
+**El cliente no fija precios.** El servidor rechaza cualquier campo comercial;
+el carrito local solo expresa intención (DEC-MOBILE-009).
+
+**«El navegador volvió» no es un pago.** El estado real lo da el servidor, que lo
+aprende del webhook. El carrito sobrevive a todo lo que no sea un pago confirmado.
 
 ## Nota de verificación
 
