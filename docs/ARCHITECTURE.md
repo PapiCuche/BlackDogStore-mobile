@@ -44,7 +44,9 @@ src/
 ├── connectivity/           Estado de red: modelo + provider (una suscripción)
 ├── api/                    HTTP. client.ts · errors.ts · api-scope.ts
 │                           authenticated-request.ts
-│                           endpoints/catalog-v1.ts (contrato tenant-safe)
+│                           endpoints/catalog-v1.ts      (público)
+│                           endpoints/auth-v1.ts         (sesión)
+│                           endpoints/customer-orders-v1.ts (cliente)
 ├── auth/                   Sesión, política y ciclo de vida de tokens
 │   ├── auth-policy.ts      Qué mecanismo permite esta build (fail-safe)
 │   ├── auth-repository-factory.ts   Composition root de auth
@@ -481,6 +483,74 @@ está **vacío a propósito** y hoy todo enlace `https://` se rechaza. Confiar e
 un host que nadie controla sería peor que no aceptar ninguno. El checklist de
 activación (AASA, assetlinks, entitlements) está en `LINKING_STRATEGY.md`.
 
+## Audiencias (M4)
+
+El backend tiene ahora **tres audiencias**, y la app respeta esa separación en
+vez de decidir por rol.
+
+```
+/api/v1/storefront/<slug>/   PÚBLICA    anónima          catalog-v1.ts
+/api/v1/customer/<slug>/     CLIENTE    sus propios      customer-orders-v1.ts
+/api/v1/internal/<slug>/     INTERNA    de la empresa    NO EXISTE TODAVÍA
+```
+
+### DEC-MOBILE-006 — Navegación pública, compra autenticada
+
+**Fecha:** 2026-08-31 (M4) · **Estado:** ACEPTADA
+
+**Decisión.** El catálogo es público y se queda público: abrir la app, buscar,
+filtrar y ver un producto nunca piden cuenta. La sesión se pide en el momento en
+que la **acción** se vuelve privada — leer tus pedidos, tus reparaciones,
+pagar.
+
+**Motivo.** Una app que exige una cuenta antes de enseñar lo que vende ha
+perdido al cliente antes de abrir la tienda. Y pedirla justo cuando hace falta
+es también cuando la persona **entiende por qué**.
+
+`features/auth/private-action-gate` es la abstracción. Decide qué **dibujar**,
+nunca qué puede leerse: el servidor revalida sesión y propiedad en cada llamada.
+
+El checkout web legacy **conserva** su comportamiento anónimo. Esa regla se
+aplica a la superficie móvil v1; cambiar el e-commerce existente es una decisión
+aparte.
+
+### DEC-MOBILE-007 — Cliente e interno son audiencias distintas
+
+**Fecha:** 2026-08-31 (M4) · **Estado:** ACEPTADA
+
+**Contexto.** Lo obvio sería `role === 'customer' ? CustomerApp : StaffApp`.
+
+**Problema.** Es demasiado simple para un SaaS. Una misma identidad puede ser
+clienta de la empresa A, trabajar en la A y trabajar también en la B. Y el
+backend ya distingue las dos relaciones: `Customer` es quien compra, `Membership`
+es quien trabaja — la migración 0015 deliberadamente **no** dio membresía a los
+clientes.
+
+**Decisión.** `customer` y `member` son booleanos **independientes** en el
+contrato, no un rol. La app de cliente conserva sus pestañas; un empleado ve
+además una entrada separada al área interna. Un trabajador puede seguir usando
+la tienda como cliente.
+
+**Consecuencia en cache.** Las claves privadas llevan segmento de audiencia:
+`['tenant', slug, 'user', id, 'customer', …]`. Dos audiencias compartiendo clave
+harían que la primera pantalla en cargar decidiera lo que muestra la segunda, y
+la dirección peligrosa es que datos internos acaben en una vista de cliente.
+
+### DEC-MOBILE-008 — Las capabilities guían la UX, jamás la autorización
+
+**Fecha:** 2026-08-31 (M4) · **Estado:** ACEPTADA
+
+**Decisión.** `access_contexts[].capabilities` viaja para decidir **qué pestaña
+dibujar**. Nunca para decidir si una operación está permitida.
+
+**Motivo.** Un cliente puede mentir. Si la app dijera "tengo `inventory.view`" y
+el servidor lo creyera, la autorización viviría en el dispositivo del atacante.
+Todo endpoint interno vuelve a resolver capabilities en el servidor: quien mienta
+recibe un 403, no inventario.
+
+**Consecuencia.** La app **no** mantiene una segunda matriz de permisos. Las
+capabilities son datos que llegan y se usan para presentar.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -537,4 +607,10 @@ un error 500.
 | Contrato implementado ≠ API configurada | Una release sin URL mostraría un login cuyo botón solo puede fallar. |
 | Perfil no persistido | Un perfil cacheado es una segunda verdad que caduca en silencio. |
 | Registro y reset ocultos en modo backend | BR-001B no existe; un formulario que solo puede fallar enseña que la contraseña está mal. |
+| Catálogo público, compra autenticada | DEC-MOBILE-006: exigir cuenta antes de enseñar lo que se vende pierde al cliente antes de abrir. |
+| Cliente e interno como audiencias separadas | DEC-MOBILE-007: `Customer` y `Membership` son relaciones distintas en el backend, y una persona puede tener ambas. |
+| Segmento de audiencia en las claves de cache | Dos audiencias compartiendo clave harían que datos internos acabaran en una vista de cliente. |
+| Capabilities solo para presentación | DEC-MOBILE-008: si el servidor creyera al cliente, la autorización viviría en el dispositivo del atacante. |
+| Un único grafo de tokens (`auth-runtime`) | Dos coordinators sobre la misma entrada del Keychain rotan el refresh uno contra otro y matan la sesión. |
+| Sin filtrado de respuestas en el cliente | Recortar filas ajenas de una respuesta significa que ya se recibieron. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |

@@ -1,6 +1,9 @@
+import { authRuntimePolicy } from '@/auth/auth-policy';
+import { getAuthRuntime } from '@/auth/auth-runtime';
 import { catalogPolicy, isPilotTenant, useMockData } from '@/config/env';
 
 import { V1ApiCatalogRepository } from './api/v1-api-catalog-repository';
+import { V1CustomerOrderRepository } from './api/v1-customer-order-repository';
 import { MockCatalogRepository } from './mock/mock-catalog-repository';
 import { MockCompanyRepository } from './mock/mock-company-repository';
 import { MockOrderRepository } from './mock/mock-order-repository';
@@ -57,6 +60,37 @@ function resolveCatalogRepository(): CatalogRepository | null {
   }
 }
 
+/**
+ * Where a customer's own orders come from.
+ *
+ * M4 — the first PRIVATE integration. Unlike the catalogue, this needs a real
+ * session, so the deciding input is the AUTH policy rather than the mock flag:
+ *
+ *   backend mode  → V1CustomerOrderRepository  (/api/v1/customer/…)
+ *   mock mode     → MockOrderRepository        (development demo)
+ *   unavailable   → null
+ *
+ * `unavailable` covers a build with no auth contract AND a build that has one
+ * but no API url. Neither can fetch a private record, and neither should show a
+ * screen that pretends otherwise.
+ *
+ * Note this says nothing about whether the signed-in person HAS any orders, or
+ * even a relation with this company. That is the server's answer, not a
+ * composition decision — asking is safe, and the reply is theirs alone.
+ */
+function resolveOrderRepository(): OrderRepository | null {
+  switch (authRuntimePolicy.mode) {
+    case 'backend':
+      return new V1CustomerOrderRepository({
+        refreshCoordinator: getAuthRuntime().coordinator,
+      });
+    case 'mock':
+      return useMockData ? new MockOrderRepository() : null;
+    case 'unavailable':
+      return null;
+  }
+}
+
 export const repositories: {
   catalog: CatalogRepository | null;
   repairs: RepairRepository | null;
@@ -65,7 +99,7 @@ export const repositories: {
 } = {
   catalog: resolveCatalogRepository(),
   repairs: useMockData ? new MockRepairRepository() : null,
-  orders: useMockData ? new MockOrderRepository() : null,
+  orders: resolveOrderRepository(),
   // Also gated on the tenant: the bundled brand belongs to the pilot, so a
   // build configured for any other company must not receive it.
   company: useMockData && isPilotTenant ? new MockCompanyRepository() : null,

@@ -220,6 +220,65 @@ Mobile **no** debe diseñar contra este código hasta que esté en `master`.
 
 ---
 
+## Pedidos de cliente · `/api/v1/customer/` — **INTEGRADO**
+
+```
+VERIFIED_STABLE_MASTER · VERSIONED · PRIVADO · INTEGRADO POR MOBILE (M4)
+```
+
+Verificado en `origin/master` **`b253156`** (PR #3), leyendo el código en
+`master` y con smoke real.
+
+| Endpoint | Auth | Qué |
+|---|---|---|
+| `GET /api/v1/customer/<company_slug>/orders/` | **Bearer v1** | Solo los pedidos del llamante |
+| `GET /api/v1/customer/<company_slug>/orders/<id>/` | **Bearer v1** | 404 si no es suyo |
+
+### Tres audiencias — DEC-API-001
+
+| Prefijo | Audiencia | Auth |
+|---|---|---|
+| `storefront/` | pública | ninguna |
+| `customer/` | **cliente, sus propios registros** | Bearer v1 |
+| `internal/` | staff bajo capability | **no existe todavía** |
+
+Espacios de URL separados, no un endpoint que ensancha su queryset según quién
+pregunte.
+
+### Propiedad
+
+`Order.user` **o** `Order.customer.user`. **Nunca el email**: es una instantánea
+de lo que se tecleó al pagar, sin unicidad, y una familia comparte dirección.
+
+**Ser empleado no es ser cliente.** Vendedor, almacenero, técnico, admin de
+empresa y platform master reciben 404. Un empleado que además compra ahí ve solo
+sus propias compras.
+
+Archivar la ficha CRM **no** quita acceso al propio historial.
+
+### Campos
+
+`id` · `status` + `status_label` · **`fulfillment_status`** + label · `total` ·
+`discount_amount` · `coupon_code` · `delivery_method` + label · `created_at` ·
+`paid_at` · `items[]` (`product_name`, `product_slug`, `image_url`, `quantity`,
+`price`).
+
+**BR-003 cerrado para v1.** Las etiquetas las renderiza el servidor: es dueño de
+la máquina de estados, así que es dueño de sus palabras.
+
+**No viajan**: identificadores de Stripe, `payment_error`, `email_send_error`,
+`cart_session_key`, marcas de correos internos, `company_snapshot`,
+`fulfillment_branch`, ni los datos personales que el comprador ya tecleó.
+
+### Fail-safe
+
+Empresa desconocida, inactiva y "no eres cliente" → **el mismo 404**. Mobile lee
+un 404 de la **lista** como lista vacía: el contrato se niega a distinguir esos
+tres casos a propósito, y el cliente no inventa una distinción que el servidor
+rechaza hacer.
+
+---
+
 ## Pedidos
 
 ### `GET /api/orders/` · `VERIFIED_STABLE_MASTER`, no consumible

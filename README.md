@@ -391,8 +391,10 @@ Dos cosas que conviene tener presentes al leer esa documentación:
 - Un token nunca llega a un log ni a un mensaje de error (`src/auth/redact.ts`).
 - Un `Authorization: Bearer` no puede salir hacia `/api/auth/*`, `/api/admin/*`,
   `/api/me/*` ni `/api/products/*` (`src/api/api-scope.ts`).
-- **La cache de server-state está particionada por empresa y por usuario**, y se
-  vacía al cambiar de identidad. Ningún token entra jamás en una query key.
+- **La cache de server-state está particionada por empresa, por usuario y por
+  audiencia**, y se vacía al cambiar de identidad. Ningún token entra jamás en
+  una query key. El segmento de audiencia (`customer`) existe para que datos
+  internos no puedan aterrizar en una vista de cliente compartiendo clave.
   Ver `docs/OFFLINE_STRATEGY.md`.
 - **La query cache es solo memoria.** No hay persistencia en disco todavía: eso
   exige cifrado, partición por tenant y política de retención primero.
@@ -437,6 +439,45 @@ El servidor devuelve las empresas con las que **verificó** que el usuario tiene
 relación. `EXPO_PUBLIC_COMPANY_SLUG` **selecciona** la suya de esa lista; si no
 está, la empresa activa queda en `null` — sin caer al piloto ni a la primera de
 la lista. Sigue sin ser autorización: cada API privada revalida en el servidor.
+
+## Pedidos y audiencias
+
+El backend tiene **tres audiencias**, y la app respeta esa separación:
+
+| Superficie | Quién | Auth |
+|---|---|---|
+| `/api/v1/storefront/<empresa>/` | cualquiera | ninguna |
+| `/api/v1/customer/<empresa>/` | **cliente, sus propios registros** | Bearer |
+| `/api/v1/internal/<empresa>/` | staff bajo capability | **no existe todavía** |
+
+### Navegación pública, compra autenticada
+
+**DEC-MOBILE-006.** Abrir la app, buscar, filtrar y ver un producto **nunca**
+piden cuenta. La sesión se pide cuando la acción se vuelve privada: tus pedidos,
+tus reparaciones, pagar.
+
+Un visitante anónimo en la pestaña Pedidos ve una invitación a entrar, no un
+error técnico: no ha hecho nada mal.
+
+### Cliente e interno no son lo mismo
+
+**DEC-MOBILE-007.** Una misma persona puede ser clienta de una empresa y trabajar
+en ella. En el contrato son **dos booleanos independientes**, no un rol.
+
+Un empleado que abre Pedidos ve **sus propias compras**, nunca las de la empresa.
+Los pedidos de toda la empresa serán el área interna, tras `sales.orders.view`.
+
+### Las capabilities son para dibujar, no para autorizar
+
+**DEC-MOBILE-008.** `access_contexts[].capabilities` decide qué pestaña se
+muestra. Todo endpoint interno las revalida en el servidor: quien mienta recibe
+un 403, no inventario.
+
+### Qué se ve de un pedido
+
+Estado de pago y **estado de entrega** por separado (BR-003), con las etiquetas
+que renderiza el servidor. No llegan identificadores de Stripe, diagnósticos
+operativos ni claves de sesión.
 
 ## EAS
 

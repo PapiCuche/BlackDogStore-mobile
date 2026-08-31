@@ -52,15 +52,16 @@ export type AuthRuntimePolicy = {
 /**
  * Resolve the authentication mode.
  *
- * | Environment | contract | API url | mocks | Result |
+ * | Environment | mocks | contract | API url | Result |
  * |---|---|---|---|---|
- * | any         | yes | set    | any | `backend` |
- * | any         | yes | UNSET  | any | **`unavailable`** |
- * | production  | no  | any    | any | **`unavailable`** — never mock |
- * | staging     | no  | any    | explicit opt-in | `mock` |
- * | staging     | no  | any    | off | `unavailable` |
- * | development | no  | any    | on  | `mock` |
- * | development | no  | any    | off | `unavailable` |
+ * | production  | (forbidden) | yes | set   | `backend` |
+ * | production  | (forbidden) | yes | UNSET | **`unavailable`** |
+ * | production  | (forbidden) | no  | any   | **`unavailable`** — never mock |
+ * | development | on  | any | any   | `mock` |
+ * | staging     | explicit opt-in | any | any | `mock` |
+ * | dev/staging | off | yes | set   | `backend` |
+ * | dev/staging | off | yes | UNSET | **`unavailable`** |
+ * | dev/staging | off | no  | any   | **`unavailable`** |
  *
  * M3 ADDED THE API URL CONDITION. Shipping the transport made
  * `isBackendAuthAvailable` true, and true means "this build can SPEAK the
@@ -77,61 +78,83 @@ export type AuthRuntimePolicy = {
  * back to mocks either — not being able to reach the server is not a licence to
  * fabricate a session.
  */
+const BACKEND: AuthRuntimePolicy = {
+  mode: 'backend',
+  decision: 'backend-contract-ready',
+  reason: 'Contrato de autenticación nativo disponible.',
+};
+
+/**
+ * Having the contract is not having a server.
+ *
+ * `isBackendAuthAvailable` says this build can SPEAK the contract; it says
+ * nothing about where the server is. A release missing the API url would
+ * otherwise render a login form whose submit can only fail, which teaches the
+ * user their password is wrong.
+ */
+const API_NOT_CONFIGURED: AuthRuntimePolicy = {
+  mode: 'unavailable',
+  decision: 'unavailable-api-not-configured',
+  reason:
+    'Hay contrato de autenticación nativo, pero EXPO_PUBLIC_API_BASE_URL no está definido: no hay servidor al que enviar las credenciales.',
+};
+
 export function resolveAuthRuntimePolicy(input: {
   environment: AppEnvironment;
   backendAuthAvailable: boolean;
   apiConfigured: boolean;
   mocksEnabled: boolean;
 }): AuthRuntimePolicy {
-  if (input.backendAuthAvailable) {
-    if (!input.apiConfigured) {
+  // PRODUCTION IS DECIDED FIRST, and never reaches the mock branch below. Two
+  // independent rules would both have to be wrong for a store build to accept a
+  // fictitious credential: this one, and `resolveMockDataPolicy`, which already
+  // refuses to enable mocks in production at all.
+  if (input.environment === 'production') {
+    if (!input.backendAuthAvailable) {
       return {
         mode: 'unavailable',
-        decision: 'unavailable-api-not-configured',
+        decision: 'unavailable-production-mock-forbidden',
         reason:
-          'Hay contrato de autenticación nativo, pero EXPO_PUBLIC_API_BASE_URL no está definido: no hay servidor al que enviar las credenciales.',
+          'No hay contrato de autenticación nativo. Una build de producción nunca acepta autenticación simulada.',
       };
     }
-    return {
-      mode: 'backend',
-      decision: 'backend-contract-ready',
-      reason: 'Contrato de autenticación nativo disponible.',
-    };
+    return input.apiConfigured ? BACKEND : API_NOT_CONFIGURED;
   }
 
-  if (input.environment === 'production') {
-    return {
-      mode: 'unavailable',
-      decision: 'unavailable-production-mock-forbidden',
-      reason:
-        'No hay contrato de autenticación nativo. Una build de producción nunca acepta autenticación simulada.',
-    };
+  // M4 FIX — MOCKS, WHERE THEY ARE ALLOWED, WIN.
+  //
+  // M3 checked the contract first. The moment `isBackendAuthAvailable` became
+  // `true`, that made `backend` the answer in development too, so
+  // `MockAuthRepository` became unreachable and a `git clone` could no longer
+  // sign in without a Django running. Turning mocks on is an explicit statement
+  // — "I want fixtures" — and the contract existing does not retract it.
+  if (input.mocksEnabled) {
+    return input.environment === 'staging'
+      ? {
+          mode: 'mock',
+          decision: 'mock-staging-explicit',
+          reason:
+            'Autenticación simulada habilitada explícitamente en staging. No es una sesión real.',
+        }
+      : {
+          mode: 'mock',
+          decision: 'mock-development',
+          reason: 'Autenticación simulada de desarrollo. No es una sesión real.',
+        };
   }
 
-  if (!input.mocksEnabled) {
-    return {
-      mode: 'unavailable',
-      decision:
-        input.environment === 'staging'
-          ? 'unavailable-mock-not-authorised'
-          : 'unavailable-no-contract',
-      reason:
-        'No hay contrato de autenticación nativo y los datos de ejemplo están desactivados.',
-    };
+  if (input.backendAuthAvailable) {
+    return input.apiConfigured ? BACKEND : API_NOT_CONFIGURED;
   }
 
-  return input.environment === 'staging'
-    ? {
-        mode: 'mock',
-        decision: 'mock-staging-explicit',
-        reason:
-          'Autenticación simulada habilitada explícitamente en staging. No es una sesión real.',
-      }
-    : {
-        mode: 'mock',
-        decision: 'mock-development',
-        reason: 'Autenticación simulada de desarrollo. No es una sesión real.',
-      };
+  return {
+    mode: 'unavailable',
+    decision:
+      input.environment === 'staging'
+        ? 'unavailable-mock-not-authorised'
+        : 'unavailable-no-contract',
+    reason: 'No hay contrato de autenticación nativo y los datos de ejemplo están desactivados.',
+  };
 }
 
 export const authRuntimePolicy: AuthRuntimePolicy = resolveAuthRuntimePolicy({

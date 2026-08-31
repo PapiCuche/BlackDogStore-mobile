@@ -151,17 +151,62 @@ describe('a contract without a server is still unavailable', () => {
     },
   );
 
-  it('does NOT fall back to mocks when the API url is missing', () => {
-    // Not being able to reach the server is not a licence to fabricate a
-    // session — least of all in development, where it would hide the mistake.
+  it('does NOT fall back to mocks in a RELEASE when the API url is missing', () => {
+    // A release that cannot reach its server is a misconfiguration, and
+    // fabricating a session would hide it behind a login that appears to work.
+    //
+    // Corrected in M4: this used to assert the same for DEVELOPMENT with mocks
+    // explicitly on, which conflated two different situations. Turning mocks on
+    // is a deliberate choice to run without a server; a release missing its url
+    // is a mistake. Only the second one is dangerous.
+    for (const environment of ['production', 'staging'] as const) {
+      const policy = resolveAuthRuntimePolicy({
+        environment,
+        backendAuthAvailable: true,
+        apiConfigured: false,
+        mocksEnabled: false,
+      });
+
+      expect(policy.mode).toBe('unavailable');
+    }
+  });
+
+  it('production refuses mocks even if every other flag says otherwise', () => {
     const policy = resolveAuthRuntimePolicy({
-      environment: 'development',
-      backendAuthAvailable: true,
+      environment: 'production',
+      backendAuthAvailable: false,
       apiConfigured: false,
       mocksEnabled: true,
     });
 
     expect(policy.mode).toBe('unavailable');
+    expect(policy.decision).toBe('unavailable-production-mock-forbidden');
+  });
+
+  it('development KEEPS its mock login once the contract exists', () => {
+    // The M4 fix. M3 checked the contract first, so the moment
+    // `isBackendAuthAvailable` became true a `git clone` could no longer sign in
+    // without a Django running, and MockAuthRepository became unreachable.
+    const policy = resolveAuthRuntimePolicy({
+      environment: 'development',
+      backendAuthAvailable: true,
+      apiConfigured: true,
+      mocksEnabled: true,
+    });
+
+    expect(policy.mode).toBe('mock');
+    expect(policy.decision).toBe('mock-development');
+  });
+
+  it('development uses the real backend once mocks are turned off', () => {
+    const policy = resolveAuthRuntimePolicy({
+      environment: 'development',
+      backendAuthAvailable: true,
+      apiConfigured: true,
+      mocksEnabled: false,
+    });
+
+    expect(policy.mode).toBe('backend');
   });
 
   it('builds no repository at all in that state', () => {

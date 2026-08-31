@@ -30,12 +30,12 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | ID | Requerimiento | Prioridad |
 |---|---|---|
 | BR-001 | Autenticación nativa **acotada a `/api/v1/`** | **PARCIAL** — BR-001A núcleo de sesión IMPLEMENTADO; BR-001B ciclo de cuenta PENDIENTE |
-| BR-002 | Selección de tenant validada server-side | **PARCIALMENTE RESUELTO** — catálogo público IMPLEMENTADO |
-| BR-003 | Exponer `fulfillment_status` | ALTA |
+| BR-002 | Selección de tenant validada server-side | **PARCIALMENTE RESUELTO** — público y cliente IMPLEMENTADOS; interno pendiente |
+| BR-003 | Exponer `fulfillment_status` | **IMPLEMENTADO para v1** |
 | BR-004 | Paginación opt-in | MEDIA |
 | BR-005 | Dominio de reparaciones | ALTA |
 | BR-006 | Endpoint público de marca | MEDIA |
-| BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — catálogo + auth IMPLEMENTADOS; superficie privada de negocio PENDIENTE |
+| BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — catálogo + auth + pedidos de cliente; superficie INTERNA pendiente |
 | BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
 
 ---
@@ -402,7 +402,18 @@ puede ver. Nunca puede ampliar lo que puede ver.
 
 ## BR-003 — Exponer `fulfillment_status` en `OrderSerializer`
 
-**Estado:** PROPUESTA · **Prioridad:** ALTA · **Bloquea:** pedidos
+**Estado:** **IMPLEMENTADO para v1** · **Prioridad:** ALTA
+
+Resuelto en M4, pero **no como se pidió originalmente**: en lugar de modificar
+`OrderSerializer` —que pertenece al frontend web y además lista
+`stripe_session_id`— el campo se expone en el serializer propio de la superficie
+de cliente, `/api/v1/customer/<empresa>/orders/`, junto a su etiqueta legible.
+
+El serializer legacy **sigue sin exponerlo**. Si el frontend web lo necesita, es
+una decisión de ese equipo.
+
+El motivo original se conserva abajo.
+
 **Base:** `VERIFIED_STABLE_MASTER`
 
 **Motivo**
