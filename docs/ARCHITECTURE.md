@@ -43,7 +43,8 @@ src/
 │
 ├── connectivity/           Estado de red: modelo + provider (una suscripción)
 ├── api/                    HTTP. client.ts · errors.ts · api-scope.ts
-│                           authenticated-request.ts · endpoints/
+│                           authenticated-request.ts
+│                           endpoints/catalog-v1.ts (contrato tenant-safe)
 ├── auth/                   Sesión, política y ciclo de vida de tokens
 │   ├── auth-policy.ts      Qué mecanismo permite esta build (fail-safe)
 │   ├── auth-repository-factory.ts   Composition root de auth
@@ -236,7 +237,7 @@ Las reglas son funciones puras (`resolveMockDataPolicy`, `resolveTenant`,
 `collectConfigurationIssues`) precisamente para poder probarlas —
 `__tests__/env-config.test.ts`.
 
-### El gate del catálogo legacy (M0.2)
+### Del gate legacy al catálogo real (M0.2 → M2)
 
 El catálogo era el caso peligroso porque **sí** tenía implementación real:
 
@@ -245,29 +246,45 @@ catalog: useMockData ? new MockCatalogRepository() : new ApiCatalogRepository()
 ```
 
 Un solo `EXPO_PUBLIC_USE_MOCK_DATA=false` bastaba para apuntar un release al
-catálogo legacy de Django — que es público, funciona, y devuelve **los productos
-de todas las empresas** (verificado en `origin/master` `2624d478`). Se estaba
-tratando *"no es mock"* como *"es seguro"*, y no son lo mismo.
+catálogo legacy de Django — público, funcional, y devolviendo **los productos de
+todas las empresas**. Se estaba tratando *"no es mock"* como *"es seguro"*, y no
+son lo mismo.
 
-`resolveLegacyCatalogPolicy` decide ahora la fuente, y **falla cerrado**:
+**M0.2** encerró eso tras un gate que fallaba cerrado: fuera de desarrollo, un
+release no recibía repositorio de catálogo en absoluto.
 
-| Fuente | Cuándo |
-|---|---|
-| `mock` | mocks activos |
-| `legacy-api` | `development` + mocks off + `ENABLE_LEGACY_CATALOG=true` |
-| `none` | todo lo demás — incluido cualquier release |
+**M2 resolvió el problema en vez de seguir vigilándolo.** `origin/master`
+`b301637b` publica `/api/v1/storefront/<company_slug>/…`, donde el servidor
+resuelve una empresa activa desde la ruta y construye cada queryset desde ella.
 
-Dos capas, a propósito:
+```
+                    mocks ON ──────────────► MockCatalogRepository
+                        │
+catalogPolicy ──────────┤ tenant + API url ─► V1ApiCatalogRepository
+                        │
+                    falta alguno ──────────► null  (fail-safe)
+```
 
-1. **Composition root** — un release no recibe repositorio de catálogo.
-2. **`assertLegacyCatalogAllowed()`** — se ejecuta dentro del repositorio y de
-   cada función de endpoint, justo antes de la red. Un sitio que decide es un
-   sitio a un `refactor` de equivocarse; la segunda comprobación hace que una
-   build bloqueada no pueda emitir la petición ni construyendo la clase a mano.
+El slug de la ruta **selecciona un escaparate público; no autoriza nada**. Toda
+superficie privada seguirá derivando su empresa de la membresía del usuario
+autenticado (BR-001/BR-002). Son dos preguntas distintas y no comparten camino.
 
-`ApiCatalogRepository` se renombró a **`LegacyApiCatalogRepository`**: el nombre
-anterior parecía "el contrato API oficial del producto", y así es como algo así
-acaba encendido en un release.
+El fail-safe importa más que el camino feliz. Sin `EXPO_PUBLIC_COMPANY_SLUG` no
+hay storefront que pedir, y caer a la empresa piloto serviría el catálogo de
+Black Dog Store dentro de la app de otra empresa. Sin API url no hay a quién
+preguntar. **Ninguno de los dos cae a mocks**: productos inventados delante de un
+cliente real es peor que una pantalla vacía que lo diga.
+
+#### Por qué el legacy se borró en vez de apagarse
+
+`LegacyApiCatalogRepository`, su wrapper de endpoint, `assertLegacyCatalogAllowed`
+y `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` fueron **eliminados**.
+
+Un segundo camino "temporal" a los mismos datos —y encima el inseguro— es el que
+acaba usándose, meses después, por alguien que no sabe por qué seguía ahí. El
+gate de M0.2 era la respuesta correcta mientras no existía alternativa; con la
+alternativa publicada, mantenerlo habría sido conservar la superficie de riesgo
+sin ninguna de sus ventajas.
 
 ## Autenticación (M1)
 
@@ -462,7 +479,10 @@ un error 500.
 | Sin persistencia de query cache | DEC-MOBILE-003: falta cifrado, partición en disco y retención. |
 | Sin cola de mutaciones offline | Aprobar o cancelar son decisiones del servidor, no promesas del cliente. |
 | Retry solo de lo transitorio | Reintentar un 403 o un 429 no lo arregla y empeora el throttle. |
-| Catálogo legacy bloqueado fuera de desarrollo | El endpoint estable no aísla por empresa: sería una fuga cross-tenant. |
+| Catálogo real vía `/api/v1/` con tenant en la ruta | Mobile llega a un host de API compartido: sin selector explícito, o no hay catálogo o es el de otra empresa. |
+| Catálogo legacy eliminado, no apagado | Un segundo camino "temporal" a los mismos datos es el que acaba usándose. |
+| Sin catálogo cuando falta tenant o API url | Caer a la empresa piloto serviría el catálogo del piloto dentro de la app de otra empresa. |
+| Ese fallo no cae a mocks | Productos inventados delante de un cliente real es peor que una pantalla vacía que lo diga. |
 | Guardia repetida antes de la llamada de red | El composition root es un solo punto de decisión, y por tanto un solo punto de fallo. |
 | Clasificación de timeout por flag, no por excepción | La forma del error de un abort no es portable entre runtimes. |
 | `Animated` en vez de Reanimated para el Skeleton | Una opacidad en bucle no necesita worklets. |

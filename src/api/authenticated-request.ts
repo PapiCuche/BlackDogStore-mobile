@@ -16,11 +16,15 @@ import { ApiError } from './errors';
  * surface. Merging them would mean every anonymous request carries the code
  * path that can sign a user out.
  *
- * ⚠️  INERT TODAY. There is no `/api/v1/` on `origin/master` `2624d478`, so
- * `authRuntimePolicy.mode` is never `'backend'` and every call here throws
- * `AuthUnavailableError` before touching the network. The logic is nonetheless
- * real and fully tested against `FakeAuthTransport` — the point of M1 is that
- * when the contract lands, this needs a transport, not a redesign.
+ * ⚠️  INERT TODAY. `/api/v1/` now exists on `origin/master` `b301637b`, but
+ * only as the ANONYMOUS storefront catalogue — there is no `/api/v1/auth/*` and
+ * no private v1 surface, and the backend has tests pinning that. A versioned
+ * prefix appearing is not an authentication contract appearing.
+ *
+ * So `authRuntimePolicy.mode` is still never `'backend'`, and every call here
+ * throws `AuthUnavailableError` before touching the network. The logic is
+ * nonetheless real and fully tested against `FakeAuthTransport` — the point of
+ * M1 is that when the contract lands, this needs a transport, not a redesign.
  */
 
 export type AuthenticatedRequestOptions = RequestOptions & {

@@ -28,19 +28,30 @@ Prioridad: **BR-001** y **BR-002** bloquean toda integración real.
 | ID | Requerimiento | Prioridad |
 |---|---|---|
 | BR-001 | Autenticación nativa **acotada a `/api/v1/`** | **PROPUESTA CRÍTICA** |
-| BR-002 | Selección de tenant validada server-side | CRÍTICA |
+| BR-002 | Selección de tenant validada server-side | **PARCIALMENTE RESUELTO** — catálogo público IMPLEMENTADO |
 | BR-003 | Exponer `fulfillment_status` | ALTA |
 | BR-004 | Paginación opt-in | MEDIA |
 | BR-005 | Dominio de reparaciones | ALTA |
 | BR-006 | Endpoint público de marca | MEDIA |
-| BR-007 | Superficie versionada `/api/v1/` (sigue siendo **PROPUESTA**) | ALTA |
+| BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — slice de catálogo IMPLEMENTADO |
 | BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
 
 ---
 
 ## BR-007 — Superficie versionada `/api/v1/` para Mobile
 
-**Estado:** PROPUESTA · **Prioridad:** ALTA · Marco de BR-001 y BR-002
+**Estado:** **PARCIAL** · **Prioridad:** ALTA
+
+| Porción | Estado |
+|---|---|
+| `/api/v1/` existe como prefijo versionado | **IMPLEMENTADO** |
+| Slice de catálogo público | **IMPLEMENTADO** — integrado por Mobile en M2 |
+| `/api/v1/auth/*` | **PENDIENTE** (BR-001) |
+| Superficie privada v1 (pedidos, reparaciones) | **PENDIENTE** |
+
+Existir el prefijo no es existir el contrato. El backend tiene tests que fijan
+que hoy **no hay** `/api/v1/auth/*` ni superficie privada v1: un 404 en cada uno.
+
 
 **Motivo**
 
@@ -221,7 +232,26 @@ respuesta antes de escribir el transporte:
 
 ## BR-002 — Selección de tenant validada en el servidor
 
-**Estado:** PROPUESTA · **Prioridad:** CRÍTICA · **Bloquea:** catálogo
+**Estado:** **PARCIALMENTE RESUELTO** · **Prioridad:** CRÍTICA
+
+| Porción | Estado |
+|---|---|
+| **Catálogo público** | **IMPLEMENTADO** — `origin/master` `b301637b`, integrado por Mobile en M2 |
+| **Autorización de tenant sobre datos privados** | **PENDIENTE** — depende de BR-001 |
+
+Lo resuelto: `/api/v1/storefront/<company_slug>/…`. El servidor resuelve una
+empresa **activa** desde la ruta y construye todo el queryset desde ella. El
+slug **selecciona** un escaparate público y no autoriza nada; desconocida,
+inactiva y malformada devuelven el mismo 404, así que el endpoint no puede
+recorrerse para enumerar empresas. Ni query param, ni cabecera, ni Host pueden
+cambiar el tenant de la ruta, y hay un test backend por cada vector.
+
+Lo que sigue pendiente: pedidos, reparaciones y cualquier dato privado. Ahí el
+selector del cliente **no puede** ser la autoridad — la empresa tiene que
+derivarse de la membresía del usuario autenticado, y eso no existe hasta BR-001.
+**Este requerimiento NO se cierra** mientras esa mitad falte.
+
+El motivo original, que documenta por qué hacía falta, se conserva abajo.
 
 **Motivo — corregido en M0.1**
 

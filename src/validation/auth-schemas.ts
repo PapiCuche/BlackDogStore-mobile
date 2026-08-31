@@ -60,7 +60,7 @@ export type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
  * Email verification token.
  *
  * CORRECTED IN M1. This used to require exactly six digits, which the real
- * backend can never produce: verified on `origin/master` `2624d478`,
+ * backend can never produce: verified on `origin/master` `b301637b`,
  * `AccountToken.make()` issues `secrets.token_urlsafe(48)` and
  * `VerifyEmailSerializer` accepts it as a plain `CharField` named `token`.
  * A six-digit rule would have rejected every genuine token.

@@ -6,9 +6,10 @@ import type { TokenPair } from '../tokens/token-types';
  * The seam where a real network implementation will eventually plug in.
  *
  * ⚠️  NO IMPLEMENTATION AGAINST DJANGO EXISTS, and none may be written until
- * BR-001 is accepted. There is no `/api/v1/auth/*` on `origin/master`
- * `2624d478`; writing a `DjangoAuthTransport` today would be code that calls a
- * 404 and pretends to be integration.
+ * BR-001 is accepted. `/api/v1/` exists on `origin/master` `b301637b` — but
+ * only the anonymous catalogue, with backend tests asserting that
+ * `/api/v1/auth/login|refresh|logout` all 404. Writing a `DjangoAuthTransport`
+ * today would be code that calls a 404 and pretends to be integration.
  *
  * The interface exists anyway because it is what makes the rest of M1 real: the
  * refresh coordinator, the rotation handling and the retry pipeline are all

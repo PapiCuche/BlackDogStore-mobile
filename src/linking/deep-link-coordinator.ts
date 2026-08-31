@@ -59,7 +59,7 @@ export function decideForIntent(
 
   if (!isPrivateIntent(intent)) {
     // Public destination: the catalogue needs no session. Whether the catalogue
-    // itself is reachable is the screen's problem (M0.2 legacy gate), not the
+    // itself is reachable is the screen's problem (the catalogue policy), not the
     // link's — a deep link never unlocks a data source.
     return { action: 'navigate', route, intent };
   }

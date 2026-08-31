@@ -8,7 +8,7 @@ import {
   appEnvironment,
   configurationIssues,
   isApiConfigured,
-  legacyCatalogPolicy,
+  catalogPolicy,
   mockDataPolicy,
   tenant,
   useMockData,
@@ -246,7 +246,7 @@ export default function ProfileScreen() {
                 {/* The catalogue source is the one thing most likely to be
                     misread as "integrated". Say it plainly. */}
                 <Text variant="caption" color="textTertiary">
-                  Catálogo: {legacyCatalogPolicy.source} · {legacyCatalogPolicy.decision}
+                  Catálogo: {catalogPolicy.source} · {catalogPolicy.decision}
                 </Text>
                 <Text variant="caption" color="textTertiary">
                   Conectividad: {connectivity}

@@ -130,7 +130,6 @@ del bundle y es público.** Nunca poner secretos ahí.
 | `EXPO_PUBLIC_API_BASE_URL` | derivada de Metro en dev | Raíz de la API de Django, sin barra final |
 | `EXPO_PUBLIC_COMPANY_SLUG` | `blackdog` **solo en dev** | Tenant de este build (ver BR-002) |
 | `EXPO_PUBLIC_USE_MOCK_DATA` | ver tabla | `false` apaga los mocks |
-| `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` | `false` | Catálogo legacy **solo desarrollo** — ver abajo |
 | `EXPO_PUBLIC_APP_ENV` | — | `staging` marca un build de release como no productivo |
 
 ### Regla a prueba de fallos
@@ -169,47 +168,54 @@ integración, y ninguna marca se renderiza.
 **Entorno** (`EXPO_PUBLIC_APP_ENV`): sin definir en un release →
 `production` (el más estricto de los dos).
 
-### Catálogo legacy
+### Catálogo real
 
-`EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` habilita los endpoints reales
-`/api/products/` y `/api/categories/`. Existen, son públicos y funcionan — y en
-el backend estable **no están aislados por empresa**:
-
-```python
-# ProductViewSet.get_queryset  @ origin/master 2624d478
-Product.objects.select_related('category').prefetch_related('reviews').filter(is_active=True)
-
-# CategoryViewSet
-Category.objects.all()
-```
-
-Ninguno de los dos modelos tiene campo `company` en `master`. Un cliente SaaS
-apuntado ahí recibiría el catálogo de **todas** las empresas: un riesgo
-cross-tenant, aunque el endpoint sea público.
-
-Por eso el catálogo real solo se activa cuando **las tres** condiciones se
-cumplen a la vez:
+Desde M2 el catálogo es una **integración real**. Con
+`EXPO_PUBLIC_USE_MOCK_DATA=false` la app llama al contrato tenant-safe de
+`PapiCuche/BlackDogStore-web` @ `origin/master` `b301637b`:
 
 ```
-appEnvironment === 'development'
-  AND EXPO_PUBLIC_USE_MOCK_DATA=false
-  AND EXPO_PUBLIC_ENABLE_LEGACY_CATALOG=true
+GET /api/v1/storefront/<EXPO_PUBLIC_COMPANY_SLUG>/products/
+GET /api/v1/storefront/<EXPO_PUBLIC_COMPANY_SLUG>/products/<slug>/
+GET /api/v1/storefront/<EXPO_PUBLIC_COMPANY_SLUG>/categories/
 ```
 
-| Entorno | mocks | flag legacy | Catálogo |
+El storefront web resuelve su empresa por Host; esta app llega a un host de API
+compartido y no tiene ese Host, así que **nombra el storefront en la ruta**. El
+servidor resuelve una empresa **activa** desde ese slug y construye todo el
+queryset desde ella.
+
+Ese slug **selecciona un escaparate público. No autoriza nada.** Las pantallas
+privadas seguirán derivando su empresa de la membresía del usuario autenticado
+(BR-001/BR-002), nunca de la ruta.
+
+| Entorno | mocks | tenant + API url | Catálogo |
 |---|---|---|---|
 | development | ON | cualquiera | mocks |
-| development | OFF | sin definir | **no disponible** |
-| development | OFF | `true` | legacy (con aviso) |
-| staging | OFF | `true` | **BLOQUEADO** |
-| production | OFF | `true` | **BLOQUEADO** |
+| development | OFF | ambos | **real `/api/v1/`** |
+| staging | OFF | ambos | **real `/api/v1/`** |
+| production | OFF | ambos | **real `/api/v1/`** |
+| cualquiera | OFF | falta alguno | **no disponible** |
 
-En staging y production el flag se **ignora** y se reporta como
-`legacy-catalog-forbidden` en Perfil → Estado de integración. No es un
-interruptor que un release pueda accionar.
+La última fila es el fail-safe. Sin `EXPO_PUBLIC_COMPANY_SLUG` no hay storefront
+que pedir, y caer a la empresa piloto serviría el catálogo de Black Dog Store
+dentro de la app de otra empresa. Sin `EXPO_PUBLIC_API_BASE_URL` no hay a quién
+preguntar. **Ninguno de los dos cae a mocks**: productos inventados delante de un
+cliente real es peor que una pantalla vacía que lo diga.
 
-Cuando el backend publique un catálogo tenant-safe estable (BR-002), este gate y
-`LegacyApiCatalogRepository` se **eliminan**; no se adaptan.
+#### El catálogo legacy se eliminó
+
+`EXPO_PUBLIC_ENABLE_LEGACY_CATALOG`, `LegacyApiCatalogRepository`, su wrapper de
+endpoint y su guardia de red **ya no existen**. M0.2 los había encerrado tras un
+gate porque `/api/products/` devuelve el catálogo de todas las empresas; M2
+resolvió el problema en vez de vigilarlo.
+
+Se borraron en lugar de apagarse: un segundo camino "temporal" a los mismos
+datos —y encima el inseguro— es el que acaba usándose por alguien que no sabe
+por qué seguía ahí.
+
+Ese endpoint sigue existiendo en el backend para el frontend web, que lo resuelve
+por Host y para el cual es correcto.
 
 ### `localhost` significa cosas distintas según dónde corra el JS
 
@@ -327,8 +333,8 @@ fixtures **en development**. Reglas:
   concluye que una feature está integrada.
 - **En release los mocks no se sirven** (ver "Regla a prueba de fallos"), y en
   production están prohibidos.
-- **El catálogo real legacy tampoco se sirve en release** — ver "Catálogo
-  legacy". Apagar los mocks NO equivale a tener un catálogo seguro.
+- **Apagar los mocks ya sí da un catálogo real y seguro** — desde M2 apunta a
+  `/api/v1/`, aislado por empresa en el servidor. Ver "Catálogo real".
 - El estado real de cada feature está en `src/config/integration-status.ts`, que
   la app lee en tiempo de ejecución, y se ve en Perfil → Estado de integración.
 
@@ -352,10 +358,10 @@ Dos cosas que conviene tener presentes al leer esa documentación:
   con cambios sin commitear. M0.1 re-verificó todo contra `origin/master` y
   etiquetó cada afirmación como `VERIFIED_STABLE_MASTER`,
   `OBSERVED_IN_PROGRESS` o `PROPOSED`.
-- **`/api/v1/` es una propuesta** (BR-007), no algo que exista. El catálogo
-  legacy `/api/products/` funciona hoy, pero **no está aislado por empresa** y
-  por tanto no es el contrato SaaS de Mobile. Está bloqueado fuera de
-  desarrollo.
+- **`/api/v1/` ya existe, pero solo el slice de catálogo.** Que el prefijo
+  versionado aparezca no significa que exista el contrato entero: no hay
+  `/api/v1/auth/*` ni superficie privada v1, y el backend tiene tests que lo
+  fijan. BR-001 sigue `API_PENDING` y BR-007 sigue `PARCIAL`.
 
 ## Seguridad
 
@@ -421,7 +427,8 @@ Las dependencias conservan sus propias licencias dentro de sus paquetes en
 
 ## Git
 
-- Rama de trabajo actual: `feat/mobile-customer-journey`
+- El desarrollo ocurre en feature branches creadas desde `main`
+- `main` contiene únicamente fases consolidadas mediante PR
 - Merge normal (merge commit). Sin `rebase`, sin squash, sin `push --force`
 - Nunca desarrollar directamente en `main`
 - `ios/` y `android/` son generados y no se commitean
