@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "Black Dog Store",
+    "slug": "BlackDogStore-mobile-temp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon/icon.png",
+    "scheme": "blackdogstore",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.blackdogstore.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDisplayName": "Black Dog"
+      }
+    },
+    "android": {
+      "package": "com.blackdogstore.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A0A",
+        "foregroundImage": "./assets/icon/adaptive-foreground.png",
+        "backgroundImage": "./assets/icon/adaptive-background.png",
+        "monochromeImage": "./assets/icon/adaptive-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/icon/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/icon/splash-mark.png",
+          "imageWidth": 120,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#080808",
+            "image": "./assets/icon/splash-mark-dark.png"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e4a0a7b3-27ff-43fc-8061-6fdad2b8bac3"
+      }
+    }
+  }
+}
