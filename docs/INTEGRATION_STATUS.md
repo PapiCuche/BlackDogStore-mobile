@@ -14,8 +14,8 @@ archivo discrepan, **el archivo tiene razón**.
 |---|---|---|---|---|---|
 | Catálogo (tienda) | IMPLEMENTADO | **API_READY** (`/api/v1/`, tenant-safe) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Detalle de producto | IMPLEMENTADO | **API_READY** (`/api/v1/`, tenant-safe) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
-| Pedidos | IMPLEMENTADO | API_PENDING | MOCK | TESTED UI | PARCIAL |
-| Detalle de pedido | IMPLEMENTADO | API_PENDING | MOCK | TESTED UI | PARCIAL |
+| Pedidos (cliente) | IMPLEMENTADO | **API_READY** (`/api/v1/customer/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Detalle de pedido | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Reparaciones | IMPLEMENTADO | MOCK | MOCK | TESTED UI | PARCIAL |
 | Detalle de reparación | IMPLEMENTADO | MOCK | MOCK | TESTED UI | PARCIAL |
 | Autenticación (login) | IMPLEMENTADO | **API_READY** (`/api/v1/auth/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
@@ -47,13 +47,19 @@ archivo discrepan, **el archivo tiene razón**.
 | Almacenamiento seguro | IMPLEMENTADO | n/a | n/a | NO TESTED | PARCIAL |
 | Deep links (parser + gate) | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Enlace de producto | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
-| Enlace de pedido | IMPLEMENTADO | API_PENDING | MOCK | TESTED | PARCIAL |
+| Enlace de pedido | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Enlace de reparación | IMPLEMENTADO | MOCK | MOCK | TESTED | PARCIAL |
 | Resume tras autenticarse | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Seguimiento seguro (tracking) | NO IMPLEMENTADO | API_PENDING (BR-008) | n/a | TESTED (rechazo) | **PENDIENTE** |
 | Universal Links / App Links | NO IMPLEMENTADO | n/a | n/a | n/a | **INFRA_PENDING** |
 | QR | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
 | Push notifications | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
+| Contexto de acceso (`access_contexts`) | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Gate de acción privada | IMPLEMENTADO | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
+| Área interna (shell) | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
+| APIs internas de negocio | NO IMPLEMENTADO | PENDIENTE | n/a | n/a | **PENDIENTE** |
+| Carrito móvil | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** → M5 |
+| Checkout autenticado móvil | NO IMPLEMENTADO | PENDIENTE | n/a | n/a | **PENDIENTE** → M5 |
 | Compra / pagos | NO IMPLEMENTADO | existe (web) | — | — | PENDIENTE |
 
 ## Qué sirve cada build (M0.1)
@@ -63,7 +69,7 @@ Con la configuración a prueba de fallos, **el entorno decide qué datos existen
 | Feature | development | staging | production |
 |---|---|---|---|
 | Catálogo | mock · o **real `/api/v1/`** con mocks off | **real `/api/v1/`** | **real `/api/v1/`** |
-| Pedidos | mock | *no disponible* | *no disponible* |
+| Pedidos | mock · o **real `/api/v1/customer/`** con mocks off | **real** | **real** |
 | Reparaciones | mock | *no disponible* | *no disponible* |
 | Marca | fixture del piloto | *no disponible* (BR-006) | *no disponible* (BR-006) |
 
@@ -191,7 +197,8 @@ y renderiza neutral. **BR-006.**
 | Feature | Bloqueo | Trabajo Mobile una vez desbloqueado |
 |---|---|---|
 | Catálogo | ~~BR-002 (+ BR-007)~~ **DESBLOQUEADO** | **Hecho en M2.** `V1ApiCatalogRepository` escrito; `LegacyApiCatalogRepository`, su wrapper, su gate y `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` **eliminados**. Se reemplazó, no se adaptó. |
-| Pedidos | BR-001, BR-003 | Escribir `ApiOrderRepository` (el mapeador es directo). |
+| Pedidos (cliente) | ~~BR-001, BR-003~~ **DESBLOQUEADO** | **Hecho en M4.** `V1CustomerOrderRepository` sobre `/api/v1/customer/`. BR-003 cerrado en el serializer v1. |
+| Pedidos (interno) | **PENDIENTE** | Necesita `/api/v1/internal/<empresa>/orders/` con `sales.orders.view`. Es otra superficie, no un ensanche de esta. |
 | Reparaciones | BR-005 | Escribir `ApiRepairRepository`; el dominio ya está modelado. |
 | Auth (sesión) | ~~BR-001, BR-007~~ **DESBLOQUEADO** | **Hecho en M3.** `DjangoAuthTransport` + `ApiAuthRepository` escritos, `isBackendAuthAvailable = true` en el mismo commit. El coordinator, el vault y el pipeline no se tocaron: la apuesta de M1 se sostuvo. |
 | Auth (cuenta) | **BR-001B** | Escribir los flujos de registro/verificación/reset cuando existan endpoints nativos. Hoy la app los oculta en modo backend. |
@@ -293,6 +300,28 @@ no. En modo backend la app **no muestra** esos formularios.
 
 Lo que **no** cambió de estado: pedidos, reparaciones, marca y seguimiento. Una
 puerta abierta no es lo que hay detrás.
+
+## Pedidos privados de cliente (M4)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master b253156)
+V1CustomerOrderRepository      IMPLEMENTADO / TESTED
+Cliente /api/v1/customer/      IMPLEMENTADO / TESTED
+BR-003 fulfillment_status      IMPLEMENTADO para v1 / TESTED
+Gate de acción privada         IMPLEMENTADO / TESTED
+Claves de cache por audiencia  IMPLEMENTADO / TESTED
+access_contexts                INTEGRADO / TESTED
+Área interna (shell)           PENDIENTE
+APIs internas de negocio       PENDIENTE
+Carrito + checkout móvil       PENDIENTE → M5
+Reparaciones                   PENDIENTE / BR-005
+```
+
+**Primera integración privada.** El catálogo es anónimo; esto necesita un token,
+así que solo pudo existir después de M3.
+
+Lo que **no** cambió: reparaciones, marca, seguimiento y todo lo interno. Que un
+empleado pueda entrar a la app no le da acceso a nada de la empresa desde aquí.
 
 ## Nota de verificación
 

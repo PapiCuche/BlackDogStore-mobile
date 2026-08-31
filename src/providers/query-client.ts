@@ -63,6 +63,14 @@ export function createQueryClient(): QueryClient {
  * The scope is the FIRST argument on purpose: it is impossible to write one of
  * these calls and forget it.
  */
+/** Audience segments under the private namespace. See `queryKeys` below. */
+export const CUSTOMER_AUDIENCE = 'customer';
+export const INTERNAL_AUDIENCE = 'internal';
+
+function customerPrefix(scope: QueryScope): readonly string[] {
+  return [...scopePrefix(scope, 'user'), CUSTOMER_AUDIENCE];
+}
+
 export const queryKeys = {
   // ── tenant-public ────────────────────────────────────────────────────────
   products: (scope: QueryScope, params: { search?: string; categorySlug?: string } = {}) =>
@@ -73,11 +81,21 @@ export const queryKeys = {
   companyBrand: (scope: QueryScope) =>
     [...scopePrefix(scope, 'public'), 'company-brand'] as const,
 
-  // ── tenant + user private ────────────────────────────────────────────────
-  repairs: (scope: QueryScope) => [...scopePrefix(scope, 'user'), 'repairs'] as const,
-  repair: (scope: QueryScope, id: string) => [...scopePrefix(scope, 'user'), 'repair', id] as const,
-  orders: (scope: QueryScope) => [...scopePrefix(scope, 'user'), 'orders'] as const,
-  order: (scope: QueryScope, id: number) => [...scopePrefix(scope, 'user'), 'order', id] as const,
+  // ── tenant + user private, CUSTOMER audience ─────────────────────────────
+  //
+  // M4 added the `customer` segment ahead of the surface that will need it.
+  // Backend now has three audiences (DEC-API-001), and the internal one will
+  // read the SAME company through a different endpoint with different
+  // permissions and a wider serializer. Two audiences sharing a cache key would
+  // mean the first screen to load decides what the second one shows — and the
+  // dangerous direction is internal data landing in a customer view.
+  //
+  // Adding the segment now costs one array element. Retrofitting it later would
+  // mean auditing every key already in flight.
+  repairs: (scope: QueryScope) => [...customerPrefix(scope), 'repairs'] as const,
+  repair: (scope: QueryScope, id: string) => [...customerPrefix(scope), 'repair', id] as const,
+  orders: (scope: QueryScope) => [...customerPrefix(scope), 'orders'] as const,
+  order: (scope: QueryScope, id: number) => [...customerPrefix(scope), 'order', id] as const,
 } as const;
 
 /**

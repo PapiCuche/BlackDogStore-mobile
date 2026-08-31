@@ -16,6 +16,10 @@ import {
 import { describeFulfillmentStatus, describePaymentStatus } from '@/domain/orders/status';
 import { orderNumber } from '@/domain/orders/types';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
+import {
+  PrivateActionPrompt,
+  usePrivateActionState,
+} from '@/features/auth/private-action-gate';
 import { useOrder } from '@/hooks/use-orders';
 import { useTheme } from '@/theme/theme-provider';
 import { formatCurrency, formatDate } from '@/utils/format';
@@ -32,10 +36,30 @@ export default function OrderDetailScreen() {
   const theme = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const numericId = Number(id);
+  // A deep link can land here with no session (M1.2 routes, it does not
+  // authorize). The gate decides what to draw; the server decides what may be
+  // read, and answers 404 for an order that is not this person's.
+  const access = usePrivateActionState();
 
   const { data: order, isPending, isError, error, refetch } = useOrder(
     Number.isFinite(numericId) ? numericId : undefined,
+    { enabled: access === 'ready' },
   );
+
+  if (access !== 'ready' && access !== 'pending') {
+    return (
+      <Screen scrollable contentContainerStyle={{ flexGrow: 1 }}>
+        <PrivateActionPrompt
+          state={access}
+          message={
+            access === 'sign-in-required'
+              ? 'Este pedido es privado. Entra con tu cuenta para verlo.'
+              : undefined
+          }
+        />
+      </Screen>
+    );
+  }
 
   if (isPending) {
     return (
@@ -116,7 +140,7 @@ export default function OrderDetailScreen() {
                   {index > 0 ? <Divider inset={theme.spacing.md} /> : null}
                   <View
                     accessible
-                    accessibilityLabel={`${item.quantity} × ${item.product.name}, ${formatCurrency(item.price)}`}
+                    accessibilityLabel={`${item.quantity} × ${item.productName}, ${formatCurrency(item.price)}`}
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
@@ -126,7 +150,7 @@ export default function OrderDetailScreen() {
                   >
                     <View style={{ flex: 1, gap: 2 }}>
                       <Text variant="callout" numberOfLines={2}>
-                        {item.product.name}
+                        {item.productName}
                       </Text>
                       <Text variant="footnote" color="textTertiary">
                         Cantidad: {item.quantity}

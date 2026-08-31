@@ -1,11 +1,8 @@
 import { ApiAuthRepository } from './api-auth-repository';
 import { authRuntimePolicy, type AuthRuntimePolicy } from './auth-policy';
 import type { AuthRepository } from './auth-repository';
+import { getAuthRuntime } from './auth-runtime';
 import { MockAuthRepository } from './mock-auth-repository';
-import { createRefreshCoordinator } from './refresh-coordinator';
-import { createMemoryAccessTokenStore } from './tokens/access-token-store';
-import { createSecureCredentialVault } from './tokens/credential-vault';
-import { createDjangoAuthTransport } from './transport/django-auth-transport';
 
 /**
  * Auth composition root.
@@ -46,17 +43,15 @@ export function resolveAuthRepository(
 }
 
 /**
- * Assemble the real repository and everything it needs.
+ * The real repository, over the SHARED token graph.
  *
- * Built lazily, on the first call, and NOT memoised at module scope: a module
- * -level instance would be constructed at import time in every test that touches
- * this file, and would reach for `expo-secure-store` while doing it.
+ * M4 FIX — this used to build its own access token store while
+ * `authenticatedRequest` read the module-level singleton. Sign-in installed a
+ * token into one and every private request looked in the other. Nothing called
+ * an authenticated endpoint in M3, so the two-stores bug was invisible until
+ * there was something to fetch. See `auth-runtime.ts`.
  */
 function buildApiAuthRepository(): AuthRepository {
-  const transport = createDjangoAuthTransport();
-  const vault = createSecureCredentialVault();
-  const accessTokens = createMemoryAccessTokenStore();
-  const coordinator = createRefreshCoordinator({ transport, vault, accessTokens });
-
+  const { transport, vault, accessTokens, coordinator } = getAuthRuntime();
   return new ApiAuthRepository({ transport, vault, accessTokens, coordinator });
 }
