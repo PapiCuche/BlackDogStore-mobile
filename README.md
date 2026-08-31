@@ -269,6 +269,50 @@ acciones.
 
 Detalles y decisiones en [`docs/OFFLINE_STRATEGY.md`](docs/OFFLINE_STRATEGY.md).
 
+## Enlaces (deep links)
+
+La app abre enlaces entrantes con el scheme `blackdogstore://`. Un enlace es
+**una intención de navegación, nunca una autorización** (DEC-MOBILE-004): lleva
+a una pantalla, y quién puede ver qué lo siguen decidiendo el gate de sesión y
+el backend.
+
+| Enlace | Requiere sesión |
+|---|---|
+| `blackdogstore://products/<slug>` | No |
+| `blackdogstore://orders/<id>` | Sí — si no la hay, va a login y **reanuda** |
+| `blackdogstore://repairs/<id>` | Sí — igual |
+| `blackdogstore://track/<token>` | Reconocido pero **no disponible** (BR-008) |
+
+Cualquier otra ruta se rechaza: es una allowlist.
+
+### Probarlos en desarrollo
+
+Con la app corriendo en el simulador o el emulador:
+
+```bash
+npx uri-scheme open "blackdogstore://products/iphone-15-pro-256" --ios
+npx uri-scheme open "blackdogstore://orders/1042" --android
+```
+
+`uri-scheme` viene con Expo; no hace falta instalarlo. Equivalentes nativos:
+
+```bash
+xcrun simctl openurl booted "blackdogstore://repairs/r-1042"
+adb shell am start -a android.intent.action.VIEW -d "blackdogstore://repairs/r-1042"
+```
+
+Abrir un enlace privado sin sesión debe llevarte a login y, al autenticarte,
+abrir el destino original.
+
+### Lo que un enlace nunca lleva
+
+Ni tokens, ni contraseñas, ni parámetros de redirección (`next`, `redirect`,
+`callback`…). Un enlace que los traiga se rechaza entero, y ninguna URL cruda
+llega a un log. Los enlaces `https://` todavía se rechazan **a propósito**: no
+hay dominio verificado que confiar (DEC-MOBILE-005).
+
+Detalles y decisiones en [`docs/LINKING_STRATEGY.md`](docs/LINKING_STRATEGY.md).
+
 ## Mocks
 
 La app se desarrolla en paralelo al backend, así que las pantallas corren sobre
@@ -336,6 +380,10 @@ Dos cosas que conviene tener presentes al leer esa documentación:
   Ver `docs/OFFLINE_STRATEGY.md`.
 - **La query cache es solo memoria.** No hay persistencia en disco todavía: eso
   exige cifrado, partición por tenant y política de retención primero.
+- **Un deep link no autoriza nada.** Un enlace con parámetros prohibidos
+  (`token`, `next`, `redirect`…) se rechaza entero, la URL cruda nunca se
+  registra y el destino pendiente vive **solo en memoria**, descartándose al
+  cerrar sesión o cambiar de usuario. Ver `docs/LINKING_STRATEGY.md`.
 
 ## EAS
 
@@ -373,7 +421,8 @@ Las dependencias conservan sus propias licencias dentro de sus paquetes en
 
 ## Git
 
-- Rama de trabajo: `feat/mobile-foundation`
+- Rama de trabajo actual: `feat/mobile-customer-journey`
+- Merge normal (merge commit). Sin `rebase`, sin squash, sin `push --force`
 - Nunca desarrollar directamente en `main`
 - `ios/` y `android/` son generados y no se commitean
 
@@ -388,9 +437,14 @@ Las dependencias conservan sus propias licencias dentro de sus paquetes en
 | [`docs/INTEGRATION_STATUS.md`](docs/INTEGRATION_STATUS.md) | Estado real por feature |
 | [`docs/MOBILE_AUTH.md`](docs/MOBILE_AUTH.md) | Arquitectura de auth, ciclo de vida de tokens y threat model |
 | [`docs/OFFLINE_STRATEGY.md`](docs/OFFLINE_STRATEGY.md) | Conectividad, reintentos y aislamiento de cache |
+| [`docs/LINKING_STRATEGY.md`](docs/LINKING_STRATEGY.md) | Deep links, seguridad de enlaces y camino a Universal Links |
 
 Decisiones de arquitectura registradas en `docs/ARCHITECTURE.md`:
 
 - **DEC-MOBILE-001** — navegación por tabs estable en lugar de la API alpha.
 - **DEC-MOBILE-002** — cache de server-state con namespace de tenant y usuario.
 - **DEC-MOBILE-003** — offline-aware antes que offline-first.
+- **DEC-MOBILE-004** — un deep link es una intención de navegación, nunca una
+  autorización.
+- **DEC-MOBILE-005** — los puntos de entrada de producción irán por Universal
+  Links / App Links verificados por HTTPS (INFRA_PENDING).

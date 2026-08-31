@@ -34,6 +34,7 @@ Prioridad: **BR-001** y **BR-002** bloquean toda integración real.
 | BR-005 | Dominio de reparaciones | ALTA |
 | BR-006 | Endpoint público de marca | MEDIA |
 | BR-007 | Superficie versionada `/api/v1/` (sigue siendo **PROPUESTA**) | ALTA |
+| BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
 
 ---
 
@@ -534,6 +535,98 @@ Solo datos **comerciales públicos**. Nunca `tax_id` ni `legal_name`: eso ya est
 - Devuelve la empresa correcta según el tenant resuelto.
 - **No** incluye `tax_id` ni `legal_name`.
 - Una empresa inactiva devuelve 404, no los datos.
+
+---
+
+## BR-008 — Contrato de seguimiento seguro para el cliente (deep link)
+
+**Estado:** PROPUESTA · **Prioridad:** ALTA · **Bloquea:** seguimiento por enlace
+**Base:** `VERIFIED_STABLE_MASTER` — verificado en `2624d478af5cd3cc90c4b65d9aa4c81bb2439cfc`
+**Depende de:** BR-005 (no hay nada que seguir sin `RepairOrder`)
+
+**Motivo**
+
+Un taller necesita mandarle al cliente un enlace: *"revisa tu reparación aquí"*.
+El cliente suele no tener cuenta, así que el enlace no puede exigir sesión — y
+justo por eso es el punto más fácil de romper de todo el producto.
+
+Hoy **no existe nada de esto** en `master`. No hay endpoint de seguimiento, no
+hay token de seguimiento, no hay `RepairOrder`. Verificado leyendo
+`store/urls.py`, `store/views.py` y `store/models.py`.
+
+Mobile **reconoce** `blackdogstore://track/<token>` y termina en
+`feature-unavailable`: la ruta existe en el parser para poder rechazarla
+explícitamente, no para honrarla. El token **no se guarda, no se registra y no
+se envía a ninguna parte**. Ver `docs/LINKING_STRATEGY.md`.
+
+**Por qué no lo resolvemos en Mobile**
+
+Un identificador secuencial (`/track/1042`) es enumerable: cualquiera recorre
+1041, 1043 y lee las reparaciones de otros clientes. La única defensa real es un
+credential opaco emitido y validado por el servidor. Mobile no puede emitirlo
+sin volverse la autoridad, y eso rompería DEC-MOBILE-004.
+
+**Propuesta**
+
+| | |
+|---|---|
+| Endpoint | `GET /api/v1/repairs/track/<token>/` |
+| Permisos | `AllowAny` — el token **es** la autorización |
+| Tenant | derivado del token, jamás de un parámetro del cliente |
+| Rate limit | por IP y por token; obligatorio, no opcional |
+
+Campo nuevo en `RepairOrder` (BR-005):
+
+| Campo | Tipo | Nota |
+|---|---|---|
+| `tracking_token` | CharField(64), único, indexado | `secrets.token_urlsafe(32)`, mínimo 128 bits de entropía |
+| `tracking_expires_at` | DateTimeField, null | caduca; un enlace eterno es una fuga eterna |
+| `tracking_revoked_at` | DateTimeField, null | poder cortar un enlace filtrado |
+
+**Respuesta propuesta — mínimo suficiente**
+
+```json
+{
+  "code": "REP-1042",
+  "status": "in_repair",
+  "status_label": "En reparación",
+  "device_name": "MacBook Pro 14\"",
+  "received_at": "2026-08-20T15:04:00Z",
+  "estimated_ready_at": "2026-08-27T00:00:00Z",
+  "updated_at": "2026-08-25T11:20:00Z",
+  "company": { "name": "Black Dog Store", "support_phone": "+51 936 449 536" }
+}
+```
+
+**Seguridad — lo que esta respuesta NO puede contener**
+
+- Notas internas ni diagnóstico técnico interno.
+- Costos internos, márgenes o precios de repuesto.
+- Datos de otros clientes, ni ningún identificador que permita inferirlos.
+- Datos del técnico asignado más allá de lo que el taller decida publicar.
+- `serial_or_imei` completo — dato sensible; a lo sumo enmascarado.
+- Email, teléfono o dirección del cliente: quien tiene el enlace no es
+  necesariamente el cliente.
+
+Un token de seguimiento **no es una sesión**. No debe emitir cookie, no debe
+aceptar `Authorization`, no debe poder escalarse a la cuenta del cliente y no
+debe permitir ninguna escritura.
+
+**Tests backend sugeridos**
+
+- Un token válido devuelve solo la reparación de ese token.
+- Un token de la empresa A no devuelve nada de la empresa B.
+- Token caducado → 404 (no 403: un 403 confirma que existe).
+- Token revocado → 404.
+- Token inexistente y token caducado son **indistinguibles** en la respuesta.
+- La respuesta no contiene notas internas, costos ni datos de contacto.
+- El endpoint no acepta métodos de escritura.
+- El rate limit corta la enumeración.
+
+**Mientras no exista**
+
+Mobile no inventa el endpoint, no simula datos de seguimiento y no acepta un
+token. `INTEGRATION_STATUS.md` lo mantiene en `API_PENDING`.
 
 ---
 

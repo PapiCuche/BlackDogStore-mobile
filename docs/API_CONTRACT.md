@@ -267,6 +267,19 @@ progreso. Propuesta completa en **BR-005**.
 
 ---
 
+## Seguimiento seguro para el cliente · no existe
+
+`API_PENDING`. No hay endpoint de seguimiento, no hay token de seguimiento y no
+hay `RepairOrder` — verificado sobre `store/urls.py`, `store/views.py` y
+`store/models.py` **en `master`**. Propuesta completa en **BR-008**.
+
+M1.2 **reconoce** `blackdogstore://track/<token>` únicamente para poder
+rechazarlo de forma explícita: la decisión es siempre `feature-unavailable`. El
+token no se guarda, no se registra, no se envía a ninguna parte y no se simula
+ninguna pantalla de seguimiento. Ver `docs/LINKING_STRATEGY.md`.
+
+---
+
 ## Marca / multiempresa · no existe como endpoint público
 
 `MOCK`. `Company` existe en `master` (SaaS Fase 1) pero sin campos de marca, y

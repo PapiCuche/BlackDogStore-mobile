@@ -56,6 +56,9 @@ src/
 ├── domain/                 Tipos y REGLAS. company · products · orders · repairs · customers
 ├── features/               Composiciones por feature (tarjetas, timeline, chips)
 ├── hooks/                  Hooks de datos (TanStack Query) + accesibilidad
+├── linking/                Enlaces entrantes. parser · security · builders
+│                           coordinator (puro) · pending-intent (memoria)
+│                           deep-link-provider (único ciclo de vida)
 ├── providers/              AppProviders · QueryClient · retry-policy
 │                           query-scope.ts · query-lifecycle.tsx
 ├── repositories/           Interfaces + mock/ + api/ + composition root
@@ -348,6 +351,81 @@ esquema y retención. Y una cola de mutaciones chocaría con la **autoridad del
 servidor**: aprobar una cotización o cancelar un pedido son decisiones que solo
 el backend puede tomar.
 
+## Enlaces entrantes (M1.2)
+
+Detalle completo en `docs/LINKING_STRATEGY.md`. Lo estructural:
+
+```
+URL (email · QR · otra app)   ← no confiable
+        │
+   parser.ts        allowlist: scheme, host, ruta, identificador, límites
+        │           security.ts: parámetros prohibidos, decoding, traversal
+        ▼
+   DeepLinkIntent   dato tipado, sin URL cruda, sin token
+        │
+   deep-link-coordinator.ts    tenant gate → auth gate → decisión (puro)
+        │
+        ├── navigate              destino público, o privado con sesión
+        ├── authenticate          guarda intent EN MEMORIA → login → resume
+        ├── auth-unavailable      no se muestra un login que no puede funcionar
+        ├── feature-unavailable   tracking: sin contrato (BR-008)
+        ├── wait                  la sesión todavía se está restaurando
+        └── reject                enlace hostil o desconocido
+        │
+   deep-link-provider.tsx   único punto de ciclo de vida: cold start,
+                            warm start, resume, fronteras de sesión
+```
+
+El parser, el coordinator y los builders son **funciones puras**: no navegan, no
+hacen fetch y no tocan almacenamiento. Todo el efecto vive en el provider, que
+es también el único sitio donde hay que mirar cuando un enlace se comporta mal.
+
+### DEC-MOBILE-004 — Deep links are navigation intents, never authorization
+
+**Fecha:** 2026-08-31 (M1.2) · **Estado:** ACEPTADA
+
+**Contexto.** Un enlace llega desde fuera de la app: un correo, un QR, un
+mensaje reenviado, otra aplicación. Nada de eso está bajo nuestro control.
+
+**Problema.** Es tentador tratar la URL como si dijera algo sobre quien la abre.
+No lo dice. Un enlace que nombra `orders/1042` significa "alguien quería llegar
+a esta pantalla", jamás "esta persona puede ver ese pedido". Un enlace se
+reenvía, se guarda en el historial, aparece en una captura y sobrevive al cambio
+de dueño del teléfono.
+
+**Decisión.** Un enlace produce como mucho un `DeepLinkIntent`: un destino. La
+autorización la deciden, en este orden, el gate de sesión de la app y —de forma
+definitiva— el backend. Ninguna pantalla muestra datos privados porque se haya
+llegado a ella por enlace.
+
+**Consecuencias.**
+- El destino pendiente vive **solo en memoria**; persistirlo se lo entregaría a
+  la siguiente persona que encienda el dispositivo.
+- Se descarta en logout y en cambio de usuario.
+- Ningún token viaja en una URL, y ninguna URL cruda llega a un log.
+- El fallo de un enlace da **un solo mensaje**, igual para todas las causas: un
+  mensaje distinto para "no existe" y para "no es tuyo" es un oráculo de
+  existencia.
+
+### DEC-MOBILE-005 — Verified HTTPS links for production entry points
+
+**Fecha:** 2026-08-31 (M1.2) · **Estado:** ACEPTADA · **INFRA_PENDING**
+
+**Contexto.** `blackdogstore://` funciona hoy y es suficiente para desarrollo.
+
+**Problema.** Un custom scheme puede reclamarlo cualquier app instalada, así que
+no prueba nada sobre el origen del enlace. Además el nombre pertenece a la app
+piloto, no al producto SaaS.
+
+**Decisión.** Los puntos de entrada de cara al cliente —correo, QR, push, web—
+usarán **Universal Links (iOS) y App Links (Android) verificados por HTTPS**. El
+custom scheme queda como compatibilidad y herramienta de desarrollo.
+
+**Estado.** No hay dominio oficial y no se inventa uno: `TRUSTED_HTTPS_HOSTS`
+está **vacío a propósito** y hoy todo enlace `https://` se rechaza. Confiar en
+un host que nadie controla sería peor que no aceptar ninguno. El checklist de
+activación (AASA, assetlinks, entitlements) está en `LINKING_STRATEGY.md`.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -389,4 +467,10 @@ un error 500.
 | Clasificación de timeout por flag, no por excepción | La forma del error de un abort no es portable entre runtimes. |
 | `Animated` en vez de Reanimated para el Skeleton | Una opacidad en bucle no necesita worklets. |
 | `noUncheckedIndexedAccess` | Encontró errores reales durante M0: indexar un array es `T \| undefined`. |
+| Un enlace es intención, no autorización | DEC-MOBILE-004: una URL se reenvía; una sesión no. |
+| Destino pendiente solo en memoria | Persistirlo se lo entregaría a la siguiente persona que use el dispositivo. |
+| Allowlist de rutas, no denylist | La ruta hostil que nadie anticipó es justo la que se usa. |
+| Rechazar el enlace con parámetros prohibidos, no limpiarlo | Limpiar enseña al emisor que el patrón funciona. |
+| `TRUSTED_HTTPS_HOSTS` vacío | DEC-MOBILE-005: no hay dominio verificado; confiar en uno inventado sería peor. |
+| Un solo mensaje de enlace no disponible | Distinguir "no existe" de "no es tuyo" es un oráculo de existencia. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |
