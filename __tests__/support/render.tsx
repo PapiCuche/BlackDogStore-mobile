@@ -3,6 +3,7 @@ import { render, type RenderOptions } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
 
 import { AuthProvider } from '@/auth/auth-provider';
+import { CartProvider } from '@/cart/cart-provider';
 import type { AuthRepository } from '@/auth/auth-repository';
 import { ConnectivityProvider } from '@/connectivity/connectivity-provider';
 import type { ConnectivityState } from '@/connectivity/connectivity-state';
@@ -24,9 +25,16 @@ export async function renderWithProviders(
     authRepository?: AuthRepository;
     /** Starting connectivity. Defaults to online, as most screens assume. */
     connectivity?: ConnectivityState;
+    /** The basket's tenant. Null exercises a build with no storefront. */
+    cartTenant?: string | null;
   } = {},
 ) {
-  const { authRepository, connectivity = 'online', ...renderOptions } = options;
+  const {
+    authRepository,
+    connectivity = 'online',
+    cartTenant = 'blackdog',
+    ...renderOptions
+  } = options;
 
   // Drive the NATIVE boundary, not just the provider's initial state: the
   // provider asks the OS on mount, and that answer would otherwise overwrite
@@ -56,7 +64,9 @@ export async function renderWithProviders(
       <ConnectivityProvider initialState={connectivity}>
         <QueryClientProvider client={queryClient}>
           <AppThemeProvider>
-            <AuthProvider repository={authRepository}>{children}</AuthProvider>
+            <AuthProvider repository={authRepository}>
+              <CartProvider tenantSlug={cartTenant}>{children}</CartProvider>
+            </AuthProvider>
           </AppThemeProvider>
         </QueryClientProvider>
       </ConnectivityProvider>

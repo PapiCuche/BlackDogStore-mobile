@@ -47,6 +47,9 @@ src/
 │                           endpoints/catalog-v1.ts      (público)
 │                           endpoints/auth-v1.ts         (sesión)
 │                           endpoints/customer-orders-v1.ts (cliente)
+│                           endpoints/customer-checkout-v1.ts (compra)
+│                           endpoints/storefront-config-v1.ts (marca)
+├── cart/                   Carrito: provider + persistencia (una sola verdad)
 ├── auth/                   Sesión, política y ciclo de vida de tokens
 │   ├── auth-policy.ts      Qué mecanismo permite esta build (fail-safe)
 │   ├── auth-repository-factory.ts   Composition root de auth
@@ -551,6 +554,71 @@ recibe un 403, no inventario.
 **Consecuencia.** La app **no** mantiene una segunda matriz de permisos. Las
 capabilities son datos que llegan y se usan para presentar.
 
+## Carrito y compra (M5)
+
+### DEC-MOBILE-009 — El carrito anónimo es intención local; el servidor es la verdad comercial
+
+**Fecha:** 2026-08-31 (M5) · **Estado:** ACEPTADA
+
+**Decisión.** El carrito vive en el dispositivo, sin backend. Guarda
+`{productSlug, quantity}` más un snapshot de nombre, imagen y último precio
+visto **solo para dibujar**. Todas las cifras que muestra son **estimaciones**, y
+la pantalla lo dice.
+
+**Motivo.** Un carrito no necesita servidor para existir, y pedir cuenta antes de
+poder elegir cosas pierde al cliente antes de abrir la tienda. Pero un número
+guardado en un teléfono no es un precio que la tienda haya aceptado: el checkout
+recalcula todo desde `Product.price` en el momento de comprar.
+
+**Consecuencias.**
+- El tipo `Cart` **no** se reutiliza de `Order`. Un `Order` es historia con
+  precios congelados; un `Cart` es una intención mutable que puede estar
+  desactualizada. Compartir el tipo invitaría a tratar un número local viejo como
+  un precio pactado.
+- La aritmética es en **céntimos enteros**, nunca en flotantes: `4500.00 × 3` en
+  números de JavaScript es cómo una cesta acaba mostrando `13499.999999999998`.
+- Persiste en **AsyncStorage, no en SecureStore**. No contiene credenciales ni
+  autorización; meterlo en el Keychain diluiría lo que «seguro» significa aquí.
+- Es **tenant-scoped**: dos tiendas son dos carritos, y no hay uno global ni
+  caída al piloto.
+- **Sobrevive al login y al logout.** Alguien que entra para pagar, falla y sale,
+  no pierde lo que eligió; lo privado —consultas de cliente— sí se limpia.
+
+### El flujo de compra
+
+```
+producto → agregar (público) → carrito (público) → «Ir a pagar»
+                                                        │
+                                              gate de sesión (DEC-MOBILE-006)
+                                                        │
+                                    POST /api/v1/customer/<empresa>/checkout/
+                                                        │
+                                    Stripe Checkout ALOJADO (expo-web-browser)
+                                                        │
+                            vuelta a foreground → REFETCH del pedido al servidor
+                                                        │
+                                      ¿pagado? → vaciar esas líneas
+                                      ¿no?     → conservar el carrito
+```
+
+**«El navegador volvió» no es un pago.** Volver a primer plano solo demuestra que
+alguien cerró una pestaña. El estado real del pedido lo sabe el servidor, que lo
+aprende del webhook de Stripe. Por eso al volver se **refetchea** y se cree eso.
+
+**El carrito no se vacía hasta que el pago se confirma.** Cancelar, expirar,
+fallar o quedarse sin red conservan la cesta: perderla por un pago abandonado
+sería castigar al cliente por dudar.
+
+**No hay campo de tarjeta en la app**, y no debe haberlo: que los datos de tarjeta
+nunca toquen el cliente es la razón entera de que exista la página alojada. La
+app abre una URL HTTPS que el servidor emitió, y **valida** que sea de Stripe
+antes de abrirla — una URL es el único campo de una respuesta que se convierte en
+una acción.
+
+**La clave de idempotencia** se genera una vez por intento y se reutiliza en cada
+reintento de ese intento; se regenera cuando la cesta cambia, porque una cesta
+distinta es una compra distinta.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -613,4 +681,12 @@ un error 500.
 | Capabilities solo para presentación | DEC-MOBILE-008: si el servidor creyera al cliente, la autorización viviría en el dispositivo del atacante. |
 | Un único grafo de tokens (`auth-runtime`) | Dos coordinators sobre la misma entrada del Keychain rotan el refresh uno contra otro y matan la sesión. |
 | Sin filtrado de respuestas en el cliente | Recortar filas ajenas de una respuesta significa que ya se recibieron. |
+| Carrito local, servidor como autoridad | DEC-MOBILE-009: un número guardado en un teléfono no es un precio que la tienda haya aceptado. |
+| `Cart` separado de `Order` | Uno es intención mutable; el otro, historia con precios congelados. |
+| Dinero en céntimos enteros | `4500.00 × 3` en flotantes muestra 13499.999999999998. |
+| Carrito en AsyncStorage, no en SecureStore | No hay credencial ni autorización dentro; el Keychain es para secretos. |
+| El carrito sobrevive al login y al logout | Quien entra para pagar y falla no debe perder lo que eligió. |
+| No vaciar hasta el pago confirmado | Volver del navegador solo prueba que se cerró una pestaña. |
+| Stripe Checkout alojado, sin campo de tarjeta | Que los datos de tarjeta no toquen el cliente es la razón de que exista. |
+| Validar la URL de pago aunque venga del servidor | Es el único campo de una respuesta que se convierte en una acción. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |

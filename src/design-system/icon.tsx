@@ -85,6 +85,12 @@ export const icons = {
   theme: { ios: 'circle.lefthalf.filled', android: 'contrast' },
   signOut: { ios: 'rectangle.portrait.and.arrow.right', android: 'logout' },
   info: { ios: 'info.circle', android: 'info' },
+
+  // M5 — the cart's vocabulary.
+  cart: { ios: 'cart', android: 'shopping_cart' },
+  plus: { ios: 'plus', android: 'add' },
+  minus: { ios: 'minus', android: 'remove' },
+  trash: { ios: 'trash', android: 'delete' },
 } as const satisfies Record<string, IconName>;
 
 export type IconKey = keyof typeof icons;

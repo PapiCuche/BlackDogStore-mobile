@@ -7,12 +7,27 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * WRONG for a token — anything secret belongs in `secure-storage.ts`. The two
  * modules are kept apart so that the wrong choice requires the wrong import.
  */
-export type PreferenceKey = 'bds.pref.theme' | 'bds.pref.haptics';
+export type PreferenceKey = 'bds.pref.theme' | 'bds.pref.haptics' | `bds.cart.${string}`;
 
 export const preferenceKeys = {
   themePreference: 'bds.pref.theme',
   hapticsEnabled: 'bds.pref.haptics',
 } as const satisfies Record<string, PreferenceKey>;
+
+/**
+ * The shopping basket of one tenant.
+ *
+ * AsyncStorage, NOT SecureStore, and the distinction is the point. SecureStore
+ * is the Keychain: it is for secrets, it is slower, and putting a shopping list
+ * in it would dilute what "this app keeps something secure" means. A basket
+ * holds no credential, no authorization and no authoritative price — only what
+ * someone was thinking of buying.
+ *
+ * Keyed by tenant so two storefronts can never see each other's basket.
+ */
+export function cartKey(tenantSlug: string): PreferenceKey {
+  return `bds.cart.${tenantSlug}`;
+}
 
 /**
  * Reads never throw.

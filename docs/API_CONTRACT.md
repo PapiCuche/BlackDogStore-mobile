@@ -220,6 +220,57 @@ Mobile **no** debe diseñar contra este código hasta que esté en `master`.
 
 ---
 
+## Compra · `/api/v1/customer/<slug>/checkout/` — **INTEGRADO**
+
+```
+VERIFIED_STABLE_MASTER · VERSIONED · PRIVADO · INTEGRADO POR MOBILE (M5)
+```
+
+Verificado en `origin/master` **`0b184d3`** (PR #4), leyendo el código en `master`
+y con smoke real: checkout 201, replay 200 con el mismo pedido, conflicto 409,
+precio falso 400, stock intacto.
+
+```
+POST /api/v1/customer/<company_slug>/checkout/   Bearer v1
+```
+
+**Envía intención, no dinero.** `items: [{product_slug, quantity}]`, los datos del
+comprador y una `idempotency_key`. El servidor **rechaza** —no ignora— `price`,
+`total`, `subtotal`, `discount_amount`, `stock`, `company_id`, `branch_id`,
+`status`, `paid`, `user_id`, `stripe_session_id` y `session_key`.
+
+Respuesta: `{order_id, checkout_url}`. La URL es una página **alojada por
+Stripe**; la app la valida como HTTPS de `stripe.com` antes de abrirla.
+
+**Idempotencia.** Misma clave y misma cesta → el mismo pedido (200). Misma clave,
+cesta distinta → **409**. En un replay cuya sesión caducó, `checkout_url` es null
+y el cliente lee el estado del pedido.
+
+**Nada se consume antes del pago**: ni carrito ni stock.
+
+---
+
+## Config pública · `/api/v1/storefront/<slug>/config/` — **INTEGRADO**
+
+```
+VERIFIED_STABLE_MASTER · VERSIONED · PÚBLICO · BR-006 CERRADO
+```
+
+Anónimo. **El mismo payload** que `/api/storefront/config/`, construido por la
+misma función — el backend tiene un test que compara ambas respuestas byte a
+byte.
+
+Secciones: `company` (name, slug, legal_name, tax_id), `branding` (logo, colores),
+`contact` (email, phone, **whatsapp_link**, web, redes, dirección) y `policies`
+(garantía, términos, privacidad).
+
+**Nada operativo**: ni `order_notification_email`, ni configuración de sucursal,
+ni credenciales, ni capabilities.
+
+Empresa desconocida e inactiva → el mismo 404 del catálogo.
+
+---
+
 ## Pedidos de cliente · `/api/v1/customer/` — **INTEGRADO**
 
 ```
