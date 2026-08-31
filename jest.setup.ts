@@ -20,6 +20,17 @@ jest.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Success: 'success', Error: 'error', Warning: 'warning' },
 }));
 
+// `expo-linking` reads the URI scheme from the expo-constants manifest, which
+// only exists in a real build. Mocked at the boundary so the builders and the
+// lifecycle provider are what get tested, not Expo's config plumbing. The
+// scheme mirrors app.json.
+jest.mock('expo-linking', () => ({
+  createURL: (path: string) => `blackdogstore://${path.replace(/^\/+/, '')}`,
+  getInitialURL: jest.fn().mockResolvedValue(null),
+  addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  parse: jest.fn(),
+}));
+
 // Connectivity comes from a native module. Mocked at the boundary so what gets
 // tested is our `ConnectivityProvider`, not Expo's internals. Tests that care
 // about connectivity drive it through the provider's `initialState` prop or by

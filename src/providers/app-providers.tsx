@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@/auth/auth-provider';
 import { ConnectivityProvider } from '@/connectivity/connectivity-provider';
+import { DeepLinkProvider } from '@/linking/deep-link-provider';
 import { AppThemeProvider } from '@/theme/theme-provider';
 
 import { createQueryClient } from './query-client';
@@ -25,6 +26,9 @@ import { QueryLifecycleBridges } from './query-lifecycle';
  *    QueryClient (to evict private cache) and the theme (to render).
  *  - **Lifecycle bridges** last, inside all four, because each one reads from a
  *    different provider — connectivity, query client and auth.
+ *  - **DeepLinkProvider** innermost of all: it reads auth to decide whether a
+ *    private destination may open, and it navigates — so everything it depends
+ *    on must already exist above it.
  *
  * The QueryClient is created inside `useState` rather than at module scope so a
  * Fast Refresh — or a test mounting the tree twice — gets a clean cache instead
@@ -40,7 +44,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
           <AppThemeProvider>
             <AuthProvider>
               <QueryLifecycleBridges />
-              {children}
+              <DeepLinkProvider>{children}</DeepLinkProvider>
             </AuthProvider>
           </AppThemeProvider>
         </QueryClientProvider>

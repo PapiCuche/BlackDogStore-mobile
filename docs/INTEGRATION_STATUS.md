@@ -38,6 +38,15 @@ archivo discrepan, **el archivo tiene razón**.
 | Cliente API | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Config a prueba de fallos | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Almacenamiento seguro | IMPLEMENTADO | n/a | n/a | NO TESTED | PARCIAL |
+| Deep links (parser + gate) | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
+| Enlace de producto | IMPLEMENTADO | API_PENDING | MOCK | TESTED | PARCIAL |
+| Enlace de pedido | IMPLEMENTADO | API_PENDING | MOCK | TESTED | PARCIAL |
+| Enlace de reparación | IMPLEMENTADO | MOCK | MOCK | TESTED | PARCIAL |
+| Resume tras autenticarse | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
+| Seguimiento seguro (tracking) | NO IMPLEMENTADO | API_PENDING (BR-008) | n/a | TESTED (rechazo) | **PENDIENTE** |
+| Universal Links / App Links | NO IMPLEMENTADO | n/a | n/a | n/a | **INFRA_PENDING** |
+| QR | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
+| Push notifications | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
 | Compra / pagos | NO IMPLEMENTADO | existe (web) | — | — | PENDIENTE |
 
 ## Qué sirve cada build (M0.1)
@@ -203,6 +212,29 @@ Offline mutation queue        PENDIENTE / PROPUESTA
 ```
 
 Ver `docs/OFFLINE_STRATEGY.md` y las decisiones DEC-MOBILE-002 / DEC-MOBILE-003.
+
+## Enlaces entrantes (M1.2)
+
+```
+Deep link parser (allowlist)  IMPLEMENTADO / TESTED
+Security limits + decoding    IMPLEMENTADO / TESTED
+Typed link builders           IMPLEMENTADO / TESTED
+Coordinator (tenant + auth)   IMPLEMENTADO / TESTED
+Pending intent (memoria)      IMPLEMENTADO / TESTED
+Cold start / warm start       IMPLEMENTADO / TESTED
+Resume tras login             IMPLEMENTADO / TESTED
+Limpieza en logout / switch   IMPLEMENTADO / TESTED
+Custom scheme                 IMPLEMENTADO (desarrollo / piloto)
+Universal Links / App Links   INFRA_PENDING (DEC-MOBILE-005)
+Secure tracking               API_PENDING (BR-008)
+QR                            PENDIENTE
+Push                          PENDIENTE
+```
+
+Ver `docs/LINKING_STRATEGY.md` y las decisiones DEC-MOBILE-004 / DEC-MOBILE-005.
+
+Un enlace **no integra nada**: lleva a una pantalla cuyo estado de integración es
+el que ya tenía. Un enlace de reparación sigue llegando a datos `MOCK`.
 
 ## Nota de verificación
 

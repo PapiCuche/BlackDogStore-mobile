@@ -11,6 +11,7 @@ import {
   icons,
   SectionHeader,
   Skeleton,
+  StaleDataNotice,
   StatusBadge,
   Screen,
   Text,
@@ -23,7 +24,6 @@ import { initials, displayName } from '@/domain/customers/types';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { QuickActions } from '@/features/home/quick-actions';
 import { useConnectivity } from '@/connectivity/connectivity-provider';
-import { StaleDataNotice } from '@/design-system';
 import { useCompanyBrand } from '@/hooks/use-company-brand';
 import { FeatureUnavailableError } from '@/repositories/errors';
 import { useOrders } from '@/hooks/use-orders';
