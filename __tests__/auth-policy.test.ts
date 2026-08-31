@@ -1,3 +1,4 @@
+import { ApiAuthRepository } from '@/auth/api-auth-repository';
 import { resolveAuthRuntimePolicy } from '@/auth/auth-policy';
 import { resolveAuthRepository } from '@/auth/auth-repository-factory';
 import { MockAuthRepository } from '@/auth/mock-auth-repository';
@@ -13,7 +14,10 @@ import type { AppEnvironment } from '@/config/env';
  * one refactor away from being the real front door.
  */
 
-const NO_BACKEND = { backendAuthAvailable: false };
+const NO_BACKEND = { backendAuthAvailable: false, apiConfigured: true };
+
+/** M3 — the contract exists AND this build knows where the server is. */
+const READY = { backendAuthAvailable: true, apiConfigured: true };
 
 describe('resolveAuthRuntimePolicy — production', () => {
   it.each([true, false])('NEVER uses mock auth, mocksEnabled=%p', (mocksEnabled) => {
@@ -29,7 +33,7 @@ describe('resolveAuthRuntimePolicy — production', () => {
   it('uses the real backend once a contract exists', () => {
     const policy = resolveAuthRuntimePolicy({
       environment: 'production',
-      backendAuthAvailable: true,
+      ...READY,
       mocksEnabled: false,
     });
     expect(policy.mode).toBe('backend');
@@ -112,16 +116,74 @@ describe('resolveAuthRepository — composition root', () => {
     }
   });
 
-  it('refuses to pretend a backend repository exists', () => {
-    // Flipping the readiness flag without shipping the transport must fail
-    // loudly rather than returning null and looking like a policy decision.
-    expect(() =>
-      resolveAuthRepository({
-        mode: 'backend',
-        decision: 'backend-contract-ready',
-        reason: 'test',
-      }),
-    ).toThrow(/ApiAuthRepository no existe/);
+  it('builds the REAL repository when the contract is ready', () => {
+    // Until M3 this asserted the opposite — that flipping the readiness flag
+    // without a transport threw. The transport shipped, so the assertion is
+    // re-pointed rather than deleted: what it protects is "the backend branch
+    // never quietly returns something fake", and that still holds.
+    const repository = resolveAuthRepository({
+      mode: 'backend',
+      decision: 'backend-contract-ready',
+      reason: 'test',
+    });
+
+    expect(repository).toBeInstanceOf(ApiAuthRepository);
+    expect(repository).not.toBeInstanceOf(MockAuthRepository);
+  });
+});
+
+describe('a contract without a server is still unavailable', () => {
+  // M3. `isBackendAuthAvailable` means "this build can SPEAK the contract", not
+  // "this build knows where the server is". Conflating them ships a login form
+  // whose submit can only fail, which teaches the user their password is wrong.
+  it.each(['production', 'staging', 'development'] as const)(
+    'refuses to sign in with no API url (%s)',
+    (environment) => {
+      const policy = resolveAuthRuntimePolicy({
+        environment,
+        backendAuthAvailable: true,
+        apiConfigured: false,
+        mocksEnabled: false,
+      });
+
+      expect(policy.mode).toBe('unavailable');
+      expect(policy.decision).toBe('unavailable-api-not-configured');
+    },
+  );
+
+  it('does NOT fall back to mocks when the API url is missing', () => {
+    // Not being able to reach the server is not a licence to fabricate a
+    // session — least of all in development, where it would hide the mistake.
+    const policy = resolveAuthRuntimePolicy({
+      environment: 'development',
+      backendAuthAvailable: true,
+      apiConfigured: false,
+      mocksEnabled: true,
+    });
+
+    expect(policy.mode).toBe('unavailable');
+  });
+
+  it('builds no repository at all in that state', () => {
+    const policy = resolveAuthRuntimePolicy({
+      environment: 'production',
+      backendAuthAvailable: true,
+      apiConfigured: false,
+      mocksEnabled: false,
+    });
+
+    expect(resolveAuthRepository(policy)).toBeNull();
+  });
+
+  it('says WHY, for the integration diagnostics screen', () => {
+    const policy = resolveAuthRuntimePolicy({
+      environment: 'production',
+      backendAuthAvailable: true,
+      apiConfigured: false,
+      mocksEnabled: false,
+    });
+
+    expect(policy.reason).toContain('EXPO_PUBLIC_API_BASE_URL');
   });
 });
 

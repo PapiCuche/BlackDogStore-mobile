@@ -15,14 +15,17 @@ import { loginSchema, type LoginFormValues } from '@/validation/auth-schemas';
 /**
  * Sign in.
  *
- * ⚠️  THIS DOES NOT AUTHENTICATE AGAINST DJANGO. The backend's login sets a JWT
- * in an HttpOnly cookie and pairs it with CSRF — a browser contract this client
- * cannot speak, and one we are explicitly not changing. See docs/MOBILE_AUTH.md
- * and BR-001.
+ * M3 — THIS NOW AUTHENTICATES FOR REAL, against `/api/v1/auth/login/` on
+ * `origin/master` `7c55ebc`. The legacy `/api/auth/login/` is still off limits:
+ * it sets a JWT in an HttpOnly cookie and pairs it with CSRF, a browser
+ * contract this client cannot speak and one we are not changing.
  *
- * The form is real: real validation, real submit state, real error handling.
- * Only the repository behind it is a mock, and the screen says so rather than
- * pretending otherwise.
+ * Two things on this screen depend on which mode the build is in:
+ *
+ *   - the "datos de ejemplo" notice, which must NEVER appear over a real login;
+ *   - the register / forgot-password links, which lead to flows the native
+ *     contract does not implement (BR-001B). Showing them in backend mode would
+ *     offer a door that opens onto nothing.
  */
 export default function LoginScreen() {
   const { policy } = useAuth();
@@ -39,8 +42,12 @@ export default function LoginScreen() {
     async (values) => {
       // The password is passed straight through and never stored, logged or put
       // into component state that outlives the submit.
-      // `identifier`, not `email`: the backend's USERNAME_FIELD is `username`
-      // and BR-001 has not settled which one the mobile contract accepts.
+      //
+      // `identifier` carries an EMAIL. BR-001A settled it: `/api/v1/auth/login/`
+      // takes `{email, password}`, unlike the web contract's username. The field
+      // keeps its abstract name so a future contract can accept something else
+      // without changing every caller, but the mapping is no longer an open
+      // question.
       await signIn({ identifier: values.email, password: values.password });
       hapticSuccess();
       router.replace('/(tabs)');
@@ -56,28 +63,41 @@ export default function LoginScreen() {
     return <AuthUnavailableScreen />;
   }
 
+  const isMock = policy.mode === 'mock';
+
   return (
     <AuthScreenShell
       title="Inicia sesión"
       subtitle="Accede para seguir tus reparaciones y pedidos."
       footer={
         <View style={{ gap: theme.spacing.sm, alignItems: 'center' }}>
-          <Link href="/(auth)/forgot-password" asChild>
-            <Text variant="subhead" color="accentText" accessibilityRole="link">
-              ¿Olvidaste tu contraseña?
-            </Text>
-          </Link>
+          {isMock ? (
+            <>
+              <Link href="/(auth)/forgot-password" asChild>
+                <Text variant="subhead" color="accentText" accessibilityRole="link">
+                  ¿Olvidaste tu contraseña?
+                </Text>
+              </Link>
 
-          <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-            <Text variant="subhead" color="textSecondary">
-              ¿No tienes cuenta?
+              <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                <Text variant="subhead" color="textSecondary">
+                  ¿No tienes cuenta?
+                </Text>
+                <Link href="/(auth)/register" asChild>
+                  <Text variant="subhead" color="accentText" accessibilityRole="link">
+                    Regístrate
+                  </Text>
+                </Link>
+              </View>
+            </>
+          ) : (
+            /* BR-001B. Registration, password reset and email verification have
+               no native endpoints, and the legacy ones speak cookies and CSRF.
+               Saying so beats a link that leads nowhere. */
+            <Text variant="footnote" color="textTertiary" style={{ textAlign: 'center' }}>
+              Crear una cuenta o recuperar tu contraseña todavía se hace desde la web.
             </Text>
-            <Link href="/(auth)/register" asChild>
-              <Text variant="subhead" color="accentText" accessibilityRole="link">
-                Regístrate
-              </Text>
-            </Link>
-          </View>
+          )}
         </View>
       }
     >
@@ -127,7 +147,11 @@ export default function LoginScreen() {
         fullWidth
       />
 
-      <MockDataNotice message="Modo desarrollo: cualquier correo y contraseña válidos abren la app. La autenticación real está pendiente (M1)." />
+      {/* Only over a fake login. Showing this above a real one would tell the
+          user their credentials do not matter, which is now false. */}
+      {isMock ? (
+        <MockDataNotice message="Modo desarrollo: cualquier correo y contraseña válidos abren la app. No es una sesión real." />
+      ) : null}
     </AuthScreenShell>
   );
 }

@@ -1,13 +1,37 @@
 # Autenticación Mobile
 
-## AUTENTICACIÓN MOBILE REAL: API_PENDING
+## AUTENTICACIÓN MOBILE REAL: **INTEGRADA** (núcleo de sesión)
 
-M1 **no** implementa autenticación contra Django. Construye toda la arquitectura
-segura para que, cuando Backend publique el contrato, la integración sea
-*conectar un transporte*, no rediseñar la aplicación.
+M3 conectó la arquitectura que M1 dejó construida. La apuesta de M1 —*que
+cuando el contrato existiera la integración sería un transporte, no un
+rediseño*— se sostuvo: el coordinator, el vault, la rotación y el pipeline de
+reintentos no se tocaron.
 
-Verificado en `PapiCuche/BlackDogStore-web` @ `origin/master`
-`2624d478af5cd3cc90c4b65d9aa4c81bb2439cfc`.
+Contrato consumido, verificado leyendo el código en `PapiCuche/BlackDogStore-web`
+@ `origin/master` **`7c55ebc`**:
+
+```
+POST /api/v1/auth/login/     {email, password} → tokens en el cuerpo
+POST /api/v1/auth/refresh/   {refresh}         → access + refresh rotado
+POST /api/v1/auth/logout/    {refresh}         → best-effort, siempre 200
+GET  /api/v1/auth/me/        Bearer            → identidad + empresas verificadas
+```
+
+| Capacidad | Estado |
+|---|---|
+| Login | **INTEGRADO / TESTED** |
+| Refresh con rotación | **INTEGRADO / TESTED** |
+| Logout | **INTEGRADO / TESTED** |
+| Restore en cold start | **INTEGRADO / TESTED** |
+| Contexto de empresa verificado | **INTEGRADO / TESTED** |
+| Registro nativo | **PENDIENTE** (BR-001B) |
+| Verificación de correo nativa | **PENDIENTE** (BR-001B) |
+| Reset de contraseña nativo | **PENDIENTE** (BR-001B) |
+
+**BR-001 NO está cerrado.** El núcleo de sesión sí; el ciclo de vida de cuenta
+no. En modo backend la app **no muestra** formularios de registro, recuperación
+ni verificación: el contrato no puede atenderlos y un formulario que solo puede
+fallar le enseña al usuario que su contraseña está mal.
 
 ---
 
@@ -322,12 +346,51 @@ que serializa la sesión y comprueba que la contraseña no aparece.
 
 ---
 
-## 16. Qué falta para integrar
+## 16. Qué se integró en M3, y qué falta
 
-1. Backend acepta **BR-007** (`/api/v1/`) y **BR-001** (auth acotada).
-2. Se escribe `DjangoAuthTransport` implementando `AuthTransport`.
-3. Se escribe `ApiAuthRepository` sobre el coordinator ya existente.
-4. `isBackendAuthAvailable` pasa a `true` **en ese mismo commit**.
-5. Se ejercita el pipeline contra el servidor real.
+### Hecho
 
-Nada de esto empieza antes de que Backend se pronuncie.
+1. ✅ Backend publicó BR-001A — `origin/master` `7c55ebc`.
+2. ✅ `DjangoAuthTransport` implementa `AuthTransport` + `getCurrentSession`.
+3. ✅ `ApiAuthRepository` sobre el coordinator existente, sin rediseñarlo.
+4. ✅ `isBackendAuthAvailable = true`, en el mismo commit que el transporte.
+5. ✅ Smoke real contra el servidor antes de integrar.
+
+### El orden que importa
+
+`signIn` persiste el refresh **antes** de instalar el access. El servidor rota y
+mete en blacklist, así que al llegar la respuesta el refresh anterior ya está
+muerto. Un crash entre "instalar access" y "persistir refresh" dejaría la app
+autenticada media hora y luego desconectada para siempre, sin forma de saber por
+qué. Persistiendo primero, esa ventana es "tenemos credenciales que aún no hemos
+empezado a usar", que sí se recupera.
+
+### Cold start ya no confunde "sin red" con "sin sesión"
+
+Antes cualquier fallo de restore terminaba en `unauthenticated`. Era inofensivo
+mientras el mock nunca fallaba; contra un servidor real firmaría la salida de
+cualquiera que abra la app en un ascensor.
+
+| Qué pasó | Estado | Credenciales |
+|---|---|---|
+| Sesión restaurada | `authenticated` | conservadas |
+| No había refresh guardado | `unauthenticated` | — |
+| Servidor **rechazó** el refresh | `unauthenticated` | **borradas** |
+| Red caída / timeout | **`temporarily-unavailable`** | **conservadas** |
+| Error inesperado | `unauthenticated` | dirección segura |
+
+### Contrato existente ≠ servidor configurado
+
+`isBackendAuthAvailable = true` significa "esta build sabe **hablar** el
+contrato", no "esta build sabe **dónde está** el servidor". Una release sin
+`EXPO_PUBLIC_API_BASE_URL` cae a `unavailable` — no a un formulario cuyo botón
+solo puede fallar, y **nunca** a mocks.
+
+### Qué falta — BR-001B
+
+Registro, verificación de correo, reenvío, reset y cambio de contraseña nativos.
+No existen en el servidor y la app no los finge: en modo backend esas pantallas
+muestran un estado explícito y remiten a la web.
+
+Después de eso, la siguiente puerta es una **superficie privada v1 tenant-safe**
+(pedidos y reparaciones), que necesita BR-003 y BR-005.

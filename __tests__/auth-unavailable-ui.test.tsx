@@ -52,9 +52,9 @@ function withAuth(policy: AuthRuntimePolicy, children: ReactNode) {
 describe('auth unavailable — every entry screen', () => {
   it.each([
     ['Login', LoginScreen, 'Acceso temporalmente no disponible'],
-    ['Register', RegisterScreen, 'Registro temporalmente no disponible'],
-    ['Forgot password', ForgotPasswordScreen, 'Recuperación no disponible'],
-    ['Verify email', VerifyEmailScreen, 'Verificación no disponible'],
+    ['Register', RegisterScreen, 'Registro no disponible en la app'],
+    ['Forgot password', ForgotPasswordScreen, 'Recuperación no disponible en la app'],
+    ['Verify email', VerifyEmailScreen, 'Verificación no disponible en la app'],
   ])('%s shows an unavailable state instead of a form', async (_name, Screen_, title) => {
     await renderWithProviders(withAuth(UNAVAILABLE, <Screen_ />));
 

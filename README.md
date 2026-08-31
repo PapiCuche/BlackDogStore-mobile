@@ -372,12 +372,22 @@ Dos cosas que conviene tener presentes al leer esa documentación:
 - Nunca en el repositorio: `.env`, keystores, `.p8`, `.p12`, provisioning
   profiles, certificados, `credentials.json`. Todo cubierto por `.gitignore`.
 - La app no guarda ni registra contraseñas.
-- **Autenticación real: API_PENDING.** Ver `docs/MOBILE_AUTH.md`.
+- **Autenticación real: INTEGRADA** (núcleo de sesión) contra
+  `/api/v1/auth/` en `origin/master` `7c55ebc`. Login, refresh con rotación,
+  logout y restore en cold start. **Registro, verificación y reset siguen
+  pendientes** (BR-001B) y la app no los muestra en modo backend. Ver
+  `docs/MOBILE_AUTH.md`.
 - **El access token nunca se persiste** — solo memoria. El refresh token sí, en
   Keychain/Keystore, y es la única credencial que se guarda.
 - **Auth simulada imposible en production.** `development` usa mock, `staging`
   solo con opt-in explícito, `production` nunca: muestra "acceso no disponible"
   en lugar de un formulario que no puede funcionar.
+- **Tener el contrato no es tener servidor.** Una build sin
+  `EXPO_PUBLIC_API_BASE_URL` cae a "acceso no disponible", nunca a un login cuyo
+  botón solo puede fallar, y **nunca** a mocks.
+- **Sin red no es sin sesión.** Un fallo de red al arrancar deja la app en
+  `temporarily-unavailable` **conservando** el refresh token; solo un rechazo del
+  servidor borra credenciales.
 - Un token nunca llega a un log ni a un mensaje de error (`src/auth/redact.ts`).
 - Un `Authorization: Bearer` no puede salir hacia `/api/auth/*`, `/api/admin/*`,
   `/api/me/*` ni `/api/products/*` (`src/api/api-scope.ts`).
@@ -390,6 +400,43 @@ Dos cosas que conviene tener presentes al leer esa documentación:
   (`token`, `next`, `redirect`…) se rechaza entero, la URL cruda nunca se
   registra y el destino pendiente vive **solo en memoria**, descartándose al
   cerrar sesión o cambiar de usuario. Ver `docs/LINKING_STRATEGY.md`.
+
+## Autenticación
+
+La app autentica de verdad contra el contrato **nativo** de
+`PapiCuche/BlackDogStore-web` @ `origin/master` `7c55ebc`:
+
+```
+POST /api/v1/auth/login/     {email, password} → tokens en el cuerpo
+POST /api/v1/auth/refresh/   {refresh}         → access + refresh rotado
+POST /api/v1/auth/logout/    {refresh}         → best-effort
+GET  /api/v1/auth/me/        Bearer            → identidad + empresas
+```
+
+El contrato **web** (`/api/auth/*`) no se toca: usa cookie HttpOnly + CSRF,
+porque el navegador adjunta cookies a peticiones que el usuario no inició. Esta
+app guarda su token y lo envía a propósito. `src/api/api-scope.ts` impide enviar
+un Bearer a `/api/auth/`, `/api/admin/` o `/api/me/`.
+
+**Se entra con correo**, no con usuario.
+
+### Qué está integrado y qué no
+
+| | |
+|---|---|
+| Login · refresh · logout · restore | **INTEGRADO** |
+| Contexto de empresa verificado | **INTEGRADO** |
+| Registro · verificación · reset | **PENDIENTE** (BR-001B) |
+
+En modo backend esas tres pantallas muestran un estado explícito y remiten a la
+web. En development con mocks siguen disponibles como demo.
+
+### Empresa activa
+
+El servidor devuelve las empresas con las que **verificó** que el usuario tiene
+relación. `EXPO_PUBLIC_COMPANY_SLUG` **selecciona** la suya de esa lista; si no
+está, la empresa activa queda en `null` — sin caer al piloto ni a la primera de
+la lista. Sigue sin ser autorización: cada API privada revalida en el servidor.
 
 ## EAS
 
@@ -442,7 +489,7 @@ Las dependencias conservan sus propias licencias dentro de sus paquetes en
 | [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) | Endpoints verificados |
 | [`docs/BACKEND_REQUIREMENTS.md`](docs/BACKEND_REQUIREMENTS.md) | Propuestas de Mobile al Backend |
 | [`docs/INTEGRATION_STATUS.md`](docs/INTEGRATION_STATUS.md) | Estado real por feature |
-| [`docs/MOBILE_AUTH.md`](docs/MOBILE_AUTH.md) | Arquitectura de auth, ciclo de vida de tokens y threat model |
+| [`docs/MOBILE_AUTH.md`](docs/MOBILE_AUTH.md) | Arquitectura de auth, ciclo de vida de tokens, integración real y threat model |
 | [`docs/OFFLINE_STRATEGY.md`](docs/OFFLINE_STRATEGY.md) | Conectividad, reintentos y aislamiento de cache |
 | [`docs/LINKING_STRATEGY.md`](docs/LINKING_STRATEGY.md) | Deep links, seguridad de enlaces y camino a Universal Links |
 

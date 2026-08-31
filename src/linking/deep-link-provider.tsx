@@ -57,11 +57,22 @@ export function DeepLinkProvider({
    */
   const statusRef = useRef(status);
 
+  /**
+   * Whether the signed-in user has a server-verified relation with THIS
+   * build's company (M3). `undefined` while there is no session, which is the
+   * state the coordinator treats as "not known", exactly as before.
+   */
+  const hasActiveCompany = session?.tenant
+    ? session.tenant.activeCompany !== null
+    : undefined;
+  const tenantRef = useRef(hasActiveCompany);
+
   // Written in an effect, never during render: React forbids touching a ref
   // while rendering, and an effect runs long before any link can arrive.
   useEffect(() => {
     statusRef.current = status;
-  }, [status]);
+    tenantRef.current = hasActiveCompany;
+  }, [status, hasActiveCompany]);
 
   /** Session identity, so a change can invalidate a held destination. */
   const identity = session ? `${companySlug ?? 'unconfigured'}::${session.user.id}` : null;
@@ -76,7 +87,10 @@ export function DeepLinkProvider({
       if (lastHandledUrl.current === url) return;
       lastHandledUrl.current = url;
 
-      const decision = decideForUrl(url, { authStatus: statusRef.current });
+      const decision = decideForUrl(url, {
+        authStatus: statusRef.current,
+        hasActiveCompany: tenantRef.current,
+      });
       applyDecisionToPending(decision, store);
       performDecision(decision, navigate);
     };
@@ -131,7 +145,7 @@ export function DeepLinkProvider({
 
     // Re-decide rather than trusting the earlier decision: auth and tenant are
     // re-evaluated against the session that actually arrived.
-    const decision = decideForIntent(pending, { authStatus: status });
+    const decision = decideForIntent(pending, { authStatus: status, hasActiveCompany });
 
     if (decision.action === 'navigate') {
       // Consume FIRST so the destination opens exactly once, even if a
@@ -146,7 +160,7 @@ export function DeepLinkProvider({
     if (decision.action === 'authenticate') {
       performDecision(decision, navigate);
     }
-  }, [status, identity, store, navigate]);
+  }, [status, identity, hasActiveCompany, store, navigate]);
 
   return <>{children}</>;
 }

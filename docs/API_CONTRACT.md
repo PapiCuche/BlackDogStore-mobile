@@ -247,6 +247,62 @@ Sí existe en el **modelo**, también en `master` (`Order.FulfillmentStatus`:
 
 ---
 
+## Autenticación nativa · `/api/v1/auth/` — **INTEGRADA**
+
+```
+VERIFIED_STABLE_MASTER
+VERSIONED
+INTEGRADO POR MOBILE (M3)
+```
+
+Verificado en `origin/master` **`7c55ebc`** (PR #2), leyendo el código en
+`master` y con un smoke real contra el servidor.
+
+| Endpoint | Auth | Qué |
+|---|---|---|
+| `POST /api/v1/auth/login/` | ninguna · 5/min | `{email, password}` → tokens en el **cuerpo** |
+| `POST /api/v1/auth/refresh/` | ninguna | `{refresh}` → access + refresh **rotado** |
+| `POST /api/v1/auth/logout/` | ninguna | best-effort, siempre 200 |
+| `GET /api/v1/auth/me/` | **Bearer v1** | identidad + `available_companies` |
+
+Respuesta de login:
+
+```json
+{
+  "access": "...", "refresh": "...", "expires_in": 1800,
+  "user": { "id": 1, "username": "...", "email": "...", "first_name": "...",
+            "last_name": "...", "role": "customer", "is_email_verified": true },
+  "available_companies": [ { "slug": "...", "name": "...", "relation": "customer" } ]
+}
+```
+
+**Sin `Set-Cookie`.** Hay test en ambos lados.
+
+### `available_companies` no es autorización
+
+El servidor lo calcula desde `Membership` activa **o** `Customer` activo del
+usuario autenticado, con la empresa activa. Nunca desde nada que el cliente
+envíe: un `company` en el body o una cabecera `X-Company-Slug` no añaden nada, y
+`is_superuser` se ignora.
+
+Mobile usa `EXPO_PUBLIC_COMPANY_SLUG` para **buscar** su empresa en esa lista. Si
+está, es `activeCompany`; si no, `activeCompany` es **null** — sin caer al piloto
+ni a "la primera de la lista". Toda API privada futura revalidará por su cuenta.
+
+### `is_email_verified` siempre es `true` aquí
+
+El backend no tiene columna de verificación: el registro crea la cuenta
+`is_active=False` y verificar la pone en `True`. Un usuario inactivo no obtiene
+token, así que quien se autentica está verificado por construcción.
+
+### Fuera de scope — BR-001B
+
+`/api/v1/auth/register|verify-email|resend-verification|password-reset|change-password/`
+**no existen** y devuelven 404, con tests en el backend que lo fijan. La app no
+muestra esos formularios en modo backend.
+
+---
+
 ## Autenticación
 
 ### VERIFIED_STABLE_MASTER — el contrato web real

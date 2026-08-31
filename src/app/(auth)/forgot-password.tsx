@@ -40,8 +40,14 @@ export default function ForgotPasswordScreen() {
   // hook order between renders. No auth mechanism in this build means no
   // form — a field that cannot succeed teaches the user their password is
   // wrong. See src/auth/auth-policy.ts.
-  if (policy.mode === 'unavailable') {
-    return <AuthUnavailableScreen title="Recuperación no disponible" message="Estamos preparando la conexión segura de esta aplicación con tu cuenta." />;
+  //
+  // M3 — `backend` joins `unavailable` here. BR-001A shipped the session core
+  // (login, refresh, logout, me) and NOTHING else: there is no native endpoint
+  // for this flow, and the legacy one speaks cookies and CSRF. A form that can
+  // only fail is exactly what this guard exists to prevent, so mock mode keeps
+  // the demo and real mode says where to go instead. See BR-001B.
+  if (policy.mode !== 'mock') {
+    return <AuthUnavailableScreen title="Recuperación no disponible en la app" message="Por ahora la contraseña se recupera desde la web. En la app puedes iniciar sesión con normalidad." />;
   }
 
   if (isSent) {
