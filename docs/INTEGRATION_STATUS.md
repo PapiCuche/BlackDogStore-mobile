@@ -25,6 +25,12 @@ archivo discrepan, **el archivo tiene razón**.
 | Access token memory-only | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Refresh en SecureStore | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Refresh coordinator | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
+| Conectividad (offline-aware) | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
+| Aislamiento de cache por tenant | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
+| Aislamiento de cache por usuario | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
+| Política de reintentos | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
+| Cache persistente offline | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
+| Cola de mutaciones offline | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
 | Marca / multiempresa | IMPLEMENTADO | MOCK | MOCK | TESTED | PARCIAL |
 | Design system | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Tema claro/oscuro/sistema | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
@@ -177,6 +183,26 @@ y renderiza neutral. **BR-006.**
 El patrón es el mismo en los cinco casos: **una clase nueva y una línea en el
 composition root**. Ninguna pantalla cambia. Esa es la razón de la capa de
 repositorios.
+
+## Resiliencia del cliente (M1.1)
+
+```
+Connectivity foundation       IMPLEMENTADO
+Offline banner                IMPLEMENTADO
+Stale data notice             IMPLEMENTADO
+onlineManager                 IMPLEMENTADO / TESTED
+focusManager (AppState)       IMPLEMENTADO / TESTED
+Retry policy                  IMPLEMENTADO / TESTED
+Tenant cache isolation        IMPLEMENTADO / TESTED
+User cache isolation          IMPLEMENTADO / TESTED
+Logout cache eviction         IMPLEMENTADO / TESTED
+Tenant switch readiness       IMPLEMENTADO / TESTED
+Home partial resilience       IMPLEMENTADO / TESTED
+Persistent offline cache      PENDIENTE
+Offline mutation queue        PENDIENTE / PROPUESTA
+```
+
+Ver `docs/OFFLINE_STRATEGY.md` y las decisiones DEC-MOBILE-002 / DEC-MOBILE-003.
 
 ## Nota de verificación
 

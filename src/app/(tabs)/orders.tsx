@@ -8,7 +8,10 @@ import {
   icons,
   LoadingState,
   Screen,
+  StaleDataNotice,
 } from '@/design-system';
+import { useConnectivity } from '@/connectivity/connectivity-provider';
+import { useListRefresh } from '@/hooks/use-list-refresh';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { OrderCard } from '@/features/orders/order-card';
 import { useOrders } from '@/hooks/use-orders';
@@ -25,7 +28,11 @@ import { useTheme } from '@/theme/theme-provider';
  */
 export default function OrdersScreen() {
   const theme = useTheme();
-  const { data, isPending, isError, error, refetch, isRefetching } = useOrders();
+  const query = useOrders();
+  const { data, isPending, isError, error } = query;
+  const { isOffline } = useConnectivity();
+  const hasCachedData = (data?.length ?? 0) > 0;
+  const { onRefresh, refreshing } = useListRefresh(query, { enabled: !isError });
 
   const header = (
     <View>
@@ -34,7 +41,8 @@ export default function OrdersScreen() {
         eyebrow="Tienda"
         subtitle="Estado de pago y de entrega de tus compras."
       />
-      <View style={{ marginBottom: theme.spacing.md }}>
+      <View style={{ marginBottom: theme.spacing.md, gap: theme.spacing.xs }}>
+        {isOffline && hasCachedData ? <StaleDataNotice /> : null}
         <MockDataNotice message="Datos de ejemplo. El endpoint existe pero requiere autenticación web (cookie + CSRF)." />
       </View>
     </View>
@@ -53,7 +61,7 @@ export default function OrdersScreen() {
     return (
       <Screen scrollable contentContainerStyle={{ flexGrow: 1 }}>
         {header}
-        <ErrorState error={error} onRetry={() => void refetch()} />
+        <ErrorState error={error} onRetry={() => void query.refetch()} />
       </Screen>
     );
   }
@@ -82,8 +90,8 @@ export default function OrdersScreen() {
           paddingBottom: theme.spacing.xxl,
           flexGrow: 1,
         }}
-        onRefresh={() => void refetch()}
-        refreshing={isRefetching}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
         showsVerticalScrollIndicator={false}
       />
     </Screen>

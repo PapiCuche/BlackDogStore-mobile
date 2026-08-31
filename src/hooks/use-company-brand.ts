@@ -8,6 +8,7 @@ import {
   type CompanyFeature,
 } from '@/domain/company/types';
 import { queryKeys } from '@/providers/query-client';
+import { useQueryScope } from '@/providers/use-query-scope';
 import { repositories } from '@/repositories';
 
 /**
@@ -37,9 +38,10 @@ const canUsePilotFixture = isPilotTenant && useMockData;
  */
 export function useCompanyBrand(): CompanyBrandState {
   const repository = repositories.company;
+  const scope = useQueryScope();
 
   const { data, isPending, isError } = useQuery({
-    queryKey: queryKeys.companyBrand(),
+    queryKey: queryKeys.companyBrand(scope),
     queryFn: ({ signal }) => repository!.getBrand(signal),
     enabled: repository !== null,
     initialData: canUsePilotFixture ? pilotCompanyBrand : undefined,

@@ -4,6 +4,8 @@ import type { ReactElement, ReactNode } from 'react';
 
 import { AuthProvider } from '@/auth/auth-provider';
 import type { AuthRepository } from '@/auth/auth-repository';
+import { ConnectivityProvider } from '@/connectivity/connectivity-provider';
+import type { ConnectivityState } from '@/connectivity/connectivity-state';
 import { AppThemeProvider } from '@/theme/theme-provider';
 
 /**
@@ -18,9 +20,27 @@ import { AppThemeProvider } from '@/theme/theme-provider';
  */
 export async function renderWithProviders(
   ui: ReactElement,
-  options: RenderOptions & { authRepository?: AuthRepository } = {},
+  options: RenderOptions & {
+    authRepository?: AuthRepository;
+    /** Starting connectivity. Defaults to online, as most screens assume. */
+    connectivity?: ConnectivityState;
+  } = {},
 ) {
-  const { authRepository, ...renderOptions } = options;
+  const { authRepository, connectivity = 'online', ...renderOptions } = options;
+
+  // Drive the NATIVE boundary, not just the provider's initial state: the
+  // provider asks the OS on mount, and that answer would otherwise overwrite
+  // whatever the test asked for.
+  const network = jest.requireMock('expo-network') as {
+    getNetworkStateAsync: jest.Mock;
+  };
+  network.getNetworkStateAsync.mockResolvedValue(
+    connectivity === 'offline'
+      ? { isConnected: false, isInternetReachable: false }
+      : connectivity === 'unknown'
+        ? {}
+        : { isConnected: true, isInternetReachable: true },
+  );
 
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -30,12 +50,16 @@ export async function renderWithProviders(
   });
 
   function Wrapper({ children }: { children: ReactNode }) {
+    // Mirrors the real provider order from AppProviders, minus SafeArea (which
+    // jest.setup stubs) — so a test exercises the same context graph the app has.
     return (
-      <QueryClientProvider client={queryClient}>
-        <AppThemeProvider>
-          <AuthProvider repository={authRepository}>{children}</AuthProvider>
-        </AppThemeProvider>
-      </QueryClientProvider>
+      <ConnectivityProvider initialState={connectivity}>
+        <QueryClientProvider client={queryClient}>
+          <AppThemeProvider>
+            <AuthProvider repository={authRepository}>{children}</AuthProvider>
+          </AppThemeProvider>
+        </QueryClientProvider>
+      </ConnectivityProvider>
     );
   }
 

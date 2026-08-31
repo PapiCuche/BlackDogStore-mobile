@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '@/providers/query-client';
+import { useQueryScope } from '@/providers/use-query-scope';
 import { repositories } from '@/repositories';
 import { featureUnavailable } from '@/repositories/errors';
 
@@ -16,8 +17,9 @@ const UNAVAILABLE =
 
 export function useOrders() {
   const repository = repositories.orders;
+  const scope = useQueryScope();
   return useQuery({
-    queryKey: queryKeys.orders(),
+    queryKey: queryKeys.orders(scope),
     queryFn: ({ signal }) =>
       repository ? repository.listOrders(signal) : featureUnavailable('orders', UNAVAILABLE),
     retry: false,
@@ -26,8 +28,9 @@ export function useOrders() {
 
 export function useOrder(id: number | undefined) {
   const repository = repositories.orders;
+  const scope = useQueryScope();
   return useQuery({
-    queryKey: queryKeys.order(id ?? -1),
+    queryKey: queryKeys.order(scope, id ?? -1),
     queryFn: ({ signal }) =>
       repository ? repository.getOrderById(id!, signal) : featureUnavailable('orders', UNAVAILABLE),
     enabled: id !== undefined && Number.isFinite(id),

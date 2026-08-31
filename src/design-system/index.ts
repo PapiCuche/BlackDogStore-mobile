@@ -16,6 +16,7 @@ export { Icon, icons, type IconKey, type IconName, type IconProps } from './icon
 export { IconButton, type IconButtonProps } from './icon-button';
 export { Input, type InputProps } from './input';
 export { ListRow, type ListRowProps } from './list-row';
+export { OfflineBanner } from './offline-banner';
 export { Screen, type ScreenProps } from './screen';
 export { SearchInput, type SearchInputProps } from './search-input';
 export { SectionHeader, type SectionHeaderProps } from './section-header';
@@ -28,5 +29,6 @@ export {
   type ErrorStateProps,
   type LoadingStateProps,
 } from './states';
+export { StaleDataNotice } from './stale-data-notice';
 export { StatusBadge, type StatusBadgeProps } from './status-badge';
 export { Text, type TextColor, type TextProps, type TextVariant } from './text';

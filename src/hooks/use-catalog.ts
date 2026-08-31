@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '@/providers/query-client';
+import { useQueryScope } from '@/providers/use-query-scope';
 import { repositories } from '@/repositories';
 import { featureUnavailable } from '@/repositories/errors';
 
@@ -32,8 +33,9 @@ const CATALOG_UNAVAILABLE =
 
 export function useProducts(params: { search?: string; categorySlug?: string } = {}) {
   const repository = repositories.catalog;
+  const scope = useQueryScope();
   return useQuery({
-    queryKey: queryKeys.products(params),
+    queryKey: queryKeys.products(scope, params),
     queryFn: ({ signal }) =>
       repository
         ? repository.listProducts(params, signal)
@@ -44,8 +46,9 @@ export function useProducts(params: { search?: string; categorySlug?: string } =
 
 export function useCategories() {
   const repository = repositories.catalog;
+  const scope = useQueryScope();
   return useQuery({
-    queryKey: queryKeys.categories(),
+    queryKey: queryKeys.categories(scope),
     queryFn: ({ signal }) =>
       repository ? repository.listCategories(signal) : featureUnavailable('catalog', CATALOG_UNAVAILABLE),
     // Categories change on the order of weeks, not minutes.
@@ -56,8 +59,9 @@ export function useCategories() {
 
 export function useProduct(slug: string | undefined) {
   const repository = repositories.catalog;
+  const scope = useQueryScope();
   return useQuery({
-    queryKey: queryKeys.product(slug ?? ''),
+    queryKey: queryKeys.product(scope, slug ?? ''),
     queryFn: ({ signal }) =>
       repository
         ? repository.getProductBySlug(slug!, signal)

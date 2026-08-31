@@ -254,6 +254,21 @@ request hacia `main` (además de `workflow_dispatch` para lanzarlo a mano).
 builds nativas son otro workflow, con otras credenciales. Este solo cubre el
 repositorio Mobile: Web tiene su propio equipo y su propio CI.
 
+## Comportamiento sin conexión
+
+La app es **offline-aware**, no offline-first: detecta la pérdida de conexión,
+la comunica y sobrevive a ella, pero no replica la base de datos ni encola
+acciones.
+
+| Situación | Qué verás |
+|---|---|
+| Sin conexión | Banda discreta arriba, no un modal |
+| Sin conexión con datos ya cargados | Los datos siguen, con aviso de que pueden no estar actualizados |
+| Vuelve la conexión | La banda desaparece y se revalida lo que esté stale |
+| Feature sin backend | "Próximamente" — distinto de estar sin conexión |
+
+Detalles y decisiones en [`docs/OFFLINE_STRATEGY.md`](docs/OFFLINE_STRATEGY.md).
+
 ## Mocks
 
 La app se desarrolla en paralelo al backend, así que las pantallas corren sobre
@@ -316,6 +331,11 @@ Dos cosas que conviene tener presentes al leer esa documentación:
 - Un token nunca llega a un log ni a un mensaje de error (`src/auth/redact.ts`).
 - Un `Authorization: Bearer` no puede salir hacia `/api/auth/*`, `/api/admin/*`,
   `/api/me/*` ni `/api/products/*` (`src/api/api-scope.ts`).
+- **La cache de server-state está particionada por empresa y por usuario**, y se
+  vacía al cambiar de identidad. Ningún token entra jamás en una query key.
+  Ver `docs/OFFLINE_STRATEGY.md`.
+- **La query cache es solo memoria.** No hay persistencia en disco todavía: eso
+  exige cifrado, partición por tenant y política de retención primero.
 
 ## EAS
 
@@ -367,6 +387,10 @@ Las dependencias conservan sus propias licencias dentro de sus paquetes en
 | [`docs/BACKEND_REQUIREMENTS.md`](docs/BACKEND_REQUIREMENTS.md) | Propuestas de Mobile al Backend |
 | [`docs/INTEGRATION_STATUS.md`](docs/INTEGRATION_STATUS.md) | Estado real por feature |
 | [`docs/MOBILE_AUTH.md`](docs/MOBILE_AUTH.md) | Arquitectura de auth, ciclo de vida de tokens y threat model |
+| [`docs/OFFLINE_STRATEGY.md`](docs/OFFLINE_STRATEGY.md) | Conectividad, reintentos y aislamiento de cache |
 
-Decisiones de arquitectura registradas: **DEC-MOBILE-001** (navegación por tabs
-estable en lugar de la API alpha de native tabs), en `docs/ARCHITECTURE.md`.
+Decisiones de arquitectura registradas en `docs/ARCHITECTURE.md`:
+
+- **DEC-MOBILE-001** — navegación por tabs estable en lugar de la API alpha.
+- **DEC-MOBILE-002** — cache de server-state con namespace de tenant y usuario.
+- **DEC-MOBILE-003** — offline-aware antes que offline-first.

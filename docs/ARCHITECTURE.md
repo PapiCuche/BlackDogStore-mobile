@@ -41,6 +41,7 @@ src/
 │   ├── products/[slug].tsx · repairs/[id].tsx · orders/[id].tsx
 │   └── +not-found.tsx
 │
+├── connectivity/           Estado de red: modelo + provider (una suscripción)
 ├── api/                    HTTP. client.ts · errors.ts · api-scope.ts
 │                           authenticated-request.ts · endpoints/
 ├── auth/                   Sesión, política y ciclo de vida de tokens
@@ -55,7 +56,8 @@ src/
 ├── domain/                 Tipos y REGLAS. company · products · orders · repairs · customers
 ├── features/               Composiciones por feature (tarjetas, timeline, chips)
 ├── hooks/                  Hooks de datos (TanStack Query) + accesibilidad
-├── providers/              AppProviders + configuración de QueryClient
+├── providers/              AppProviders · QueryClient · retry-policy
+│                           query-scope.ts · query-lifecycle.tsx
 ├── repositories/           Interfaces + mock/ + api/ + composition root
 ├── storage/                secure-storage (secretos) · preferences-storage (no secretos)
 ├── theme/                  Tokens + AppThemeProvider
@@ -295,6 +297,57 @@ Cuatro decisiones que gobiernan el resto:
    todas terminan igual: una sesión que el usuario no pidió. Cada mutación sube
    el epoch; cada finalización lo comprueba.
 
+## Resiliencia del cliente (M1.1)
+
+Detalle completo en `docs/OFFLINE_STRATEGY.md`. Lo estructural:
+
+```
+ConnectivityProvider   una sola suscripción nativa (expo-network)
+        │
+        ├── onlineManager   ← TanStack sabe pausar; no puede ver la radio
+        ├── focusManager    ← AppState, porque no hay window.focus
+        └── OfflineBanner   ← banda discreta, no modal
+```
+
+### DEC-MOBILE-002 — Tenant and user scoped server-state cache
+
+**Fecha:** 2026-08-27 (M1.1) · **Estado:** ACEPTADA
+
+**Contexto.** M0 usaba claves globales: `['products']`, `['orders']`. En un
+piloto de una tienda funciona.
+
+**Problema.** En un SaaS es una fuga de cache, y no hace falta ningún bug de
+backend: el catálogo de la Empresa A puede responder a la build de B, y los
+pedidos del Usuario A pueden seguir en memoria cuando entra el Usuario B.
+
+**Decisión.** Toda query específica de empresa lleva namespace de tenant; toda
+query con datos privados lleva además el id estable del usuario.
+
+```
+['tenant', 'blackdog', 'public', 'products', …]     catálogo, marca
+['tenant', 'blackdog', 'user', '42', 'orders']      pedidos, reparaciones
+```
+
+Y al cambiar la identidad (`tenant::user`) se **cancelan y eliminan** las
+queries privadas. Ambas cosas: defensa en profundidad.
+
+**Alcance.** Es un namespace de cache, **no autorización**. El slug viene de la
+build y nunca ha sido una credencial; la autoridad es del servidor (BR-002).
+
+### DEC-MOBILE-003 — Offline-aware before offline-first
+
+**Fecha:** 2026-08-27 (M1.1) · **Estado:** ACEPTADA
+
+**Decisión.** M1.1 implementa conectividad, cache en memoria, reintentos y
+revalidación al reconectar. **No** implementa persistencia de cache ni cola de
+mutaciones offline.
+
+**Motivo.** Persistir exige antes resolver partición por tenant en disco,
+partición por sesión, borrado en logout, cifrado de datos personales, versión de
+esquema y retención. Y una cola de mutaciones chocaría con la **autoridad del
+servidor**: aprobar una cotización o cancelar un pedido son decisiones que solo
+el backend puede tomar.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -325,6 +378,12 @@ un error 500.
 | `isBackendAuthAvailable` como constante | Una variable de entorno permitiría afirmar que hay contrato sin código que lo hable. |
 | Persistir el refresh **antes** de instalar el access | Tras la rotación el token viejo ya está en blacklist; un fallo de escritura después sería invisible hasta la expiración. |
 | Epoch en provider y coordinator | Es lo que impide que un resultado tardío resucite una sesión cerrada. |
+| Conectividad con tres estados | `unknown` es real: avisar de "sin conexión" antes de preguntar al sistema es una falsa alarma. |
+| Una sola suscripción de red | Una por pantalla serían N listeners nativos y N cleanups que olvidar. |
+| Cache con namespace de tenant y usuario | DEC-MOBILE-002: una fuga de cache no necesita un bug de backend. |
+| Sin persistencia de query cache | DEC-MOBILE-003: falta cifrado, partición en disco y retención. |
+| Sin cola de mutaciones offline | Aprobar o cancelar son decisiones del servidor, no promesas del cliente. |
+| Retry solo de lo transitorio | Reintentar un 403 o un 429 no lo arregla y empeora el throttle. |
 | Catálogo legacy bloqueado fuera de desarrollo | El endpoint estable no aísla por empresa: sería una fuga cross-tenant. |
 | Guardia repetida antes de la llamada de red | El composition root es un solo punto de decisión, y por tanto un solo punto de fallo. |
 | Clasificación de timeout por flag, no por excepción | La forma del error de un abort no es portable entre runtimes. |
