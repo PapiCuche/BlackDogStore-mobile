@@ -6,6 +6,8 @@ import type { AuthRepository } from '@/auth/auth-repository';
 import type { AuthRuntimePolicy } from '@/auth/auth-policy';
 import type { AuthSession } from '@/auth/types';
 
+import { AuthScreenShell } from '@/features/auth/auth-screen-shell';
+
 import { renderWithProviders } from './support/render';
 
 /**
@@ -214,7 +216,16 @@ describe('session never carries credentials', () => {
 
 describe('mock session is visible in the UI', () => {
   it('renders the demo badge on the auth shell', async () => {
-    const { AuthScreenShell } = require('@/features/auth/auth-screen-shell');
+    // `AuthScreenShell` is imported at the TOP of this file, not lazily here.
+    //
+    // It used to be a `require()` inside this test body, which pulled in
+    // BrandLockup → expo-image → the bundled 124 KB logo asset. On a cold Jest
+    // transform cache — i.e. CI — that whole subtree was transformed INSIDE the
+    // 5 s test timeout, so the test failed on CI and passed locally where the
+    // cache is warm. It is also how a module ends up resolving after teardown
+    // ("trying to import a file after the Jest environment has been torn
+    // down"). A top-level import moves that cost to module load, which Jest
+    // does not bound by the per-test timeout.
     const repository: AuthRepository = {
       restoreSession: async () => null,
       signIn: async () => makeSession('carlos'),
