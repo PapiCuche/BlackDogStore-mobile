@@ -11,11 +11,14 @@ import {
   LoadingState,
   Screen,
   SearchInput,
+  StaleDataNotice,
 } from '@/design-system';
 import { CategoryChips } from '@/features/catalog/category-chips';
 import { ProductCard } from '@/features/catalog/product-card';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
+import { useConnectivity } from '@/connectivity/connectivity-provider';
 import { isCatalogAvailable, useCategories, useProducts } from '@/hooks/use-catalog';
+import { useListRefresh } from '@/hooks/use-list-refresh';
 import { FeatureUnavailableError } from '@/repositories/errors';
 import { screenGutter } from '@/theme';
 import { useTheme } from '@/theme/theme-provider';
@@ -60,6 +63,12 @@ export default function ShopScreen() {
   const hasFilters = search.trim().length > 0 || categorySlug !== null;
   const isUnavailable = productsQuery.error instanceof FeatureUnavailableError;
 
+  const { isOffline } = useConnectivity();
+  const hasCachedProducts = (productsQuery.data?.length ?? 0) > 0;
+  const { onRefresh, refreshing } = useListRefresh(productsQuery, {
+    enabled: !isUnavailable && catalogAvailable,
+  });
+
   // No catalogue means no searching and no filtering. Leaving a search field on
   // screen invites the shopper to type into something that cannot answer.
   if (isUnavailable || !catalogAvailable) {
@@ -94,11 +103,12 @@ export default function ShopScreen() {
         />
       ) : null}
 
-      {useMockData ? (
-        <View style={{ marginTop: theme.spacing.xxs, marginBottom: theme.spacing.xs }}>
+      <View style={{ marginTop: theme.spacing.xxs, marginBottom: theme.spacing.xs, gap: theme.spacing.xs }}>
+        {isOffline && hasCachedProducts ? <StaleDataNotice /> : null}
+        {useMockData ? (
           <MockDataNotice message="Datos de ejemplo. El catálogo real todavía no está integrado." />
-        </View>
-      ) : null}
+        ) : null}
+      </View>
     </View>
   );
 
@@ -143,8 +153,8 @@ export default function ShopScreen() {
           paddingBottom: theme.spacing.xxl,
           flexGrow: 1,
         }}
-        onRefresh={() => void productsQuery.refetch()}
-        refreshing={productsQuery.isRefetching}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       />

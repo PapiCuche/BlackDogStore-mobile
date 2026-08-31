@@ -3,18 +3,28 @@ import { useState, type ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@/auth/auth-provider';
+import { ConnectivityProvider } from '@/connectivity/connectivity-provider';
 import { AppThemeProvider } from '@/theme/theme-provider';
 
 import { createQueryClient } from './query-client';
+import { QueryLifecycleBridges } from './query-lifecycle';
 
 /**
  * Every app-wide provider, in one place and in a deliberate order.
  *
- *   SafeArea → Query → Theme → Auth
+ *   SafeArea → Connectivity → Query → Theme → Auth → lifecycle bridges
  *
- * SafeArea is outermost because layout must be resolvable before anything
- * renders. Auth is innermost because it is the only one that may eventually
- * want to invalidate queries and read themed UI on sign-out.
+ * Why this order:
+ *
+ *  - **SafeArea** outermost: layout must be resolvable before anything renders.
+ *  - **Connectivity** next: it depends on nothing and everything below may read
+ *    it. Putting it above Query is what lets the online bridge exist at all.
+ *  - **Query** before Theme and Auth: both may eventually read or invalidate
+ *    server state, and neither is needed to fetch.
+ *  - **Auth** innermost of the providers: it is the only one that needs the
+ *    QueryClient (to evict private cache) and the theme (to render).
+ *  - **Lifecycle bridges** last, inside all four, because each one reads from a
+ *    different provider — connectivity, query client and auth.
  *
  * The QueryClient is created inside `useState` rather than at module scope so a
  * Fast Refresh — or a test mounting the tree twice — gets a clean cache instead
@@ -25,11 +35,16 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <AppThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
-        </AppThemeProvider>
-      </QueryClientProvider>
+      <ConnectivityProvider>
+        <QueryClientProvider client={queryClient}>
+          <AppThemeProvider>
+            <AuthProvider>
+              <QueryLifecycleBridges />
+              {children}
+            </AuthProvider>
+          </AppThemeProvider>
+        </QueryClientProvider>
+      </ConnectivityProvider>
     </SafeAreaProvider>
   );
 }

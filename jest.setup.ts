@@ -20,6 +20,20 @@ jest.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Success: 'success', Error: 'error', Warning: 'warning' },
 }));
 
+// Connectivity comes from a native module. Mocked at the boundary so what gets
+// tested is our `ConnectivityProvider`, not Expo's internals. Tests that care
+// about connectivity drive it through the provider's `initialState` prop or by
+// re-mocking these two functions.
+jest.mock('expo-network', () => ({
+  getNetworkStateAsync: jest.fn().mockResolvedValue({
+    isConnected: true,
+    isInternetReachable: true,
+    type: 'WIFI',
+  }),
+  addNetworkStateListener: jest.fn(() => ({ remove: jest.fn() })),
+  NetworkStateType: { WIFI: 'WIFI', CELLULAR: 'CELLULAR', NONE: 'NONE', UNKNOWN: 'UNKNOWN' },
+}));
+
 // The Keychain/Keystore is a native module. Mocked at the boundary so the
 // wrapper in `src/storage/secure-storage.ts` — which is ours — is what gets
 // tested, rather than Expo's internals.

@@ -3,6 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
 
+import { OfflineBanner } from '@/design-system';
 import { AppProviders } from '@/providers/app-providers';
 import { useAppTheme } from '@/theme/theme-provider';
 
@@ -62,6 +63,10 @@ function RootNavigator() {
       {/* `style` follows the scheme rather than being pinned, so the clock and
           battery stay legible in both themes. */}
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+
+      {/* Above the navigator so it spans every screen, and outside it so a
+          push transition never animates the connectivity state. */}
+      <OfflineBanner />
 
       <Stack
         screenOptions={{

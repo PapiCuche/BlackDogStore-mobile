@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '@/providers/query-client';
+import { useQueryScope } from '@/providers/use-query-scope';
 import { repositories } from '@/repositories';
 import { featureUnavailable } from '@/repositories/errors';
 
@@ -17,8 +18,9 @@ const UNAVAILABLE =
 
 export function useRepairs() {
   const repository = repositories.repairs;
+  const scope = useQueryScope();
   return useQuery({
-    queryKey: queryKeys.repairs(),
+    queryKey: queryKeys.repairs(scope),
     queryFn: ({ signal }) =>
       repository ? repository.listRepairs(signal) : featureUnavailable('repairs', UNAVAILABLE),
     retry: false,
@@ -27,8 +29,9 @@ export function useRepairs() {
 
 export function useRepair(id: string | undefined) {
   const repository = repositories.repairs;
+  const scope = useQueryScope();
   return useQuery({
-    queryKey: queryKeys.repair(id ?? ''),
+    queryKey: queryKeys.repair(scope, id ?? ''),
     queryFn: ({ signal }) =>
       repository ? repository.getRepairById(id!, signal) : featureUnavailable('repairs', UNAVAILABLE),
     enabled: Boolean(id),

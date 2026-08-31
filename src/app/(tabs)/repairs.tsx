@@ -8,7 +8,10 @@ import {
   icons,
   LoadingState,
   Screen,
+  StaleDataNotice,
 } from '@/design-system';
+import { useConnectivity } from '@/connectivity/connectivity-provider';
+import { useListRefresh } from '@/hooks/use-list-refresh';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { RepairCard } from '@/features/repairs/repair-card';
 import { useRepairs } from '@/hooks/use-repairs';
@@ -28,7 +31,11 @@ import { useTheme } from '@/theme/theme-provider';
  */
 export default function RepairsScreen() {
   const theme = useTheme();
-  const { data, isPending, isError, error, refetch, isRefetching } = useRepairs();
+  const query = useRepairs();
+  const { data, isPending, isError, error } = query;
+  const { isOffline } = useConnectivity();
+  const hasCachedData = (data?.length ?? 0) > 0;
+  const { onRefresh, refreshing } = useListRefresh(query, { enabled: !isError });
 
   const header = (
     <View>
@@ -37,7 +44,9 @@ export default function RepairsScreen() {
         eyebrow="Servicio técnico"
         subtitle="Sigue el estado de los equipos que dejaste en el taller."
       />
-      <View style={{ marginBottom: theme.spacing.md }}>
+      <View style={{ marginBottom: theme.spacing.md, gap: theme.spacing.xs }}>
+        {/* Cached data plus no network: keep the data, state the caveat. */}
+        {isOffline && hasCachedData ? <StaleDataNotice /> : null}
         <MockDataNotice message="Datos de ejemplo. El backend aún no tiene un módulo de reparaciones." />
       </View>
     </View>
@@ -56,7 +65,7 @@ export default function RepairsScreen() {
     return (
       <Screen scrollable contentContainerStyle={{ flexGrow: 1 }}>
         {header}
-        <ErrorState error={error} onRetry={() => void refetch()} />
+        <ErrorState error={error} onRetry={() => void query.refetch()} />
       </Screen>
     );
   }
@@ -83,8 +92,8 @@ export default function RepairsScreen() {
           paddingBottom: theme.spacing.xxl,
           flexGrow: 1,
         }}
-        onRefresh={() => void refetch()}
-        refreshing={isRefetching}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
         showsVerticalScrollIndicator={false}
       />
     </Screen>

@@ -22,7 +22,10 @@ import { findActiveRepair } from '@/domain/repairs/types';
 import { initials, displayName } from '@/domain/customers/types';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { QuickActions } from '@/features/home/quick-actions';
+import { useConnectivity } from '@/connectivity/connectivity-provider';
+import { StaleDataNotice } from '@/design-system';
 import { useCompanyBrand } from '@/hooks/use-company-brand';
+import { FeatureUnavailableError } from '@/repositories/errors';
 import { useOrders } from '@/hooks/use-orders';
 import { useRepairs } from '@/hooks/use-repairs';
 import { useTheme } from '@/theme/theme-provider';
@@ -52,15 +55,40 @@ export default function HomeScreen() {
   const activeRepair = findActiveRepair(repairsQuery.data ?? []);
   const recentOrder = ordersQuery.data?.[0] ?? null;
 
-  const isRefreshing = repairsQuery.isRefetching || ordersQuery.isRefetching;
+  const { isOffline } = useConnectivity();
+
+  /**
+   * PARTIAL RESILIENCE.
+   *
+   * Home reads three independent sources and must never let one take the screen
+   * down with it. A section whose feature has no backend in this build is
+   * HIDDEN rather than rendered as empty: "no tienes reparaciones activas" is a
+   * statement about the customer's account, and it would be false.
+   *
+   * Other failures (a real network error) still fall through to the section's
+   * own empty state, because there the data genuinely is unknown rather than
+   * unavailable.
+   */
+  const repairsUnavailable = repairsQuery.error instanceof FeatureUnavailableError;
+  const ordersUnavailable = ordersQuery.error instanceof FeatureUnavailableError;
+
+  const hasCachedData = Boolean(repairsQuery.data || ordersQuery.data);
+
+  // Refresh is offered only when at least one section could actually answer.
+  const canRefresh = !isOffline && !(repairsUnavailable && ordersUnavailable);
+  const isRefreshing = canRefresh && (repairsQuery.isRefetching || ordersQuery.isRefetching);
 
   return (
     <Screen
       scrollable
-      onRefresh={() => {
-        void repairsQuery.refetch();
-        void ordersQuery.refetch();
-      }}
+      onRefresh={
+        canRefresh
+          ? () => {
+              void repairsQuery.refetch();
+              void ordersQuery.refetch();
+            }
+          : undefined
+      }
       refreshing={isRefreshing}
     >
       <View
@@ -96,7 +124,12 @@ export default function HomeScreen() {
       </View>
 
       <View style={{ gap: theme.spacing.xl }}>
+        {/* Cached content with no network: keep it, and say so once, at the
+            top, rather than repeating the caveat per section. */}
+        {isOffline && hasCachedData ? <StaleDataNotice /> : null}
+
         {/* ── Active repair ─────────────────────────────────────────────── */}
+        {repairsUnavailable ? null : (
         <View>
           <SectionHeader title="Tu reparación" eyebrow="Servicio técnico" />
 
@@ -159,9 +192,10 @@ export default function HomeScreen() {
             </Card>
           )}
         </View>
+        )}
 
         {/* ── Recent order ──────────────────────────────────────────────── */}
-        {ordersQuery.isPending || recentOrder ? (
+        {!ordersUnavailable && (ordersQuery.isPending || recentOrder) ? (
           <View>
             <SectionHeader
               title="Pedido reciente"

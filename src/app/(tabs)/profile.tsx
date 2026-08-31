@@ -27,7 +27,10 @@ import {
   Text,
 } from '@/design-system';
 import { displayName, initials } from '@/domain/customers/types';
+import { authRuntimePolicy } from '@/auth/auth-policy';
+import { useConnectivity } from '@/connectivity/connectivity-provider';
 import { useCompanyBrand } from '@/hooks/use-company-brand';
+import { useQueryScope } from '@/providers/use-query-scope';
 import { useAppTheme, THEME_PREFERENCES, type ThemePreference } from '@/theme/theme-provider';
 import { useTheme } from '@/theme/theme-provider';
 import { hapticSelection } from '@/utils/haptics';
@@ -51,6 +54,9 @@ export default function ProfileScreen() {
   const brandState = useCompanyBrand();
   const { session, signOut } = useAuth();
   const { preference, setPreference } = useAppTheme();
+  const { state: connectivity } = useConnectivity();
+  const queryScope = useQueryScope();
+  const isDevelopment = appEnvironment === 'development';
 
   const profile = session?.user ?? null;
   const name = displayName(profile);
@@ -242,6 +248,24 @@ export default function ProfileScreen() {
                 <Text variant="caption" color="textTertiary">
                   Catálogo: {legacyCatalogPolicy.source} · {legacyCatalogPolicy.decision}
                 </Text>
+                <Text variant="caption" color="textTertiary">
+                  Conectividad: {connectivity}
+                </Text>
+
+                {/* Development only. A cache namespace is harmless, but there is
+                    no reason to put internals in front of a customer. No token
+                    or credential is ever rendered here. */}
+                {isDevelopment ? (
+                  <>
+                    <Text variant="caption" color="textTertiary">
+                      Auth: {authRuntimePolicy.mode} · {authRuntimePolicy.decision}
+                    </Text>
+                    <Text variant="caption" color="textTertiary">
+                      Cache scope: tenant={queryScope.tenant} · user=
+                      {queryScope.user ?? 'anónimo'}
+                    </Text>
+                  </>
+                ) : null}
               </View>
 
               {/* Only ever non-empty in a misconfigured release build. Shown
