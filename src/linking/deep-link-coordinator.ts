@@ -43,7 +43,15 @@ export type DeepLinkDecision =
  */
 export function decideForIntent(
   intent: DeepLinkIntent,
-  context: { authStatus: AuthStatus },
+  context: {
+    authStatus: AuthStatus;
+    /**
+     * Whether the signed-in user has a SERVER-VERIFIED relation with this
+     * build's company (M3). Optional: absent means "not known here", which is
+     * the state every caller was in before real tenant context existed.
+     */
+    hasActiveCompany?: boolean;
+  },
 ): DeepLinkDecision {
   const visibility = visibilityOf(intent);
 
@@ -66,6 +74,20 @@ export function decideForIntent(
 
   switch (context.authStatus) {
     case 'authenticated':
+      // M3 — BEING SIGNED IN IS NOT THE SAME AS BELONGING HERE.
+      //
+      // `/api/v1/auth/me/` reports the companies the server verified this user
+      // has a relation with. If this build's storefront is not among them, the
+      // account is real but has nothing to do with THIS business, and every
+      // private screen would come back empty or forbidden.
+      //
+      // This is a LOCAL sanity check, not authorization: it only avoids a
+      // navigation that is obviously pointless from context the app already
+      // holds. The backend remains the only thing that decides what may be
+      // read, and `hasActiveCompany` is never sent anywhere as proof.
+      if (context.hasActiveCompany === false) {
+        return { action: 'feature-unavailable', intent };
+      }
       return { action: 'navigate', route, intent };
 
     case 'loading':
@@ -97,7 +119,7 @@ export function decideForIntent(
  */
 export function decideForUrl(
   rawUrl: unknown,
-  context: { authStatus: AuthStatus },
+  context: { authStatus: AuthStatus; hasActiveCompany?: boolean },
 ): DeepLinkDecision {
   const parsed = parseDeepLink(rawUrl);
   if (!parsed.ok) return { action: 'reject', reason: parsed.reason };

@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { RefreshNetworkError } from './auth-errors';
 import { authRuntimePolicy, type AuthRuntimePolicy } from './auth-policy';
 import type { AuthRepository } from './auth-repository';
 import { resolveAuthRepository } from './auth-repository-factory';
@@ -96,12 +97,24 @@ export function AuthProvider({
         setSession(restored);
         setStatus(restored ? 'authenticated' : 'unauthenticated');
       })
-      .catch(() => {
-        // A failed restore is not something the user can act on — it means
-        // "you are signed out", which is exactly what is rendered.
+      .catch((error: unknown) => {
         if (cancelled || startedAtEpoch !== epochRef.current) return;
         setSession(null);
-        setStatus('unauthenticated');
+        // M3 — A FAILED RESTORE IS NOT ALWAYS A LOGOUT.
+        //
+        // Until the backend was real this collapsed everything into
+        // `unauthenticated`, which was harmless because the mock never failed.
+        // Against a real server it would sign out anyone who launched the app
+        // on a train: the refresh token in the Keychain is still perfectly
+        // good, and the only thing that happened is that we could not ask.
+        //
+        // `RefreshNetworkError` therefore means "credentials kept, try again",
+        // and the repository is careful to throw it rather than resolve null.
+        // A rejected refresh has already had its credentials cleared by the
+        // coordinator and resolves null instead of reaching here at all.
+        setStatus(
+          error instanceof RefreshNetworkError ? 'temporarily-unavailable' : 'unauthenticated',
+        );
       });
 
     return () => {

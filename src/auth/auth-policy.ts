@@ -1,4 +1,5 @@
 import {
+  isApiConfigured,
   isBackendAuthAvailable,
   mockDataPolicy,
   type AppEnvironment,
@@ -37,6 +38,7 @@ export type AuthPolicyDecision =
   | 'mock-development'
   | 'mock-staging-explicit'
   | 'unavailable-no-contract'
+  | 'unavailable-api-not-configured'
   | 'unavailable-mock-not-authorised'
   | 'unavailable-production-mock-forbidden';
 
@@ -50,27 +52,46 @@ export type AuthRuntimePolicy = {
 /**
  * Resolve the authentication mode.
  *
- * | Environment | backend ready | mocks | Result |
- * |---|---|---|---|
- * | any         | yes | any | `backend` |
- * | production  | no  | any | **`unavailable`** — never mock |
- * | staging     | no  | explicit opt-in | `mock` |
- * | staging     | no  | off | `unavailable` |
- * | development | no  | on  | `mock` |
- * | development | no  | off | `unavailable` |
+ * | Environment | contract | API url | mocks | Result |
+ * |---|---|---|---|---|
+ * | any         | yes | set    | any | `backend` |
+ * | any         | yes | UNSET  | any | **`unavailable`** |
+ * | production  | no  | any    | any | **`unavailable`** — never mock |
+ * | staging     | no  | any    | explicit opt-in | `mock` |
+ * | staging     | no  | any    | off | `unavailable` |
+ * | development | no  | any    | on  | `mock` |
+ * | development | no  | any    | off | `unavailable` |
+ *
+ * M3 ADDED THE API URL CONDITION. Shipping the transport made
+ * `isBackendAuthAvailable` true, and true means "this build can SPEAK the
+ * contract" — not "this build knows where the server is". Without those being
+ * separate, a release missing `EXPO_PUBLIC_API_BASE_URL` would render a login
+ * form whose submit button can only ever fail, which teaches the user their
+ * password is wrong.
  *
  * Production is checked BEFORE the mock branch so that no combination of
  * variables can reach `mock` there. `mockDataPolicy` already refuses to enable
  * mocks in production at all (M0.1), which makes this a second, independent
  * barrier rather than a duplicate: two separate rules would both have to be
- * wrong for a store build to accept a fake login.
+ * wrong for a store build to accept a fake login. A missing API url NEVER falls
+ * back to mocks either — not being able to reach the server is not a licence to
+ * fabricate a session.
  */
 export function resolveAuthRuntimePolicy(input: {
   environment: AppEnvironment;
   backendAuthAvailable: boolean;
+  apiConfigured: boolean;
   mocksEnabled: boolean;
 }): AuthRuntimePolicy {
   if (input.backendAuthAvailable) {
+    if (!input.apiConfigured) {
+      return {
+        mode: 'unavailable',
+        decision: 'unavailable-api-not-configured',
+        reason:
+          'Hay contrato de autenticación nativo, pero EXPO_PUBLIC_API_BASE_URL no está definido: no hay servidor al que enviar las credenciales.',
+      };
+    }
     return {
       mode: 'backend',
       decision: 'backend-contract-ready',
@@ -116,6 +137,7 @@ export function resolveAuthRuntimePolicy(input: {
 export const authRuntimePolicy: AuthRuntimePolicy = resolveAuthRuntimePolicy({
   environment: appEnvironment,
   backendAuthAvailable: isBackendAuthAvailable,
+  apiConfigured: isApiConfigured,
   mocksEnabled: mockDataPolicy.enabled,
 });
 

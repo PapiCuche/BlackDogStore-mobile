@@ -18,10 +18,17 @@ archivo discrepan, **el archivo tiene razón**.
 | Detalle de pedido | IMPLEMENTADO | API_PENDING | MOCK | TESTED UI | PARCIAL |
 | Reparaciones | IMPLEMENTADO | MOCK | MOCK | TESTED UI | PARCIAL |
 | Detalle de reparación | IMPLEMENTADO | MOCK | MOCK | TESTED UI | PARCIAL |
-| Autenticación (UI) | IMPLEMENTADO | API_PENDING | MOCK | TESTED | PARCIAL |
+| Autenticación (login) | IMPLEMENTADO | **API_READY** (`/api/v1/auth/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Refresh con rotación | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Logout | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Restore en cold start | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Contexto de empresa verificado | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Registro nativo | UI solo en mock | API_PENDING (BR-001B) | n/a | TESTED (oculto) | **PENDIENTE** |
+| Verificación de correo nativa | UI solo en mock | API_PENDING (BR-001B) | n/a | TESTED (oculto) | **PENDIENTE** |
+| Reset de contraseña nativo | UI solo en mock | API_PENDING (BR-001B) | n/a | TESTED (oculto) | **PENDIENTE** |
 | Auth mock (development) | IMPLEMENTADO | n/a | MOCK | TESTED | IMPLEMENTADO |
 | Auth mock (production) | **BLOQUEADO** | n/a | n/a | TESTED | IMPLEMENTADO |
-| Token lifecycle | IMPLEMENTADO | API_PENDING | n/a | TESTED | IMPLEMENTADO |
+| Token lifecycle | IMPLEMENTADO | **API_READY** | **INTEGRATED** | TESTED | **INTEGRADO** |
 | Access token memory-only | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Refresh en SecureStore | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Refresh coordinator | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
@@ -186,7 +193,8 @@ y renderiza neutral. **BR-006.**
 | Catálogo | ~~BR-002 (+ BR-007)~~ **DESBLOQUEADO** | **Hecho en M2.** `V1ApiCatalogRepository` escrito; `LegacyApiCatalogRepository`, su wrapper, su gate y `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` **eliminados**. Se reemplazó, no se adaptó. |
 | Pedidos | BR-001, BR-003 | Escribir `ApiOrderRepository` (el mapeador es directo). |
 | Reparaciones | BR-005 | Escribir `ApiRepairRepository`; el dominio ya está modelado. |
-| Auth | BR-001, BR-007 | Escribir `DjangoAuthTransport` + `ApiAuthRepository` y poner `isBackendAuthAvailable = true` **en el mismo commit**. El coordinator, el vault y el pipeline ya existen y están probados. |
+| Auth (sesión) | ~~BR-001, BR-007~~ **DESBLOQUEADO** | **Hecho en M3.** `DjangoAuthTransport` + `ApiAuthRepository` escritos, `isBackendAuthAvailable = true` en el mismo commit. El coordinator, el vault y el pipeline no se tocaron: la apuesta de M1 se sostuvo. |
+| Auth (cuenta) | **BR-001B** | Escribir los flujos de registro/verificación/reset cuando existan endpoints nativos. Hoy la app los oculta en modo backend. |
 | Marca | BR-006 | Escribir `ApiCompanyRepository`; el fixture queda como fallback del piloto. |
 
 El patrón es el mismo en los cinco casos: **una clase nueva y una línea en el
@@ -259,6 +267,32 @@ seguimiento siguen exactamente donde estaban. Un catálogo integrado no integra
 nada más.
 
 Ver `docs/API_CONTRACT.md` y BR-002 / BR-007 en `docs/BACKEND_REQUIREMENTS.md`.
+
+## Autenticación nativa (M3)
+
+```
+Contrato backend BR-001A       IMPLEMENTADO / VERIFICADO (origin/master 7c55ebc)
+DjangoAuthTransport            IMPLEMENTADO / TESTED
+ApiAuthRepository              IMPLEMENTADO / TESTED
+Login                          INTEGRADO / TESTED
+Refresh con rotación           INTEGRADO / TESTED
+Logout local-first             INTEGRADO / TESTED
+Restore en cold start          INTEGRADO / TESTED
+Red caída != logout            INTEGRADO / TESTED
+Contexto de empresa verificado INTEGRADO / TESTED
+Bearer solo en /api/v1/        TESTED
+Sin logging de credenciales    TESTED (escaneo estructural)
+Registro nativo                PENDIENTE (BR-001B)
+Verificación de correo nativa  PENDIENTE (BR-001B)
+Reset de contraseña nativo     PENDIENTE (BR-001B)
+Superficie privada de negocio  PENDIENTE (BR-003 / BR-005)
+```
+
+**BR-001 no está cerrado.** El núcleo de sesión sí; el ciclo de vida de cuenta
+no. En modo backend la app **no muestra** esos formularios.
+
+Lo que **no** cambió de estado: pedidos, reparaciones, marca y seguimiento. Una
+puerta abierta no es lo que hay detrás.
 
 ## Nota de verificación
 

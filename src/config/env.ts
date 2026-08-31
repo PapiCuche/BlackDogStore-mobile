@@ -338,7 +338,7 @@ export const isRealCatalogActive: boolean = catalogPolicy.source === 'api-v1';
  * backend has tests pinning that. A versioned prefix appearing is not the same
  * as an authentication contract appearing. See BR-001 and docs/MOBILE_AUTH.md.
  */
-export const isBackendAuthAvailable = false as boolean;
+export const isBackendAuthAvailable = true as boolean;
 
 // ─── Configuration health ───────────────────────────────────────────────────
 

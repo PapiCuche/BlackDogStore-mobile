@@ -40,11 +40,20 @@ export type AuthCompanyRef = {
 /**
  * Tenant context, AS VALIDATED BY THE SERVER.
  *
- * Null until a backend contract delivers it, and that is the whole point:
  * `EXPO_PUBLIC_COMPANY_SLUG` is a build's CHOICE of storefront, not proof of
  * anything. It must never, on its own, grant access to private data. Authority
- * comes from the server having checked the user's membership — exactly what
- * `store/tenancy.py` already does for staff via `resolve_company_for_user`.
+ * comes from the server having checked the relation.
+ *
+ * M3 — this is now populated for real. `/api/v1/auth/me/` returns the companies
+ * the server VERIFIED this user has a relation with, from `Membership` (staff)
+ * or `Customer` (buyer) rows it owns. `activeCompany` is the build's slug IF it
+ * appears in that list, and **null otherwise** — no fallback to the pilot, no
+ * "first company in the list", no membership invented from a build constant.
+ *
+ * A null `activeCompany` with a non-empty `availableCompanies` is a real and
+ * meaningful state: this person has an account, just not with this storefront.
+ *
+ * Still not authorization. Every private endpoint re-checks server-side.
  *
  * See BR-002 and BR-006.
  */
@@ -91,10 +100,14 @@ export type AuthStatus =
 /**
  * Sign-in input.
  *
- * `identifier`, not `email`: verified on `origin/master`, `LoginView` builds a
- * `TokenObtainPairSerializer` over the stock `auth.User`, whose
- * `USERNAME_FIELD` is `username`. Whether the mobile contract will accept an
- * email is an open question in BR-001, so the type does not presume it.
+ * `identifier` CARRIES AN EMAIL on the native contract. BR-001A settled it:
+ * `/api/v1/auth/login/` takes `{email, password}`, unlike the web contract's
+ * `username` (`USERNAME_FIELD` is still `username` on the stock `auth.User`,
+ * and the web login is unchanged).
+ *
+ * The name stays abstract so a future contract could accept something else
+ * without touching every caller, but it is no longer an open question: the
+ * login screen collects an email and `DjangoAuthTransport` sends it as `email`.
  *
  * The password is present for exactly as long as one call takes. It is never
  * stored on the session, never persisted, never logged.

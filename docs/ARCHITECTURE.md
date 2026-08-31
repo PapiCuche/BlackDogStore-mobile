@@ -317,6 +317,44 @@ Cuatro decisiones que gobiernan el resto:
    todas terminan igual: una sesión que el usuario no pidió. Cada mutación sube
    el epoch; cada finalización lo comprueba.
 
+### Autenticación real (M3)
+
+M1 construyó la máquina completa —vault, access store, refresh coordinator,
+pipeline de reintentos— contra `FakeAuthTransport`, apostando a que cuando el
+endpoint existiera el trabajo sería **una clase, no un rediseño**. M3 cobró esa
+apuesta: el coordinator, el vault y la rotación no se tocaron.
+
+```
+LoginScreen ──► AuthProvider ──► ApiAuthRepository
+                                       │
+                     ┌─────────────────┼─────────────────┐
+                     ▼                 ▼                 ▼
+              CredentialVault   AccessTokenStore   DjangoAuthTransport
+              (SecureStore)      (solo memoria)     (/api/v1/auth/)
+                     └──────► RefreshCoordinator ◄──────┘
+                              single-flight · epoch
+```
+
+**El orden importa más que las piezas.** `signIn` persiste el refresh **antes**
+de instalar el access, porque el servidor rota y mete en blacklist: al llegar la
+respuesta el token anterior ya está muerto. Un crash entre medias dejaría la app
+autenticada media hora y luego desconectada para siempre.
+
+**Cold start distingue tres cosas que antes eran una.** Rechazo del servidor →
+`unauthenticated` con credenciales borradas. Sin refresh guardado →
+`unauthenticated`. Red caída → **`temporarily-unavailable` conservando el
+refresh**. Antes todo terminaba en logout, algo inofensivo con un mock que nunca
+fallaba y desastroso contra un servidor real.
+
+**Contrato ≠ servidor.** `isBackendAuthAvailable` dice que la build sabe hablar
+el contrato, no dónde está el servidor. Sin `EXPO_PUBLIC_API_BASE_URL` la
+política cae a `unavailable`, nunca a un login que solo puede fallar ni a mocks.
+
+**Empresa activa.** El servidor devuelve las relaciones que verificó
+(`Membership` o `Customer`). El slug de la build **busca** la suya en esa lista;
+si no está, `activeCompany` es null. Sin caer al piloto, sin "la primera", sin
+inventar una membresía desde una constante de build.
+
 ## Resiliencia del cliente (M1.1)
 
 Detalle completo en `docs/OFFLINE_STRATEGY.md`. Lo estructural:
@@ -493,4 +531,10 @@ un error 500.
 | Rechazar el enlace con parámetros prohibidos, no limpiarlo | Limpiar enseña al emisor que el patrón funciona. |
 | `TRUSTED_HTTPS_HOSTS` vacío | DEC-MOBILE-005: no hay dominio verificado; confiar en uno inventado sería peor. |
 | Un solo mensaje de enlace no disponible | Distinguir "no existe" de "no es tuyo" es un oráculo de existencia. |
+| Auth nativa por email, no por username | El contrato web pide un username que el formulario le generó al usuario; el nativo pide lo que la persona sabe. |
+| Persistir el refresh antes de instalar el access | El servidor ya invalidó el anterior: un crash entre medias sería invisible hasta la expiración. |
+| Red caída ≠ sesión cerrada | Firmar la salida de quien entra en un ascensor es peor que pedirle que reintente. |
+| Contrato implementado ≠ API configurada | Una release sin URL mostraría un login cuyo botón solo puede fallar. |
+| Perfil no persistido | Un perfil cacheado es una segunda verdad que caduca en silencio. |
+| Registro y reset ocultos en modo backend | BR-001B no existe; un formulario que solo puede fallar enseña que la contraseña está mal. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |

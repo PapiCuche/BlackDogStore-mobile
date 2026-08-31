@@ -23,17 +23,19 @@ Cada requerimiento indica sobre qué se apoya:
 
 Ver `API_CONTRACT.md` para el detalle de qué es cada cosa.
 
-Prioridad: **BR-001** y **BR-002** bloquean toda integración real.
+Prioridad: **BR-001** y **BR-002** bloqueaban toda integración real. Ambos están
+ahora **parcialmente resueltos** — catálogo público y núcleo de sesión nativa —
+y lo que queda de cada uno bloquea la superficie privada de negocio.
 
 | ID | Requerimiento | Prioridad |
 |---|---|---|
-| BR-001 | Autenticación nativa **acotada a `/api/v1/`** | **PROPUESTA CRÍTICA** |
+| BR-001 | Autenticación nativa **acotada a `/api/v1/`** | **PARCIAL** — BR-001A núcleo de sesión IMPLEMENTADO; BR-001B ciclo de cuenta PENDIENTE |
 | BR-002 | Selección de tenant validada server-side | **PARCIALMENTE RESUELTO** — catálogo público IMPLEMENTADO |
 | BR-003 | Exponer `fulfillment_status` | ALTA |
 | BR-004 | Paginación opt-in | MEDIA |
 | BR-005 | Dominio de reparaciones | ALTA |
 | BR-006 | Endpoint público de marca | MEDIA |
-| BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — slice de catálogo IMPLEMENTADO |
+| BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — catálogo + auth IMPLEMENTADOS; superficie privada de negocio PENDIENTE |
 | BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
 
 ---
@@ -46,7 +48,8 @@ Prioridad: **BR-001** y **BR-002** bloquean toda integración real.
 |---|---|
 | `/api/v1/` existe como prefijo versionado | **IMPLEMENTADO** |
 | Slice de catálogo público | **IMPLEMENTADO** — integrado por Mobile en M2 |
-| `/api/v1/auth/*` | **PENDIENTE** (BR-001) |
+| `/api/v1/auth/*` (núcleo de sesión) | **IMPLEMENTADO** (BR-001A) |
+| `/api/v1/auth/*` (ciclo de cuenta) | **PENDIENTE** (BR-001B) |
 | Superficie privada v1 (pedidos, reparaciones) | **PENDIENTE** |
 
 Existir el prefijo no es existir el contrato. El backend tiene tests que fijan
@@ -91,7 +94,28 @@ BR-001 y BR-002 tengan dónde vivir sin tocar lo existente.
 
 ## BR-001 — Contrato de autenticación nativo, acotado a `/api/v1/`
 
-**Estado:** PROPUESTA · **Prioridad:** CRÍTICA · **Bloquea:** auth, pedidos, perfil
+**Estado:** **PARCIAL** · **Prioridad:** CRÍTICA
+
+| Porción | Estado |
+|---|---|
+| **BR-001A** — núcleo de sesión (`login`, `refresh`, `logout`, `me`) | **IMPLEMENTADO** — `origin/master` `7c55ebc`, integrado por Mobile en M3 |
+| **BR-001B** — ciclo de vida de cuenta | **PENDIENTE** |
+
+**Lo resuelto.** Contrato nativo separado del web: tokens en el cuerpo, `Bearer`
+en lugar de cookie, sin CSRF. `V1BearerAuthentication` **no es global** y solo la
+declaran las vistas privadas v1, con tests de que un Bearer no abre nada legacy.
+Login por email, con la ambigüedad de duplicados resuelta de forma fail-safe
+porque `email` **no** es unique en esa base de datos. Refresh con rotación y
+blacklist. Logout best-effort sin exigir access vivo.
+
+**Lo pendiente (BR-001B).** Registro, verificación de correo, reenvío, reset y
+cambio de contraseña nativos. Siguen siendo solo web, y la app **no los muestra**
+en modo backend en vez de ofrecer un formulario que no puede funcionar.
+
+**Este requerimiento NO se cierra** mientras BR-001B falte.
+
+El motivo original, que documenta por qué hacía falta, se conserva abajo.
+
 **Base:** `VERIFIED_STABLE_MASTER`
 
 **Motivo**
