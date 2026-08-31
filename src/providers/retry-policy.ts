@@ -25,8 +25,9 @@ const TERMINAL_ERROR_NAMES = new Set([
   'RefreshRejectedError',
   // A programming error: the caller aimed a Bearer at the wrong surface.
   'BearerScopeViolationError',
-  // The legacy catalogue is gated off in this build. Permanent.
-  'LegacyCatalogForbiddenError',
+  // This build has no tenant configured, so there is no storefront to ask for.
+  // A retry would ask the same unanswerable question.
+  'MissingTenantError',
   // The caller navigated away. Retrying would resurrect work nobody wants.
   'AbortError',
 ]);

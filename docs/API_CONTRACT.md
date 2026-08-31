@@ -34,7 +34,60 @@ Superficie propuesta para Mobile: `/api/v1/` — ver **BR-007**.
 
 ---
 
-## Catálogo
+## Catálogo · `/api/v1/` — **INTEGRADO**
+
+```
+VERIFIED_STABLE_MASTER
+VERSIONED
+PUBLIC
+TENANT_SAFE
+INTEGRADO POR MOBILE (M2)
+```
+
+Verificado en `PapiCuche/BlackDogStore-web` @ `origin/master` **`b301637b`**
+(PR #1, *feat(api): add tenant-safe v1 public catalog*), leyendo el código en
+`master`, no la descripción del PR.
+
+| Endpoint | Qué |
+|---|---|
+| `GET /api/v1/storefront/<company_slug>/products/` | Lista, filtrable |
+| `GET /api/v1/storefront/<company_slug>/products/<product_slug>/` | Detalle por slug |
+| `GET /api/v1/storefront/<company_slug>/categories/` | Categorías del tenant |
+
+Query params de la lista: `category`, `search`, `in_stock=true`, `ordering`
+(allowlist: `price`, `-price`, `name`, `-name`, `newest`).
+
+Respuesta: **array plano**, igual que la superficie legacy.
+
+Campos de producto: `id`, `name`, `slug`, `description`, `price`, `inventory`,
+`category`, `image_url`, `average_rating`, `review_count`. Nada interno.
+
+`inventory` son **unidades vendibles** — el stock de la sucursal de despacho, no
+el total de la empresa. Es lo que el checkout puede entregar de verdad.
+
+### El tenant va en la ruta
+
+El storefront web resuelve su empresa por Host. Mobile llega a un host de API
+compartido y no tiene ese Host, así que nombra el storefront que quiere.
+
+Ese slug **selecciona un escaparate público; no autoriza nada**. El servidor
+resuelve una empresa **activa** y construye todo el queryset desde ella.
+
+Desconocida, inactiva, malformada y vacía → **el mismo 404**, con el mismo
+cuerpo: el endpoint no puede recorrerse para enumerar qué empresas existen.
+
+Ni query param, ni cabecera, ni Host, ni `DEFAULT_STOREFRONT_COMPANY_SLUG`
+pueden cambiar el tenant de la ruta. El backend tiene un test por cada vector.
+
+### Anónimo por diseño
+
+`authentication_classes = []`. Mobile llama con `request`, nunca con
+`authenticatedRequest`: un Bearer no pinta nada en un escaparate, y merece
+decirse en voz alta porque `/api/v1/` es justo el prefijo habilitado para Bearer.
+
+---
+
+## Catálogo legacy · `/api/products/` — **RETIRADO DE MOBILE**
 
 ### `GET /api/products/`
 
@@ -43,13 +96,17 @@ VERIFIED_STABLE_MASTER
 LEGACY
 PUBLIC
 NOT_TENANT_SAFE
-NOT_APPROVED_FOR_MOBILE_RELEASE
+YA NO LO USA MOBILE
 ```
 
-**No es `API_READY` para Mobile.** Desde la perspectiva de integración Mobile
-está en `API_PENDING`: el endpoint existe y funciona, pero **no cumple la
-frontera de aislamiento SaaS**, así que no es un contrato contra el que esta app
-pueda publicarse.
+**M2 lo retiró.** `LegacyApiCatalogRepository`, su wrapper de endpoint, su
+guardia de red y `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` fueron **eliminados**, no
+apagados: un segundo camino "temporal" a los mismos datos —y encima el
+inseguro— es el que acaba usándose.
+
+Se documenta aquí porque sigue existiendo en el backend para el frontend web,
+que lo resuelve por Host y para el cual **sí** es correcto. Lo que sigue describe
+ese endpoint tal como está en `master`; Mobile ya no lo llama.
 
 `ProductViewSet` (`ReadOnlyModelViewSet`; permiso global `AllowAny`).
 

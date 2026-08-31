@@ -1,6 +1,6 @@
-import { isPilotTenant, legacyCatalogPolicy, useMockData } from '@/config/env';
+import { catalogPolicy, isPilotTenant, useMockData } from '@/config/env';
 
-import { LegacyApiCatalogRepository } from './api/legacy-api-catalog-repository';
+import { V1ApiCatalogRepository } from './api/v1-api-catalog-repository';
 import { MockCatalogRepository } from './mock/mock-catalog-repository';
 import { MockCompanyRepository } from './mock/mock-company-repository';
 import { MockOrderRepository } from './mock/mock-order-repository';
@@ -27,25 +27,31 @@ import type {
  * M0.2 — THE CATALOGUE JOINED THEM.
  *
  * It used to read `useMockData ? Mock : Api`, so turning mocks off was enough
- * to point a release at the legacy Django catalogue. That catalogue is public,
- * it works, and it returns **every company's products** — verified on
- * `origin/master` `2624d478`. "Not mock" was being treated as "safe", and the
- * two are not the same thing.
+ * to point a release at the pre-SaaS Django catalogue, which returned **every
+ * company's products**. "Not mock" was being treated as "safe", and the two are
+ * not the same thing.
  *
- * Now the source comes from `legacyCatalogPolicy`, which fails closed:
+ * M2 — THE REAL CATALOGUE ARRIVED, AND THE LEGACY ONE WAS DELETED.
  *
- *   mock                     → MockCatalogRepository
- *   legacy-api (dev + flag)  → LegacyApiCatalogRepository
- *   none                     → null
+ * `origin/master` `b301637b` ships `/api/v1/storefront/<company_slug>/…`, where
+ * the server resolves an active company from the path and builds every queryset
+ * from it. So a release build finally has a catalogue it is safe to serve.
  *
- * There is no path from a release build to the legacy catalogue.
+ * The legacy repository, its endpoint wrapper, its network guard and
+ * `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` were REMOVED rather than switched off. A
+ * second path to the same data — especially the unsafe one — is a path that
+ * eventually gets used by someone who does not know why it was left there.
+ *
+ *   mock    → MockCatalogRepository
+ *   api-v1  → V1ApiCatalogRepository
+ *   none    → null  (no tenant, or no API URL: fails safe, never to mocks)
  */
 function resolveCatalogRepository(): CatalogRepository | null {
-  switch (legacyCatalogPolicy.source) {
+  switch (catalogPolicy.source) {
     case 'mock':
       return new MockCatalogRepository();
-    case 'legacy-api':
-      return new LegacyApiCatalogRepository();
+    case 'api-v1':
+      return new V1ApiCatalogRepository();
     case 'none':
       return null;
   }

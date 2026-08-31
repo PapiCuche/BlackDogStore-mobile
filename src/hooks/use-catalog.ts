@@ -12,15 +12,19 @@ import { featureUnavailable } from '@/repositories/errors';
  * query key and the repository call in one place, so a cache invalidation
  * cannot go looking for a key nobody writes.
  *
- * M0.2 — `repositories.catalog` can be `null`. That happens whenever this build
- * is not allowed to serve a catalogue: any release build (the legacy endpoint
- * is not tenant-safe), and a development build that has neither mocks nor the
- * explicit legacy opt-in.
+ * `repositories.catalog` can be `null`. Since M2 that no longer means "no safe
+ * endpoint exists" — it means this build cannot NAME a storefront: no
+ * `EXPO_PUBLIC_COMPANY_SLUG`, or no `EXPO_PUBLIC_API_BASE_URL`. Both are
+ * configuration errors, and both fail safe rather than guessing a tenant.
  *
  * When it is null the query rejects with a `FeatureUnavailableError` instead of
  * resolving to `[]`. "El catálogo todavía no está disponible" and "esta tienda
  * no tiene productos" are different statements, and showing the second when the
  * first is true tells the customer something false about the business.
+ *
+ * The same distinction holds for the errors that come back from a REAL call: a
+ * network failure, a 404 for an unknown tenant and an empty shelf are three
+ * different things, and only the last one is "no hay productos".
  */
 
 /**

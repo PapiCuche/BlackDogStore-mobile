@@ -8,8 +8,9 @@
  *
  * `ProposedAuthTokenWire` is a PROPOSED WIRE CONTRACT. It is Mobile's request
  * to the Backend team (BR-001) and it does NOT exist. Django's current auth
- * returns its tokens in HttpOnly cookies and nothing in the body; there is no
- * `/api/v1/` route at all on `origin/master` `2624d478`.
+ * returns its tokens in HttpOnly cookies and nothing in the body, and while
+ * `/api/v1/` exists on `origin/master` `b301637b`, it holds only the anonymous
+ * storefront catalogue — no `/api/v1/auth/*` of any kind.
  *
  * Nothing here claims Django speaks camelCase. When the endpoint exists, a
  * mapper converts snake_case wire → this model, exactly like the catalogue

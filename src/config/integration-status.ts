@@ -31,10 +31,12 @@ export type FeatureIntegration = {
 export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   catalog: {
     label: 'Catálogo',
-    // NOT API_READY. The endpoint exists and works, but it returns every
-    // company's products, so it is not a contract this app may ship against.
-    status: 'API_PENDING',
-    note: 'El catálogo legacy de /api/products/ existe en master pero NO está aislado por empresa: devuelve productos de todas las empresas. Solo se puede usar en desarrollo y con opt-in explícito. Bloqueado por BR-002.',
+    // M2 — the first feature to earn this. The app calls
+    // /api/v1/storefront/<company_slug>/ on origin/master b301637b, where the
+    // server resolves an active company from the path and scopes every
+    // queryset to it. Covered by tests on both sides.
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/storefront/<empresa>/ — aislado por empresa en el servidor. Cubierto por tests. En development sigue disponible el modo mock.',
   },
   orders: {
     label: 'Pedidos',

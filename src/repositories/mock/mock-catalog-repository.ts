@@ -9,7 +9,7 @@ import { simulateLatency } from './latency';
  *
  * Filtering mirrors what `ProductViewSet.get_queryset` actually does server
  * side — `name__icontains` for search and `category__slug` for the category —
- * so that switching to `LegacyApiCatalogRepository` does not change what the
+ * so that switching to `V1ApiCatalogRepository` does not change what the
  * screen shows. A mock that filters more cleverly than the real endpoint is a
  * mock that hides a missing backend feature.
  */

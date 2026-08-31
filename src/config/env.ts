@@ -159,52 +159,49 @@ export const companySlug: string | null = tenant.status === 'resolved' ? tenant.
 export const isPilotTenant: boolean =
   tenant.status === 'resolved' && tenant.slug === PILOT_COMPANY_SLUG;
 
-// ─── Legacy catalog gate ────────────────────────────────────────────────────
+// ─── Catalog source ─────────────────────────────────────────────────────────
 
 /**
- * Where the catalogue may come from in this build.
+ * Where the catalogue comes from in this build.
  *
- * M0.2 added this because "not mock" did NOT mean "safe". The composition root
- * used to read `useMockData ? Mock : Api`, so a single
- * `EXPO_PUBLIC_USE_MOCK_DATA=false` was enough to point a RELEASE build at the
- * legacy Django catalogue.
+ * M0.2 added a gate here because "not mock" did NOT mean "safe": the only real
+ * endpoint available was the pre-SaaS Django catalogue, which returned EVERY
+ * company's products. That gate blocked it outside development.
  *
- * That endpoint is public and works — and it is NOT tenant-safe. Verified on
- * `PapiCuche/BlackDogStore-web` @ `origin/master` `2624d478`:
+ * M2 removed the problem instead of guarding it. `PapiCuche/BlackDogStore-web`
+ * @ `origin/master` `b301637b` ships a tenant-safe contract:
  *
- *   ProductViewSet.get_queryset  →  Product.objects…filter(is_active=True)
- *   CategoryViewSet.queryset     →  Category.objects.all()
+ *   GET /api/v1/storefront/<company_slug>/products/
+ *   GET /api/v1/storefront/<company_slug>/products/<product_slug>/
+ *   GET /api/v1/storefront/<company_slug>/categories/
  *
- * Neither `Product` nor `Category` has a `company` field there, and the
- * backend's own docstring says of its host-based resolver: "DESIGNED, not yet
- * wired up … no public view calls it yet". So a multi-tenant mobile client
- * pointed at it would receive EVERY company's products — a cross-tenant leak,
- * even though the endpoint is public.
- *
- * The gate therefore FAILS CLOSED: the legacy catalogue is reachable only from
- * a development build that asks for it by name.
+ * The server resolves an ACTIVE company from the path and builds every queryset
+ * from it. So a release build can now have a real catalogue, and the legacy
+ * repository, its guard and `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` are gone — not
+ * left switched off. A second, unsafe path that still exists is a path that
+ * eventually gets used.
  */
 export type CatalogSource =
   /** Bundled fixtures. */
   | 'mock'
-  /** The real, legacy, NOT tenant-safe Django catalogue. */
-  | 'legacy-api'
+  /** The tenant-safe `/api/v1/` contract. */
+  | 'api-v1'
   /** No catalogue at all in this build. */
   | 'none';
 
-export type LegacyCatalogDecision =
-  /** Mocks are on; the legacy flag is irrelevant. */
+export type CatalogDecision =
+  /** Mocks are on; nothing else is consulted. */
   | 'mock-active'
-  /** Development build that explicitly opted in. */
-  | 'legacy-development-explicit'
-  /** Development build that did not opt in. */
-  | 'legacy-disabled'
-  /** Release build. Refused regardless of the flag. */
-  | 'legacy-forbidden-release';
+  /** Tenant and API URL both resolved. */
+  | 'api-v1-active'
+  /** No `EXPO_PUBLIC_COMPANY_SLUG`: there is no storefront to ask for. */
+  | 'unavailable-missing-tenant'
+  /** No `EXPO_PUBLIC_API_BASE_URL`: there is nowhere to ask. */
+  | 'unavailable-missing-api-url';
 
-export type LegacyCatalogPolicy = {
+export type CatalogPolicy = {
   source: CatalogSource;
-  decision: LegacyCatalogDecision;
+  decision: CatalogDecision;
   /** Diagnostic sentence for Profile. Not shown to customers. */
   reason: string;
 };
@@ -212,22 +209,30 @@ export type LegacyCatalogPolicy = {
 /**
  * Decide where the catalogue comes from.
  *
- * | Environment | mocks | `ENABLE_LEGACY_CATALOG` | Result |
- * |---|---|---|---|
- * | development | on   | any    | `mock` |
- * | development | off  | unset  | `none` |
- * | development | off  | `true` | `legacy-api` |
- * | staging     | off  | `true` | **`none`** |
- * | production  | off  | `true` | **`none`** |
+ * | Environment | mocks | tenant | API URL | Result |
+ * |---|---|---|---|---|
+ * | development | on   | any      | any     | `mock` |
+ * | development | off  | resolved | set     | `api-v1` |
+ * | staging     | off  | resolved | set     | `api-v1` |
+ * | production  | off  | resolved | set     | `api-v1` |
+ * | any         | off  | missing  | any     | **`none`** |
+ * | any         | off  | any      | unset   | **`none`** |
  *
- * The release rows are the point: the flag is not a switch a release can flip.
- * It is ignored there, and `collectConfigurationIssues` reports the attempt.
+ * FAILS SAFE, and the last two rows are the reason this is a function rather
+ * than a ternary. Without a tenant there is no storefront to name, and the one
+ * thing that must never happen is falling back to the pilot's — a build for
+ * another company would quietly serve Black Dog Store's catalogue under that
+ * company's brand. Without an API URL there is nowhere to ask.
+ *
+ * Neither failure falls back to mocks. `resolveMockDataPolicy` already forbids
+ * mocks in production, and reintroducing them here as a "safety net" would ship
+ * fabricated products to real customers.
  */
-export function resolveLegacyCatalogPolicy(input: {
-  environment: AppEnvironment;
+export function resolveCatalogPolicy(input: {
   mocksEnabled: boolean;
-  legacyFlag: string | undefined;
-}): LegacyCatalogPolicy {
+  tenant: TenantConfig;
+  apiConfigured: boolean;
+}): CatalogPolicy {
   if (input.mocksEnabled) {
     return {
       source: 'mock',
@@ -236,49 +241,30 @@ export function resolveLegacyCatalogPolicy(input: {
     };
   }
 
-  // Checked BEFORE the flag, so no value of the flag can reach the legacy
-  // branch in a release.
-  if (input.environment !== 'development') {
+  if (input.tenant.status !== 'resolved') {
     return {
       source: 'none',
-      decision: 'legacy-forbidden-release',
+      decision: 'unavailable-missing-tenant',
       reason:
-        'El catálogo legacy no está aislado por empresa y está bloqueado fuera de desarrollo.',
+        'EXPO_PUBLIC_COMPANY_SLUG no está definido. Sin empresa no hay catálogo que pedir, ' +
+        'y no se asume ninguna.',
     };
   }
 
-  if (input.legacyFlag?.trim().toLowerCase() === 'true') {
+  if (!input.apiConfigured) {
     return {
-      source: 'legacy-api',
-      decision: 'legacy-development-explicit',
-      reason:
-        'Catálogo legacy habilitado explícitamente para desarrollo. NO está aislado por empresa.',
+      source: 'none',
+      decision: 'unavailable-missing-api-url',
+      reason: 'EXPO_PUBLIC_API_BASE_URL no está definido. No hay servidor al que pedir el catálogo.',
     };
   }
 
   return {
-    source: 'none',
-    decision: 'legacy-disabled',
-    reason:
-      'El catálogo real está desactivado. Actívalo con EXPO_PUBLIC_ENABLE_LEGACY_CATALOG=true (solo desarrollo).',
+    source: 'api-v1',
+    decision: 'api-v1-active',
+    reason: `Catálogo real de "${input.tenant.slug}" vía /api/v1/ (aislado por empresa en el servidor).`,
   };
 }
-
-export const legacyCatalogPolicy: LegacyCatalogPolicy = resolveLegacyCatalogPolicy({
-  environment: appEnvironment,
-  mocksEnabled: mockDataPolicy.enabled,
-  legacyFlag: process.env.EXPO_PUBLIC_ENABLE_LEGACY_CATALOG,
-});
-
-/** Whether this build may call the legacy, non-tenant-safe catalogue. */
-export const isLegacyCatalogAllowed: boolean = legacyCatalogPolicy.source === 'legacy-api';
-
-/**
- * Whether the build ASKED for the legacy catalogue, regardless of the answer.
- * Used only to report a refused request as a configuration issue.
- */
-export const legacyCatalogRequested: boolean =
-  process.env.EXPO_PUBLIC_ENABLE_LEGACY_CATALOG?.trim().toLowerCase() === 'true';
 
 // ─── API base URL ───────────────────────────────────────────────────────────
 
@@ -319,6 +305,16 @@ export const isApiConfigured: boolean = apiBaseUrl.length > 0;
 /** Request timeout in milliseconds. Mobile networks stall; they rarely fail fast. */
 export const apiTimeoutMs = 15_000;
 
+/** Where this build's catalogue comes from. Fails safe; see `resolveCatalogPolicy`. */
+export const catalogPolicy: CatalogPolicy = resolveCatalogPolicy({
+  mocksEnabled: mockDataPolicy.enabled,
+  tenant,
+  apiConfigured: isApiConfigured,
+});
+
+/** Whether this build reads the real, tenant-safe catalogue. */
+export const isRealCatalogActive: boolean = catalogPolicy.source === 'api-v1';
+
 // ─── Mobile auth contract availability ──────────────────────────────────────
 
 /**
@@ -332,18 +328,22 @@ export const apiTimeoutMs = 15_000;
  * commit that ships an `ApiAuthRepository` and its transport, because that is
  * the only moment the claim becomes true.
  *
- * Verified on `PapiCuche/BlackDogStore-web` @ `origin/master` `2624d478`:
- * `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES` contains only
- * `store.authentication.CookieJWTAuthentication`, `LoginView` returns the JWTs
- * in HttpOnly cookies and not in the body, and there is no `/api/v1/` route of
- * any kind. See BR-001 and docs/MOBILE_AUTH.md.
+ * Re-verified on `PapiCuche/BlackDogStore-web` @ `origin/master` `b301637b`:
+ * `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES` still contains only
+ * `store.authentication.CookieJWTAuthentication`, and `LoginView` still returns
+ * the JWTs in HttpOnly cookies rather than in the body.
+ *
+ * M2 note: `/api/v1/` now EXISTS, but only as the anonymous storefront
+ * catalogue. There is no `/api/v1/auth/*` and no private v1 surface, and the
+ * backend has tests pinning that. A versioned prefix appearing is not the same
+ * as an authentication contract appearing. See BR-001 and docs/MOBILE_AUTH.md.
  */
 export const isBackendAuthAvailable = false as boolean;
 
 // ─── Configuration health ───────────────────────────────────────────────────
 
 export type ConfigurationIssue = {
-  code: 'missing-tenant' | 'missing-api-url' | 'mocks-in-release' | 'legacy-catalog-forbidden';
+  code: 'missing-tenant' | 'missing-api-url' | 'mocks-in-release';
   message: string;
 };
 
@@ -360,21 +360,9 @@ export function collectConfigurationIssues(input: {
   tenant: TenantConfig;
   apiConfigured: boolean;
   mockPolicy: MockDataPolicy;
-  legacyCatalogRequested: boolean;
 }): ConfigurationIssue[] {
   const issues: ConfigurationIssue[] = [];
   if (input.environment === 'development') return issues;
-
-  if (input.legacyCatalogRequested) {
-    // The request was already refused by resolveLegacyCatalogPolicy. Reporting
-    // it matters because it means someone shipped a build believing the legacy
-    // catalogue was on — and it is not.
-    issues.push({
-      code: 'legacy-catalog-forbidden',
-      message:
-        'EXPO_PUBLIC_ENABLE_LEGACY_CATALOG=true fue ignorado: el catálogo legacy no está aislado por empresa y no puede usarse en un release.',
-    });
-  }
 
   if (input.tenant.status === 'missing') {
     issues.push({
@@ -403,7 +391,6 @@ export const configurationIssues: readonly ConfigurationIssue[] = collectConfigu
   tenant,
   apiConfigured: isApiConfigured,
   mockPolicy: mockDataPolicy,
-  legacyCatalogRequested,
 });
 
 export const isConfigurationValid: boolean = configurationIssues.length === 0;

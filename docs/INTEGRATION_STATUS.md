@@ -12,8 +12,8 @@ archivo discrepan, **el archivo tiene razón**.
 
 | Feature | Mobile UI | Backend | Integration | Tests | Estado |
 |---|---|---|---|---|---|
-| Catálogo (tienda) | IMPLEMENTADO | API_PENDING (legacy no tenant-safe) | MOCK | TESTED UI | PARCIAL |
-| Detalle de producto | IMPLEMENTADO | API_PENDING (legacy no tenant-safe) | MOCK | TESTED UI | PARCIAL |
+| Catálogo (tienda) | IMPLEMENTADO | **API_READY** (`/api/v1/`, tenant-safe) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Detalle de producto | IMPLEMENTADO | **API_READY** (`/api/v1/`, tenant-safe) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Pedidos | IMPLEMENTADO | API_PENDING | MOCK | TESTED UI | PARCIAL |
 | Detalle de pedido | IMPLEMENTADO | API_PENDING | MOCK | TESTED UI | PARCIAL |
 | Reparaciones | IMPLEMENTADO | MOCK | MOCK | TESTED UI | PARCIAL |
@@ -39,7 +39,7 @@ archivo discrepan, **el archivo tiene razón**.
 | Config a prueba de fallos | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Almacenamiento seguro | IMPLEMENTADO | n/a | n/a | NO TESTED | PARCIAL |
 | Deep links (parser + gate) | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
-| Enlace de producto | IMPLEMENTADO | API_PENDING | MOCK | TESTED | PARCIAL |
+| Enlace de producto | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Enlace de pedido | IMPLEMENTADO | API_PENDING | MOCK | TESTED | PARCIAL |
 | Enlace de reparación | IMPLEMENTADO | MOCK | MOCK | TESTED | PARCIAL |
 | Resume tras autenticarse | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
@@ -55,7 +55,7 @@ Con la configuración a prueba de fallos, **el entorno decide qué datos existen
 
 | Feature | development | staging | production |
 |---|---|---|---|
-| Catálogo | mock · o legacy **con opt-in explícito** | *no disponible* | *no disponible* |
+| Catálogo | mock · o **real `/api/v1/`** con mocks off | **real `/api/v1/`** | **real `/api/v1/`** |
 | Pedidos | mock | *no disponible* | *no disponible* |
 | Reparaciones | mock | *no disponible* | *no disponible* |
 | Marca | fixture del piloto | *no disponible* (BR-006) | *no disponible* (BR-006) |
@@ -68,57 +68,57 @@ propia cuenta.
 
 ## Detalle
 
-### Catálogo — legacy existente, **no apto para release**
+### Catálogo — **INTEGRADO** (M2)
 
 Estado detallado:
 
 ```
 Mobile UI:                 IMPLEMENTADO
-Backend legacy:            IMPLEMENTADO   (existe y funciona en master)
-Backend tenant-safe:       PENDIENTE      (OBSERVED_IN_PROGRESS en una rama Web)
-Integration:               MOCK
-Release-safe integration:  PENDIENTE
+Backend tenant-safe:       IMPLEMENTADO   (origin/master b301637b)
+Integration:               INTEGRATED
+Tests:                     TESTED         (ambos lados)
+Release-safe:              SÍ
 ```
 
-**No está `INTEGRATED` y no puede estarlo todavía.**
-
-`GET /api/products/` y `/api/categories/` existen en `master`, son públicos y
-están verificados. Pero **no están aislados por empresa**:
-
-```python
-# ProductViewSet.get_queryset  @ origin/master 2624d478
-Product.objects.select_related('category').prefetch_related('reviews').filter(is_active=True)
-
-# CategoryViewSet
-Category.objects.all()
-```
-
-Ni `Product` ni `Category` tienen campo `company` en `master`, y el resolvedor
-por host que sí existe está documentado por el propio backend como *"DESIGNED,
-not yet wired up … no public view calls it yet"*.
-
-Un cliente SaaS apuntado ahí recibe el catálogo de **todas** las empresas. Eso es
-un **riesgo cross-tenant**, aunque el endpoint sea público. **Bloqueado por
-BR-002.**
-
-#### El gate (M0.2)
-
-`LegacyApiCatalogRepository` (antes `ApiCatalogRepository`) solo se construye
-cuando **las tres** condiciones se cumplen:
+**Primera integración real del proyecto.**
 
 ```
-appEnvironment === 'development'
-  AND mocks apagados
-  AND EXPO_PUBLIC_ENABLE_LEGACY_CATALOG === 'true'
+GET /api/v1/storefront/<company_slug>/products/
+GET /api/v1/storefront/<company_slug>/products/<product_slug>/
+GET /api/v1/storefront/<company_slug>/categories/
 ```
 
-En cualquier otro caso `repositories.catalog` es `null` y la pantalla muestra
-*"Catálogo no disponible todavía"*. En staging y production el flag se **ignora**
-y se reporta como `legacy-catalog-forbidden` en el diagnóstico de configuración.
+Verificado leyendo el código en `master`, no la descripción del PR. El servidor
+resuelve una empresa **activa** desde el slug de la ruta y construye cada
+queryset desde ella; el cliente no filtra nada, porque un cliente que recorta
+filas de otra empresa ya las ha recibido.
 
-Hay además una segunda defensa: `assertLegacyCatalogAllowed()` se ejecuta dentro
-del repositorio y de cada función de endpoint, así que una build bloqueada no
-puede emitir la petición ni construyendo la clase a mano.
+Empresa desconocida, inactiva o malformada devuelven **el mismo 404**, así que el
+endpoint no puede recorrerse para enumerar empresas.
+
+#### Fail-safe
+
+| Situación | Catálogo |
+|---|---|
+| mocks activos | fixtures |
+| tenant + API url resueltos | **real `/api/v1/`** |
+| falta `EXPO_PUBLIC_COMPANY_SLUG` | **ninguno** |
+| falta `EXPO_PUBLIC_API_BASE_URL` | **ninguno** |
+
+Sin tenant no hay storefront que pedir, y caer al piloto serviría el catálogo de
+Black Dog Store dentro de la app de otra empresa. Ninguno de los dos fallos cae a
+mocks.
+
+#### El gate legacy se retiró
+
+M0.2 encerraba `/api/products/` tras `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` porque
+devolvía los productos de todas las empresas. Con el contrato tenant-safe
+publicado, **`LegacyApiCatalogRepository`, su wrapper, `assertLegacyCatalogAllowed`
+y la variable fueron eliminados**, no apagados.
+
+Ese endpoint sigue existiendo en el backend para el frontend web, que lo resuelve
+por Host y para el cual es correcto. Mobile ya no lo llama, y hay un test que
+comprueba que los módulos ya no se pueden importar.
 
 ### Pedidos — `API_PENDING`
 
@@ -183,7 +183,7 @@ y renderiza neutral. **BR-006.**
 
 | Feature | Bloqueo | Trabajo Mobile una vez desbloqueado |
 |---|---|---|
-| Catálogo | BR-002 (+ BR-007) | Escribir el repositorio tenant-safe y **borrar** `LegacyApiCatalogRepository` junto con su gate. No se adapta: se reemplaza. |
+| Catálogo | ~~BR-002 (+ BR-007)~~ **DESBLOQUEADO** | **Hecho en M2.** `V1ApiCatalogRepository` escrito; `LegacyApiCatalogRepository`, su wrapper, su gate y `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` **eliminados**. Se reemplazó, no se adaptó. |
 | Pedidos | BR-001, BR-003 | Escribir `ApiOrderRepository` (el mapeador es directo). |
 | Reparaciones | BR-005 | Escribir `ApiRepairRepository`; el dominio ya está modelado. |
 | Auth | BR-001, BR-007 | Escribir `DjangoAuthTransport` + `ApiAuthRepository` y poner `isBackendAuthAvailable = true` **en el mismo commit**. El coordinator, el vault y el pipeline ya existen y están probados. |
@@ -236,21 +236,59 @@ Ver `docs/LINKING_STRATEGY.md` y las decisiones DEC-MOBILE-004 / DEC-MOBILE-005.
 Un enlace **no integra nada**: lleva a una pantalla cuyo estado de integración es
 el que ya tenía. Un enlace de reparación sigue llegando a datos `MOCK`.
 
+## Catálogo real (M2)
+
+```
+Contrato backend v1            IMPLEMENTADO / VERIFICADO (origin/master b301637b)
+V1ApiCatalogRepository         IMPLEMENTADO / TESTED
+Cliente /api/v1/ (catalog-v1)  IMPLEMENTADO / TESTED
+Tenant en la ruta              IMPLEMENTADO / TESTED
+Política de catálogo fail-safe IMPLEMENTADO / TESTED
+Query keys tenant-scoped       PRESERVADO (M1.1) / TESTED
+Deep link de producto → real   INTEGRADO / TESTED
+Catálogo legacy                ELIMINADO
+EXPO_PUBLIC_ENABLE_LEGACY_CATALOG  ELIMINADO
+```
+
+**Primera integración real del proyecto.** Deja de ser mock: la app llama a
+`/api/v1/storefront/<empresa>/`, donde el servidor resuelve una empresa activa
+desde la ruta y scopea todo el queryset.
+
+Lo que **no** cambió de estado: pedidos, reparaciones, autenticación, marca y
+seguimiento siguen exactamente donde estaban. Un catálogo integrado no integra
+nada más.
+
+Ver `docs/API_CONTRACT.md` y BR-002 / BR-007 en `docs/BACKEND_REQUIREMENTS.md`.
+
 ## Nota de verificación
 
-Lo documentado en `API_CONTRACT.md` se re-verificó en M0.2 contra
-`origin/master` @ `2624d478af5cd3cc90c4b65d9aa4c81bb2439cfc` — sin cambios
-respecto a la auditoría de M0.1.
+**Base actual: `origin/master` @ `b301637b`** (`Merge pull request #1 — feat(api):
+add tenant-safe v1 public catalog`), verificada leyendo el código en `master`.
 
-M0 había leído un working tree en la rama `feat/tenant-aware-commerce` con
-cambios sin commitear, y algunas afirmaciones describían código que **no es
-contrato estable**.
+`master` avanzó mucho desde la base de M0.2 (`2624d478`):
 
-La rama `feat/tenant-aware-commerce` @ `6d8c3e0` **sigue sin mergearse en
-`master`**. Aparentemente contiene `Product.company`, `Category.company` y los
-helpers de storefront tenant-aware, pero eso es `OBSERVED_IN_PROGRESS`: la
-existencia de código en una rama no es una API estable. Mobile **no** se integra
-contra ella.
+| Commit | Qué trajo |
+|---|---|
+| `67d677b` · `6d8c3e0` | Catálogo tenant-aware — `Category.company`, `Product.company`, migraciones 0018–0020 |
+| `59d6daf` | Comercio tenant-aware — `Order.company`, `Coupon.company`, cart/checkout/Stripe, migraciones 0021–0023 |
+| `ab92fe9` · `58188d1` · `1ddd547` | Fundación SaaS completa: inventario multisucursal, configuración por empresa, series internas, CRM de clientes, migraciones 0024–0033 |
+| `2907208` · `b301637b` | `/api/v1/storefront/<company_slug>/…` — el contrato que M2 integra |
 
-El orden es: rama Web → tests → merge a `master` → Mobile reaudita `master` →
-recién entonces integra.
+La rama `feat/tenant-aware-commerce`, que M0.2 clasificó como
+`OBSERVED_IN_PROGRESS` y contra la que Mobile **no** se integró, **ya está
+mergeada en `master`**. Esperar a que lo estuviera fue lo correcto: la existencia
+de código en una rama no es una API estable, y entre aquella rama y `master` de
+hoy hay diez migraciones más y una reescritura de `tenancy.py`.
+
+El orden se respetó: rama Web → tests → merge a `master` → Mobile reaudita
+`master` → recién entonces integra.
+
+### Qué se verificó antes de integrar
+
+- `feat/tenant-aware-commerce` es ancestro de `origin/master` (`git merge-base`)
+- `backend/store/v1_views.py` existe en `master`
+- `backend/urls.py` monta `path('api/v1/', include('store.v1_urls'))`
+- Suite backend en `master`: **1504 tests, OK**
+- `makemigrations --check --dry-run`: sin cambios pendientes
+
+Nada de esto se dio por bueno leyendo la descripción de un PR.

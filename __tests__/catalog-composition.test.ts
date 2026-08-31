@@ -1,27 +1,37 @@
-import type { LegacyCatalogPolicy } from '@/config/env';
+import type { CatalogPolicy } from '@/config/env';
 
 /**
- * M0.2 — what the composition root actually builds, per environment.
+ * What the composition root actually builds, per configuration.
  *
- * `legacyCatalogPolicy` is resolved once at import time, so each case re-imports
- * the module graph with a different policy. That is the only honest way to test
- * a decision that is made at module scope.
+ * `catalogPolicy` is resolved once at import time, so each case re-imports the
+ * module graph with a different policy. That is the only honest way to test a
+ * decision made at module scope.
+ *
+ * M2 rewrote this file. It used to assert that a release build got NO catalogue,
+ * because the only real endpoint leaked every company's products. Now a release
+ * build gets the tenant-safe one — and the cases that must still produce nothing
+ * are the ones where this build cannot name a storefront at all.
  */
 
-const MOCK_POLICY: LegacyCatalogPolicy = {
+const MOCK_POLICY: CatalogPolicy = {
   source: 'mock',
   decision: 'mock-active',
   reason: 'mocks',
 };
-const LEGACY_POLICY: LegacyCatalogPolicy = {
-  source: 'legacy-api',
-  decision: 'legacy-development-explicit',
-  reason: 'dev opt-in',
+const V1_POLICY: CatalogPolicy = {
+  source: 'api-v1',
+  decision: 'api-v1-active',
+  reason: 'real',
 };
-const BLOCKED_POLICY: LegacyCatalogPolicy = {
+const NO_TENANT_POLICY: CatalogPolicy = {
   source: 'none',
-  decision: 'legacy-forbidden-release',
-  reason: 'release',
+  decision: 'unavailable-missing-tenant',
+  reason: 'sin empresa',
+};
+const NO_API_POLICY: CatalogPolicy = {
+  source: 'none',
+  decision: 'unavailable-missing-api-url',
+  reason: 'sin API',
 };
 
 /**
@@ -31,27 +41,25 @@ const BLOCKED_POLICY: LegacyCatalogPolicy = {
  * `--experimental-vm-modules` for the latter, and this project has no reason to
  * turn that on.
  */
-function loadRepositories(policy: LegacyCatalogPolicy) {
+function loadRepositories(policy: CatalogPolicy) {
   let repositories!: typeof import('@/repositories').repositories;
   let MockCatalogRepository!: new () => unknown;
-  let LegacyApiCatalogRepository!: new () => unknown;
+  let V1ApiCatalogRepository!: new () => unknown;
 
   jest.isolateModules(() => {
     jest.doMock('@/config/env', () => ({
       ...jest.requireActual('@/config/env'),
-      legacyCatalogPolicy: policy,
-      isLegacyCatalogAllowed: policy.source === 'legacy-api',
+      catalogPolicy: policy,
+      isRealCatalogActive: policy.source === 'api-v1',
       useMockData: policy.source === 'mock',
       isPilotTenant: true,
     }));
     ({ repositories } = require('@/repositories'));
     ({ MockCatalogRepository } = require('@/repositories/mock/mock-catalog-repository'));
-    ({ LegacyApiCatalogRepository } = require(
-      '@/repositories/api/legacy-api-catalog-repository'
-    ));
+    ({ V1ApiCatalogRepository } = require('@/repositories/api/v1-api-catalog-repository'));
   });
 
-  return { repositories, MockCatalogRepository, LegacyApiCatalogRepository };
+  return { repositories, MockCatalogRepository, V1ApiCatalogRepository };
 }
 
 afterEach(() => {
@@ -67,7 +75,7 @@ describe('composition root — catalogue', () => {
   });
 
   it('keeps the mock catalogue fully working', async () => {
-    // Regression guard: the gate must not break normal development.
+    // Regression guard: none of this may break normal development.
     const { repositories } = loadRepositories(MOCK_POLICY);
 
     const products = await repositories.catalog!.listProducts({});
@@ -77,23 +85,40 @@ describe('composition root — catalogue', () => {
     expect(categories.length).toBeGreaterThan(0);
   });
 
-  it('builds the LEGACY repository only for an explicit development opt-in', () => {
-    const { repositories, LegacyApiCatalogRepository } = loadRepositories(LEGACY_POLICY);
+  it('builds the REAL v1 repository when the tenant and API url resolve', () => {
+    const { repositories, V1ApiCatalogRepository } = loadRepositories(V1_POLICY);
 
-    expect(repositories.catalog).toBeInstanceOf(LegacyApiCatalogRepository);
+    expect(repositories.catalog).toBeInstanceOf(V1ApiCatalogRepository);
   });
 
-  it('builds NO catalogue repository in a release build', () => {
-    // The M0.2 fix. Before it, this slot held a LegacyApiCatalogRepository as
-    // soon as EXPO_PUBLIC_USE_MOCK_DATA was false.
-    const { repositories } = loadRepositories(BLOCKED_POLICY);
+  it('builds NO catalogue when this build has no tenant', () => {
+    // The failure this prevents: falling back to the pilot's slug and serving
+    // Black Dog Store's catalogue inside another company's app.
+    const { repositories } = loadRepositories(NO_TENANT_POLICY);
 
     expect(repositories.catalog).toBeNull();
   });
 
-  it('never builds the legacy repository when it is blocked', () => {
-    const { repositories, LegacyApiCatalogRepository } = loadRepositories(BLOCKED_POLICY);
+  it('builds NO catalogue when there is no API url', () => {
+    const { repositories } = loadRepositories(NO_API_POLICY);
 
-    expect(repositories.catalog).not.toBeInstanceOf(LegacyApiCatalogRepository);
+    expect(repositories.catalog).toBeNull();
+  });
+
+  it('never falls back to MOCKS when the real catalogue is unavailable', () => {
+    // Fabricated products shown to real customers is a worse outcome than an
+    // empty screen that says so.
+    for (const policy of [NO_TENANT_POLICY, NO_API_POLICY]) {
+      const { repositories, MockCatalogRepository } = loadRepositories(policy);
+      expect(repositories.catalog).not.toBeInstanceOf(MockCatalogRepository);
+    }
+  });
+
+  it('the legacy catalogue module no longer exists', () => {
+    // M2 deleted it rather than switching it off. A second, unsafe path that
+    // still exists is a path that eventually gets used.
+    expect(() => require('@/repositories/api/legacy-api-catalog-repository')).toThrow();
+    expect(() => require('@/api/endpoints/legacy-catalog')).toThrow();
+    expect(() => require('@/api/legacy-catalog-guard')).toThrow();
   });
 });
