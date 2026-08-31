@@ -190,7 +190,9 @@ Sí existe en el **modelo**, también en `master` (`Order.FulfillmentStatus`:
 
 ---
 
-## Autenticación · `VERIFIED_STABLE_MASTER`, incompatible con Mobile
+## Autenticación
+
+### VERIFIED_STABLE_MASTER — el contrato web real
 
 Rutas existentes en `master` (`store/auth_views.py`):
 
@@ -203,16 +205,59 @@ POST /api/auth/password-reset/request/    POST /api/auth/password-reset/confirm/
 POST /api/auth/change-password/
 ```
 
-En `master`, `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES` contiene
-**únicamente** `store.authentication.CookieJWTAuthentication`. `LoginView`
-escribe los JWT en cookies HttpOnly y deliberadamente **no** los devuelve en el
-body; `CookieJWTAuthentication` ejecuta `enforce_csrf` en toda petición
-autenticada.
+`REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES` contiene **únicamente**
+`store.authentication.CookieJWTAuthentication`.
 
-Todo esto funciona — **para un navegador**. La app **no llama a ninguno de estos
-endpoints**. Ver `MOBILE_AUTH.md`.
+`POST /api/auth/login/` — verificado:
 
----
+```json
+{ "detail": "Login correcto.", "user": { "id": 1, "username": "...", "email": "...", "first_name": "...", "last_name": "..." } }
+```
+
+Los JWT salen **solo** en cookies HttpOnly (`_set_auth_cookies`). El body no los
+contiene, y eso es deliberado.
+
+Detalles verificados que corrigen suposiciones de M0:
+
+| Detalle | Realidad en `master` |
+|---|---|
+| Campo de login | `TokenObtainPairSerializer` sobre `auth.User` → **`username`**, no email |
+| `role` en el login | **No aparece.** `UserSerializer` es `[id, username, email, first_name, last_name]` |
+| `role` disponible en | `GET /api/auth/me/`, que lo añade junto a `is_staff` |
+| Token de verificación | `secrets.token_urlsafe(48)` — **opaco y largo**, no un código de 6 dígitos |
+| Rotación | `ROTATE_REFRESH_TOKENS: True`, `BLACKLIST_AFTER_ROTATION: True` |
+| Throttle de login | `LoginThrottle` (`AnonRateThrottle`, scope `login`, 5/min) |
+| Blacklist | `rest_framework_simplejwt.token_blacklist` instalada |
+
+### PROPOSED_MOBILE_V1 — lo que Mobile pide
+
+**PROPUESTA. No existe. No se llama.** Ver BR-001 y BR-007.
+
+```
+POST /api/v1/auth/login/
+POST /api/v1/auth/refresh/
+POST /api/v1/auth/logout/
+```
+
+Respuesta propuesta para login y refresh:
+
+```json
+{ "access": "<jwt>", "refresh": "<jwt>", "expires_in": 1800, "user": { "...": "..." } }
+```
+
+El mapeador `toTokenPair()` ya existe en `src/auth/tokens/token-types.ts` y
+convierte ese snake_case al modelo interno. **Mobile no afirma que Django
+devuelva camelCase**: el modelo interno es camelCase, el contrato de cable es
+snake_case, y la conversión es explícita.
+
+### API_PENDING — estado Mobile
+
+La app **no llama a ningún endpoint de autenticación**. `authenticatedRequest()`
+lanza `AuthUnavailableError` antes de tocar la red mientras no exista contrato,
+y `assertBearerAllowed()` impide que un Bearer llegue a `/api/auth/*`,
+`/api/admin/*`, `/api/me/*` o `/api/products/*`.
+
+Ver `MOBILE_AUTH.md`.
 
 ## Reparaciones · no existe
 
@@ -234,6 +279,24 @@ progreso. Propuesta completa en **BR-005**.
 
 Mobile propone que su contrato viva en `/api/v1/`, **aditivo** y sin renombrar
 ni modificar `/api/` (contrato legacy del frontend web). Ver **BR-007**.
+
+### Compatibilidad, una vez Mobile consuma `/api/v1/`
+
+Una versión antigua de la app sigue instalada en teléfonos que nadie va a
+actualizar. Por eso, a partir del momento en que Mobile consuma `/api/v1/`:
+
+- **no eliminar campos** de una respuesta;
+- **no renombrar campos**;
+- los cambios deben ser **aditivos**;
+- un breaking change exige `/api/v2/`, no una modificación de `/api/v1/`.
+
+### OpenAPI · `PROPUESTA PRIORITARIA`
+
+Cuando `/api/v1/` exista, Backend debería publicar un esquema OpenAPI. Mobile
+generaría a partir de él los tipos de cable y, posiblemente, el cliente — lo que
+elimina la clase entera de bugs "el mapeador asumía otra cosa".
+
+M1 **no** instala generadores: sin esquema no hay nada que generar.
 
 Hasta que exista, el catálogo legacy `/api/products/` y `/api/categories/`
 **no se considera el contrato SaaS definitivo de Mobile**: hoy es global,

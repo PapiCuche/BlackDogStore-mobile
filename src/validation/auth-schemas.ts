@@ -56,12 +56,27 @@ export const forgotPasswordSchema = z.object({ email });
 
 export type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 
-/** Django issues a 6-digit code for email verification flows. */
+/**
+ * Email verification token.
+ *
+ * CORRECTED IN M1. This used to require exactly six digits, which the real
+ * backend can never produce: verified on `origin/master` `2624d478`,
+ * `AccountToken.make()` issues `secrets.token_urlsafe(48)` and
+ * `VerifyEmailSerializer` accepts it as a plain `CharField` named `token`.
+ * A six-digit rule would have rejected every genuine token.
+ *
+ * The realistic flow is a deep link carrying the token, not a typed code — but
+ * until BR-001 settles the mobile verification contract, the field accepts the
+ * token shape the backend actually mints.
+ */
 export const verifyEmailSchema = z.object({
   code: z
     .string()
     .trim()
-    .regex(/^\d{6}$/, 'El código tiene 6 dígitos.'),
+    .min(16, 'El código de verificación no es válido.')
+    .max(256, 'El código de verificación no es válido.')
+    // `token_urlsafe` yields base64url: letters, digits, '-' and '_'.
+    .regex(/^[A-Za-z0-9_-]+$/, 'El código de verificación no es válido.'),
 });
 
 export type VerifyEmailFormValues = z.infer<typeof verifyEmailSchema>;

@@ -12,6 +12,16 @@ import { useTheme } from '@/theme/theme-provider';
  * the way. Keeping this decision in a route (rather than in a conditional
  * inside the root layout) means Expo Router owns the navigation state, and the
  * back stack after the redirect is correct.
+ *
+ * M1 — only `authenticated` opens the app. Every other state routes to the auth
+ * stack, which then decides what to render:
+ *
+ *   unauthenticated          → the sign-in form
+ *   unavailable              → "acceso no disponible" (no form at all)
+ *   temporarily-unavailable  → credentials kept, server unreachable
+ *
+ * Routing all three to the same place is deliberate: the auth stack already
+ * owns that decision, and duplicating it here would let the two disagree.
  */
 export default function BootstrapScreen() {
   const { status } = useAuth();

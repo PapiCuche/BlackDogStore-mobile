@@ -18,7 +18,13 @@ archivo discrepan, **el archivo tiene razón**.
 | Detalle de pedido | IMPLEMENTADO | API_PENDING | MOCK | TESTED UI | PARCIAL |
 | Reparaciones | IMPLEMENTADO | MOCK | MOCK | TESTED UI | PARCIAL |
 | Detalle de reparación | IMPLEMENTADO | MOCK | MOCK | TESTED UI | PARCIAL |
-| Autenticación | IMPLEMENTADO (UI) | API_PENDING | MOCK | TESTED (validación) | PARCIAL |
+| Autenticación (UI) | IMPLEMENTADO | API_PENDING | MOCK | TESTED | PARCIAL |
+| Auth mock (development) | IMPLEMENTADO | n/a | MOCK | TESTED | IMPLEMENTADO |
+| Auth mock (production) | **BLOQUEADO** | n/a | n/a | TESTED | IMPLEMENTADO |
+| Token lifecycle | IMPLEMENTADO | API_PENDING | n/a | TESTED | IMPLEMENTADO |
+| Access token memory-only | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
+| Refresh en SecureStore | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
+| Refresh coordinator | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Marca / multiempresa | IMPLEMENTADO | MOCK | MOCK | TESTED | PARCIAL |
 | Design system | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Tema claro/oscuro/sistema | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
@@ -114,8 +120,42 @@ completa en **BR-005**.
 ### Autenticación — `API_PENDING`
 
 Cinco pantallas terminadas, validación real con Zod, estados de envío y error
-reales. Ningún endpoint llamado. Ver `MOBILE_AUTH.md` y **BR-001** (revisado en
-M0.1: autenticación Bearer **acotada a `/api/v1/`**, nunca global).
+reales. **Ningún endpoint llamado.**
+
+Estado detallado tras M1:
+
+```
+Auth UI                       IMPLEMENTADO
+Mock Auth development         IMPLEMENTADO
+Mock Auth production          BLOQUEADO
+Real Mobile Auth              API_PENDING
+Token lifecycle foundation    IMPLEMENTADO
+Access memory-only            IMPLEMENTADO
+Refresh secure storage        IMPLEMENTADO
+Refresh coordinator           IMPLEMENTADO
+Single-flight refresh         TESTED
+Rotation handling             TESTED
+401 retry once                TESTED
+403 no refresh                TESTED
+Logout race safety            TESTED
+Tenant authorization          PENDIENTE BACKEND
+/api/v1/auth                  PROPUESTA / API_PENDING
+Web auth                      SIN CAMBIOS
+```
+
+**Qué sirve cada build:**
+
+| Entorno | Autenticación |
+|---|---|
+| development | mock (o `unavailable` si se apagan los mocks) |
+| staging | `unavailable`, salvo opt-in explícito de mocks |
+| production | **`unavailable` siempre** — nunca mock |
+
+Con `unavailable` la app **no muestra formulario**: una pantalla de acceso que
+no puede funcionar le enseña al usuario que sus credenciales son incorrectas.
+
+Ver `MOBILE_AUTH.md` y **BR-001** (autenticación Bearer **acotada a `/api/v1/`**,
+nunca global).
 
 ### Marca / multiempresa — `MOCK`
 
@@ -131,7 +171,7 @@ y renderiza neutral. **BR-006.**
 | Catálogo | BR-002 (+ BR-007) | Escribir el repositorio tenant-safe y **borrar** `LegacyApiCatalogRepository` junto con su gate. No se adapta: se reemplaza. |
 | Pedidos | BR-001, BR-003 | Escribir `ApiOrderRepository` (el mapeador es directo). |
 | Reparaciones | BR-005 | Escribir `ApiRepairRepository`; el dominio ya está modelado. |
-| Auth | BR-001, BR-007 | Escribir `ApiAuthRepository` + Bearer para `/api/v1/` + refresh. |
+| Auth | BR-001, BR-007 | Escribir `DjangoAuthTransport` + `ApiAuthRepository` y poner `isBackendAuthAvailable = true` **en el mismo commit**. El coordinator, el vault y el pipeline ya existen y están probados. |
 | Marca | BR-006 | Escribir `ApiCompanyRepository`; el fixture queda como fallback del piloto. |
 
 El patrón es el mismo en los cinco casos: **una clase nueva y una línea en el

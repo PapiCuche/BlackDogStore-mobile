@@ -20,6 +20,17 @@ jest.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Success: 'success', Error: 'error', Warning: 'warning' },
 }));
 
+// The Keychain/Keystore is a native module. Mocked at the boundary so the
+// wrapper in `src/storage/secure-storage.ts` — which is ours — is what gets
+// tested, rather than Expo's internals.
+jest.mock('expo-secure-store', () => ({
+  setItemAsync: jest.fn().mockResolvedValue(undefined),
+  getItemAsync: jest.fn().mockResolvedValue(null),
+  deleteItemAsync: jest.fn().mockResolvedValue(undefined),
+  isAvailableAsync: jest.fn().mockResolvedValue(true),
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
+}));
+
 // SF Symbols / Material Symbols are rendered by the OS. The stub keeps the
 // component tree shaped the same without pulling in a native view.
 jest.mock('expo-symbols', () => {

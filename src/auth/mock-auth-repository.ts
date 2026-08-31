@@ -1,31 +1,38 @@
-import type { Customer } from '@/domain/customers/types';
-
 import type { AuthRepository } from './auth-repository';
-import type { AuthSession, RegistrationDetails, SignInCredentials } from './types';
+import type { AuthSession, RegistrationDetails, SignInCredentials, UserProfile } from './types';
 
 /**
  * A development-only stand-in for authentication.
  *
- * It accepts ANY well-formed credentials and returns a session. That is the
- * point: it lets the whole app be navigated while the real contract is being
- * designed, and it is honest about being fake — `mode` is `'mock'` and the UI
- * says so.
+ * It accepts ANY well-formed credentials. That is the point: it lets the whole
+ * app be navigated while the real contract is designed, and it is honest about
+ * being fake — `mode` is `'mock'` and the UI shows a "Modo demo" badge.
  *
- * What it deliberately does NOT do:
- *   - talk to Django,
- *   - persist anything (a mock session must not survive a relaunch and be
- *     mistaken for a real one),
- *   - touch SecureStore. There is no token here to store, and writing a fake
- *     one would train the codebase to expect a shape that may not be right.
+ * ⚠️  It is NOT self-gating. Whether this class may exist at all is decided by
+ * `resolveAuthRepository` from `AuthRuntimePolicy`, and in production the answer
+ * is always no. Putting the environment check inside the class would scatter
+ * the rule; keeping it in the composition root means there is one place to
+ * audit.
+ *
+ * What it deliberately never does:
+ *   - talk to Django;
+ *   - persist a session (a fake session must not survive a relaunch and be
+ *     mistaken for a real one);
+ *   - touch SecureStore or mint a token-shaped string. Writing a fake token
+ *     would train the codebase — and its tests — to expect a shape that may
+ *     turn out to be wrong, and would put a credential-looking value into the
+ *     Keychain for no reason.
  */
 export class MockAuthRepository implements AuthRepository {
   async restoreSession(): Promise<AuthSession | null> {
-    // Intentionally always null on cold start. See the class comment.
+    // Always null. See the class comment: no persistence, by design.
     return null;
   }
 
   async signIn(credentials: SignInCredentials): Promise<AuthSession> {
-    return buildMockSession(credentials.email);
+    // `credentials.password` is read by nothing. It is not stored, not hashed,
+    // not echoed back on the session, and not logged.
+    return buildMockSession(credentials.identifier);
   }
 
   async register(details: RegistrationDetails): Promise<AuthSession> {
@@ -33,22 +40,31 @@ export class MockAuthRepository implements AuthRepository {
   }
 
   async signOut(): Promise<void> {
-    // Nothing to clear: this implementation deliberately persists nothing.
+    // Nothing to clear: this implementation persists nothing.
   }
 }
 
-function buildMockSession(email: string, firstName?: string): AuthSession {
-  const localPart = email.split('@')[0] ?? 'invitado';
-  const customer: Customer = {
+function buildMockSession(identifier: string, firstName?: string): AuthSession {
+  const localPart = identifier.split('@')[0] || 'invitado';
+  const user: UserProfile = {
     id: 0,
     username: localPart,
-    email,
-    // Capitalise the local part so the Home greeting reads naturally rather
-    // than showing a raw handle.
+    email: identifier.includes('@') ? identifier : `${localPart}@example.com`,
+    // Capitalised so the Home greeting reads naturally instead of showing a
+    // raw handle.
     firstName: firstName?.trim() || localPart.charAt(0).toUpperCase() + localPart.slice(1),
     lastName: '',
     role: 'customer',
     isEmailVerified: true,
   };
-  return { customer, mode: 'mock', expiresAt: null };
+
+  return {
+    user,
+    mode: 'mock',
+    expiresAt: null,
+    // No tenant: a mock session has no server-validated company context, and
+    // inventing one would be exactly the "slug equals authority" mistake the
+    // tenant model exists to prevent.
+    tenant: null,
+  };
 }

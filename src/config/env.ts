@@ -319,6 +319,27 @@ export const isApiConfigured: boolean = apiBaseUrl.length > 0;
 /** Request timeout in milliseconds. Mobile networks stall; they rarely fail fast. */
 export const apiTimeoutMs = 15_000;
 
+// ─── Mobile auth contract availability ──────────────────────────────────────
+
+/**
+ * Whether a NATIVE mobile authentication contract exists and is implemented.
+ *
+ * This is a SOURCE-LEVEL CONSTANT, deliberately not an environment variable.
+ *
+ * An env var would let a build claim the contract is ready when no code exists
+ * to speak it — exactly the class of mistake M0.1 and M0.2 closed for mocks and
+ * for the legacy catalogue. This flag may only flip to `true` in the same
+ * commit that ships an `ApiAuthRepository` and its transport, because that is
+ * the only moment the claim becomes true.
+ *
+ * Verified on `PapiCuche/BlackDogStore-web` @ `origin/master` `2624d478`:
+ * `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES` contains only
+ * `store.authentication.CookieJWTAuthentication`, `LoginView` returns the JWTs
+ * in HttpOnly cookies and not in the body, and there is no `/api/v1/` route of
+ * any kind. See BR-001 and docs/MOBILE_AUTH.md.
+ */
+export const isBackendAuthAvailable = false as boolean;
+
 // ─── Configuration health ───────────────────────────────────────────────────
 
 export type ConfigurationIssue = {

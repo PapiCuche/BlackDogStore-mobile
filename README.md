@@ -307,7 +307,15 @@ Dos cosas que conviene tener presentes al leer esa documentación:
 - Nunca en el repositorio: `.env`, keystores, `.p8`, `.p12`, provisioning
   profiles, certificados, `credentials.json`. Todo cubierto por `.gitignore`.
 - La app no guarda ni registra contraseñas.
-- **Autenticación real: PENDIENTE.** Ver `docs/MOBILE_AUTH.md`.
+- **Autenticación real: API_PENDING.** Ver `docs/MOBILE_AUTH.md`.
+- **El access token nunca se persiste** — solo memoria. El refresh token sí, en
+  Keychain/Keystore, y es la única credencial que se guarda.
+- **Auth simulada imposible en production.** `development` usa mock, `staging`
+  solo con opt-in explícito, `production` nunca: muestra "acceso no disponible"
+  en lugar de un formulario que no puede funcionar.
+- Un token nunca llega a un log ni a un mensaje de error (`src/auth/redact.ts`).
+- Un `Authorization: Bearer` no puede salir hacia `/api/auth/*`, `/api/admin/*`,
+  `/api/me/*` ni `/api/products/*` (`src/api/api-scope.ts`).
 
 ## EAS
 
@@ -358,7 +366,7 @@ Las dependencias conservan sus propias licencias dentro de sus paquetes en
 | [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) | Endpoints verificados |
 | [`docs/BACKEND_REQUIREMENTS.md`](docs/BACKEND_REQUIREMENTS.md) | Propuestas de Mobile al Backend |
 | [`docs/INTEGRATION_STATUS.md`](docs/INTEGRATION_STATUS.md) | Estado real por feature |
-| [`docs/MOBILE_AUTH.md`](docs/MOBILE_AUTH.md) | Por qué la auth está pendiente |
+| [`docs/MOBILE_AUTH.md`](docs/MOBILE_AUTH.md) | Arquitectura de auth, ciclo de vida de tokens y threat model |
 
 Decisiones de arquitectura registradas: **DEC-MOBILE-001** (navegación por tabs
 estable en lugar de la API alpha de native tabs), en `docs/ARCHITECTURE.md`.

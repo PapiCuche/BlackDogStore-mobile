@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
 import { Button, EmptyState, icons, Input, Screen } from '@/design-system';
+import { useAuth } from '@/auth/auth-provider';
 import { AuthScreenShell } from '@/features/auth/auth-screen-shell';
+import { AuthUnavailableScreen } from '@/features/auth/auth-unavailable';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { hapticSuccess } from '@/utils/haptics';
 import { forgotPasswordSchema, type ForgotPasswordFormValues } from '@/validation/auth-schemas';
@@ -20,6 +22,7 @@ import { forgotPasswordSchema, type ForgotPasswordFormValues } from '@/validatio
  * turn this form into an account-enumeration oracle.
  */
 export default function ForgotPasswordScreen() {
+  const { policy } = useAuth();
   const [isSent, setIsSent] = useState(false);
 
   const { control, handleSubmit, formState } = useForm<ForgotPasswordFormValues>({
@@ -32,6 +35,14 @@ export default function ForgotPasswordScreen() {
     hapticSuccess();
     setIsSent(true);
   });
+
+  // Placed AFTER every hook: an early return above them would change the
+  // hook order between renders. No auth mechanism in this build means no
+  // form — a field that cannot succeed teaches the user their password is
+  // wrong. See src/auth/auth-policy.ts.
+  if (policy.mode === 'unavailable') {
+    return <AuthUnavailableScreen title="Recuperación no disponible" message="Estamos preparando la conexión segura de esta aplicación con tu cuenta." />;
+  }
 
   if (isSent) {
     return (

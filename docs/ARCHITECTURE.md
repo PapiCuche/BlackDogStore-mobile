@@ -41,8 +41,15 @@ src/
 │   ├── products/[slug].tsx · repairs/[id].tsx · orders/[id].tsx
 │   └── +not-found.tsx
 │
-├── api/                    HTTP. client.ts · errors.ts · endpoints/catalog.ts
-├── auth/                   Sesión: types · repositorio · mock · provider
+├── api/                    HTTP. client.ts · errors.ts · api-scope.ts
+│                           authenticated-request.ts · endpoints/
+├── auth/                   Sesión, política y ciclo de vida de tokens
+│   ├── auth-policy.ts      Qué mecanismo permite esta build (fail-safe)
+│   ├── auth-repository-factory.ts   Composition root de auth
+│   ├── refresh-coordinator.ts       Single-flight + rotación + epoch
+│   ├── redact.ts           Nada de esto llega a un log
+│   ├── tokens/             access (memoria) · vault (SecureStore) · tipos
+│   └── transport/          Interfaz + FakeAuthTransport (solo tests)
 ├── config/                 env.ts (entorno) · integration-status.ts
 ├── design-system/          Componentes reutilizables. Barrel en index.ts
 ├── domain/                 Tipos y REGLAS. company · products · orders · repairs · customers
@@ -257,6 +264,37 @@ Dos capas, a propósito:
 anterior parecía "el contrato API oficial del producto", y así es como algo así
 acaba encendido en un release.
 
+## Autenticación (M1)
+
+La fundación completa del ciclo de vida de tokens, **sin backend**. El detalle
+está en `docs/MOBILE_AUTH.md`; lo estructural es esto:
+
+```
+AuthProvider  ← estado de sesión + epoch anti-carrera
+   └── resolveAuthRepository()   ← composition root
+          ├── MockAuthRepository   development / staging opt-in
+          ├── ApiAuthRepository    NO EXISTE (BR-001)
+          └── null                 → status 'unavailable'
+
+RefreshCoordinator   single-flight · rotación · epoch
+   ├── AccessTokenStore    memoria. Nunca disco, nunca React.
+   └── CredentialVault     SecureStore. Solo el refresh token.
+```
+
+Cuatro decisiones que gobiernan el resto:
+
+1. **La política decide, no el componente.** `AuthProvider` construía
+   `new MockAuthRepository()` como parámetro por defecto, así que un release
+   aceptaba cualquier contraseña. Ahora `resolveAuthRuntimePolicy` decide y en
+   production la respuesta es siempre `unavailable`.
+2. **El access token vive en memoria.** Dura 30 minutos; persistirlo casi no
+   ahorra nada y lo que entra al Keychain sobrevive al proceso y a los backups.
+3. **Sesión ≠ tokens ≠ perfil.** El estado de React acaba en volcados de
+   devtools y reportes de crash: aceptable para un nombre, fatal para un token.
+4. **Un epoch por sesión.** Las carreras de auth solo aparecen con red lenta y
+   todas terminan igual: una sesión que el usuario no pidió. Cada mutación sube
+   el epoch; cada finalización lo comprueba.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -282,6 +320,11 @@ un error 500.
 | Repositorios **nulables** | Un build que no puede servir mocks no debe tener de dónde sacarlos. |
 | Config estricta por defecto en release | Una variable olvidada no puede volver permisivo un build de tienda. |
 | Sin `X-Company-Slug` en el cliente | BR-002 no está aprobado; no se finge un contrato inexistente. |
+| Auth mock imposible en production | Una app distribuible no acepta credenciales que no puede verificar. |
+| Access token solo en memoria | Corta vida; el Keychain es para lo que debe sobrevivir al proceso. |
+| `isBackendAuthAvailable` como constante | Una variable de entorno permitiría afirmar que hay contrato sin código que lo hable. |
+| Persistir el refresh **antes** de instalar el access | Tras la rotación el token viejo ya está en blacklist; un fallo de escritura después sería invisible hasta la expiración. |
+| Epoch en provider y coordinator | Es lo que impide que un resultado tardío resucite una sesión cerrada. |
 | Catálogo legacy bloqueado fuera de desarrollo | El endpoint estable no aísla por empresa: sería una fuga cross-tenant. |
 | Guardia repetida antes de la llamada de red | El composition root es un solo punto de decisión, y por tanto un solo punto de fallo. |
 | Clasificación de timeout por flag, no por excepción | La forma del error de un abort no es portable entre runtimes. |
