@@ -116,6 +116,29 @@ export const queryKeys = {
     [...internalPrefix(scope), 'orders', JSON.stringify(params)] as const,
   internalOrder: (scope: QueryScope, id: number) =>
     [...internalPrefix(scope), 'order', id] as const,
+
+  // Inventory keys carry the BRANCH, because the same person asking about two
+  // shops is asking two different questions. Without it, switching branches
+  // would read the previous shop's numbers out of the cache and show them under
+  // the new shop's name — a wrong figure that looks authoritative.
+  // `null` is its own slot: "everything I may see" is not branch zero.
+  internalInventorySummary: (scope: QueryScope, branchId: number | null) =>
+    [...internalPrefix(scope), 'inventory', 'summary', branchId] as const,
+  internalInventoryStock: (
+    scope: QueryScope,
+    branchId: number | null,
+    params: Record<string, unknown> = {},
+  ) =>
+    [...internalPrefix(scope), 'inventory', 'stock', branchId, JSON.stringify(params)] as const,
+  internalInventoryMovements: (
+    scope: QueryScope,
+    branchId: number | null,
+    params: Record<string, unknown> = {},
+  ) =>
+    [...internalPrefix(scope), 'inventory', 'movements', branchId, JSON.stringify(params)] as const,
+  /** The whole module, for invalidation after a movement. */
+  internalInventoryRoot: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'inventory'] as const,
 } as const;
 
 /**

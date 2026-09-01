@@ -59,9 +59,9 @@ archivo discrepan, **el archivo tiene razón**.
 | Área interna (shell) | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Pedidos internos de venta | **IMPLEMENTADO** | **API_READY** (`/api/v1/internal/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Fulfillment interno | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
-| Inventario interno | NO IMPLEMENTADO | API_PENDING (v1) | n/a | n/a | **PENDIENTE** |
+| Inventario interno | **IMPLEMENTADO** | **API_READY** (`/api/v1/internal/<slug>/inventory/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Administración de plataforma | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
-| APIs internas de negocio | **PARCIAL** — ventas sí; inventario y servicio no | **PARCIAL** | **PARCIAL** | **TESTED** | **PARCIAL** |
+| APIs internas de negocio | **PARCIAL** — ventas e inventario sí; servicio no | **PARCIAL** | **PARCIAL** | **TESTED** | **PARCIAL** |
 | Carrito móvil (público) | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
 | Checkout autenticado móvil | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Stripe Checkout alojado | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
@@ -204,7 +204,8 @@ y renderiza neutral. **BR-006.**
 |---|---|---|
 | Catálogo | ~~BR-002 (+ BR-007)~~ **DESBLOQUEADO** | **Hecho en M2.** `V1ApiCatalogRepository` escrito; `LegacyApiCatalogRepository`, su wrapper, su gate y `EXPO_PUBLIC_ENABLE_LEGACY_CATALOG` **eliminados**. Se reemplazó, no se adaptó. |
 | Pedidos (cliente) | ~~BR-001, BR-003~~ **DESBLOQUEADO** | **Hecho en M4.** `V1CustomerOrderRepository` sobre `/api/v1/customer/`. BR-003 cerrado en el serializer v1. |
-| Pedidos (interno) | **PENDIENTE** | Necesita `/api/v1/internal/<empresa>/orders/` con `sales.orders.view`. Es otra superficie, no un ensanche de esta. |
+| Pedidos (interno) | ~~superficie interna~~ **DESBLOQUEADO** | **Hecho en M6.** `V1InternalSalesRepository` sobre `/api/v1/internal/`. Otra superficie, no un ensanche de la de cliente. |
+| Inventario (interno) | ~~superficie interna~~ **DESBLOQUEADO** | **Hecho en M7A.** `V1InternalInventoryRepository` sobre `/api/v1/internal/<empresa>/inventory/`. Tercera puerta: la sucursal. |
 | Reparaciones | BR-005 | Escribir `ApiRepairRepository`; el dominio ya está modelado. |
 | Auth (sesión) | ~~BR-001, BR-007~~ **DESBLOQUEADO** | **Hecho en M3.** `DjangoAuthTransport` + `ApiAuthRepository` escritos, `isBackendAuthAvailable = true` en el mismo commit. El coordinator, el vault y el pipeline no se tocaron: la apuesta de M1 se sostuvo. |
 | Auth (cuenta) | **BR-001B** | Escribir los flujos de registro/verificación/reset cuando existan endpoints nativos. Hoy la app los oculta en modo backend. |
@@ -367,7 +368,7 @@ Fulfillment interno            INTEGRADO / TESTED
 Shell interno separado         IMPLEMENTADO / TESTED
 Cache por audiencia            IMPLEMENTADO / TESTED
 Revocación de permiso          IMPLEMENTADO / TESTED
-Inventario interno             PENDIENTE
+Inventario interno             INTEGRADO / TESTED (M7A)
 Servicio técnico               PENDIENTE / BR-005
 Administración de plataforma   PENDIENTE
 ```
@@ -411,3 +412,35 @@ El orden se respetó: rama Web → tests → merge a `master` → Mobile reaudit
 - `makemigrations --check --dry-run`: sin cambios pendientes
 
 Nada de esto se dio por bueno leyendo la descripción de un PR.
+
+## Inventario interno (M7A)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master fd6ea01)
+Cliente de inventario v1       IMPLEMENTADO / TESTED
+Resumen por sucursal           INTEGRADO / TESTED
+Stock por sucursal             INTEGRADO / TESTED
+Kardex                         INTEGRADO / TESTED
+Ajuste manual                  INTEGRADO / TESTED
+Alcance por sucursal           IMPLEMENTADO / TESTED
+Cache con sucursal en la clave IMPLEMENTADO / TESTED
+Transferencias y recuentos     NO EXPUESTOS (a propósito, backend y app)
+```
+
+**La sucursal es la tercera puerta.** Membresía → 404. Capability → 403.
+Sucursal ajena → **404 otra vez**, y la app lo traduce a `BranchOutOfScopeError`
+en lugar de reutilizar el error de membresía: perder el acceso a una tienda no es
+perder el área interna.
+
+**La clave de caché lleva la sucursal.** Sin ella, cambiar de tienda mostraría
+los números de la anterior bajo el nombre de la nueva — una cifra equivocada con
+aspecto de autoridad. `null` («todas las que puedo ver») es su propia ranura, no
+la sucursal cero.
+
+**El ajuste no calcula nada.** No hay campo de stock final en el formulario, en
+`StockAdjustmentInput` ni en el cuerpo del POST, y un test estructural falla si
+alguien lo añade.
+
+**Lo que sigue PENDIENTE**: transferencias, recuentos, reportes de inventario
+(`inventory.reports` no tiene superficie v1), clientes internos y servicio
+técnico.

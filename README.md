@@ -448,7 +448,7 @@ El backend tiene **tres audiencias**, y la app respeta esa separación:
 |---|---|---|
 | `/api/v1/storefront/<empresa>/` | cualquiera | ninguna |
 | `/api/v1/customer/<empresa>/` | **cliente, sus propios registros** | Bearer |
-| `/api/v1/internal/<empresa>/` | staff bajo capability | **no existe todavía** |
+| `/api/v1/internal/<empresa>/` | staff bajo capability | Bearer v1 + capability |
 
 ### Navegación pública, compra autenticada
 
@@ -556,6 +556,34 @@ el servidor, en cada petición: quien mienta recibe un 403, no los datos.
 Un módulo que la persona no tiene **no se dibuja**. Uno que sí tiene pero que la
 app aún no implementa **se dice** — callarlo haría concluir que la app está rota
 en vez de incompleta.
+
+### Inventario: una tercera puerta
+
+El stock solo existe en un lugar, así que el módulo de inventario pregunta
+**dónde** además de **qué**:
+
+| Situación | Respuesta del servidor | Qué muestra la app |
+|---|---|---|
+| Sin membresía activa | 404 | El área interna no está disponible |
+| Sin `inventory.view` | 403 | Ya no tienes acceso a este módulo |
+| Sucursal fuera de tu acceso | **404**, no 403 | Esa sucursal no está disponible |
+
+El tercer caso responde 404 a propósito: un 403 confirmaría que la sucursal
+existe, y bastaría con probar ids para levantar el mapa de tiendas de la empresa.
+
+**Ver stock y moverlo son dos permisos.** `inventory.view` dibuja las pantallas
+de lectura; el botón de registrar movimiento solo aparece con `inventory.adjust`.
+
+**El ajuste manda lo que se movió, nunca el total resultante.** No hay campo de
+stock final en el formulario ni en el contrato: el servidor toma el lock, aplica
+el signo según el tipo de movimiento y devuelve el resultado.
+
+Sin sucursales asignadas la app lo dice y no simula un error: es un estado
+legítimo de la empresa.
+
+**Transferencias y recuentos no están**, ni aquí ni en la API v1. Son flujos de
+varios pasos y aplanarlos en un botón inventaría una semántica que el negocio no
+tiene.
 
 ## EAS
 

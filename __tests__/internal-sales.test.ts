@@ -230,12 +230,22 @@ describe('the module registry decides what to DRAW', () => {
     expect(modules.map((m) => m.key)).not.toContain('inventory');
   });
 
-  it('marks inventory as PENDING rather than offering a dead tile', () => {
-    // The backend has enforced `inventory.view` since Phase 2D; this app has no
-    // screen. A tile leading nowhere reads as broken, not unfinished.
+  it('inventory is READY now that M7A built it', () => {
+    // Was `pending-mobile` through M6: the backend had enforced `inventory.view`
+    // since Phase 2D and this app had no screen, so the registry said so rather
+    // than drawing a tile that led nowhere. M7A built the screen.
     const modules = visibleModules(context(['inventory.view']));
 
     expect(modules.map((m) => m.key)).toEqual(['inventory']);
+    expect(modules[0]!.integration).toBe('ready');
+    expect(modules[0]!.route).toBe('/internal/inventory');
+  });
+
+  it('still refuses to draw a tile for a module with no screen', () => {
+    // The rule outlives the example. Customers is the current one.
+    const modules = visibleModules(context(['service.customers.view']));
+
+    expect(modules.map((m) => m.key)).toEqual(['customers']);
     expect(modules[0]!.integration).toBe('pending-mobile');
     expect(modules[0]!.route).toBeUndefined();
   });

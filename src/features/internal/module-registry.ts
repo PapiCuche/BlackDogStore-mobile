@@ -1,3 +1,4 @@
+import { CAP_INVENTORY_VIEW } from '@/domain/internal/inventory-types';
 import {
   CAP_SALES_ORDERS_VIEW,
   hasUxCapability,
@@ -12,11 +13,14 @@ import {
  * on every request, and a module listed here still returns 403 to someone who
  * lacks the permission.
  *
- * WHY `integration` EXISTS. A company can grant `inventory.view` today — the
- * capability has been ACTIVE since the backend's Phase 2D — and there is no
- * inventory screen in this app. Drawing a tile that leads nowhere would be
- * worse than saying so: the person would conclude the app is broken rather than
- * unfinished.
+ * WHY `integration` EXISTS. A company can grant `service.customers.view` today
+ * and there is no customers screen in this app. Drawing a tile that leads
+ * nowhere would be worse than saying so: the person would conclude the app is
+ * broken rather than unfinished.
+ *
+ * Inventory was this docstring's example until M7A built it. That is the shape
+ * of the field: entries move from `pending-mobile` to `ready` as screens land,
+ * and the capability they name never changes.
  */
 export type ModuleIntegration =
   /** Built and usable now. */
@@ -49,10 +53,10 @@ export const INTERNAL_MODULES: readonly InternalModule[] = [
   {
     key: 'inventory',
     title: 'Inventario',
-    description: 'Stock, movimientos y reportes por sucursal.',
-    requires: 'inventory.view',
-    // The backend enforces this capability already; the app has no screen.
-    integration: 'pending-mobile',
+    description: 'Stock y movimientos por sucursal.',
+    requires: CAP_INVENTORY_VIEW,
+    integration: 'ready',
+    route: '/internal/inventory',
   },
   {
     key: 'customers',

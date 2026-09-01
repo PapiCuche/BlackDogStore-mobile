@@ -627,7 +627,7 @@ Cuatro audiencias. La app respeta la separación que el backend impone.
 ```
 /api/v1/storefront/<slug>/   PÚBLICA    catalog-v1.ts
 /api/v1/customer/<slug>/     CLIENTE    customer-orders-v1.ts, checkout
-/api/v1/internal/<slug>/     INTERNA    internal-v1.ts
+/api/v1/internal/<slug>/     INTERNA    internal-v1.ts, internal-inventory-v1.ts
 /api/admin/                  WEB        nunca desde Mobile
 ```
 
@@ -694,6 +694,99 @@ usuario; M6 es su primer consumidor. Un pedido interno y uno de cliente con el
 
 Se reconocen como privadas **por su forma**, así que el logout las desaloja sin
 que nadie tuviera que registrarlas.
+
+## Inventario interno (M7A)
+
+### DEC-MOBILE-010 — La sucursal es una tercera puerta, y su negativa es un 404
+
+**Fecha:** 2026-09-01 (M7A) · **Estado:** ACEPTADA
+
+**Decisión.** El módulo de inventario trata la sucursal como una dimensión de
+acceso propia, al mismo nivel que la pertenencia y la capability. Un `branch_id`
+en la URL o en el cuerpo es un **selector**, nunca una autoridad, y el rechazo
+del servidor —**404**, no 403— se traduce a su propio error,
+`BranchOutOfScopeError`.
+
+**Motivo.** El stock solo existe en un lugar. Tener `inventory.view` en una
+empresa responde *qué* puedes hacer; `MembershipBranchAccess` responde *dónde*, y
+son dos preguntas con dos respuestas. El backend contesta 404 a una sucursal
+ajena para que nadie pueda barrer ids y levantar el mapa de tiendas de su
+empresa; si la app tradujera ese 404 al mismo error que usa para «no perteneces
+a esta empresa», le diría a alguien que perdió toda su membresía cuando solo tocó
+una tienda que no es suya.
+
+**Consecuencias.**
+- La distinción se hace por lo que la app **preguntó** (`hadBranch`), no por lo
+  que el servidor respondió: el servidor manda el mismo 404 a propósito.
+- `parseBranchParam` acepta enteros positivos y nada más. No valida acceso —
+  no puede— y su docstring lo dice para que nadie lo confunda con una comprobación.
+- Un miembro con `SELECTED` y cero sucursales asignadas ve un `EmptyState`, no un
+  error: es un estado legítimo de la empresa.
+- El selector se dibuja desde `available_branches` del servidor, nunca desde una
+  lista cacheada.
+
+### DEC-MOBILE-011 — La sucursal forma parte de la clave de cache
+
+**Fecha:** 2026-09-01 (M7A) · **Estado:** ACEPTADA
+
+**Decisión.** Las claves de inventario llevan la sucursal como elemento propio, y
+«todas las que puedo ver» (`null`) es una ranura distinta de la sucursal cero.
+
+**Motivo.** La misma persona preguntando por dos tiendas está haciendo dos
+preguntas distintas. Sin la sucursal en la clave, cambiar de tienda leería los
+números de la anterior y los pintaría bajo el nombre de la nueva — una cifra
+equivocada con aspecto de autoridad, que es peor que no tener cifra.
+
+**Consecuencias.**
+- Todo el módulo cuelga de un prefijo común (`internalInventoryRoot`), de modo que
+  un movimiento invalida resumen, stock y Kardex de una vez. Parchear tres formas
+  a mano para ahorrar un refetch es como una pantalla acaba mostrando un total que
+  no cuadra con las filas de debajo.
+- Las claves siguen siendo privadas por forma, así que el logout las desaloja sin
+  registrarlas en ningún sitio.
+
+### DEC-MOBILE-012 — Un ajuste manda intención, nunca un resultado
+
+**Fecha:** 2026-09-01 (M7A) · **Estado:** ACEPTADA
+
+**Decisión.** El formulario y el tipo `StockAdjustmentInput` describen lo que
+**se movió**: producto, sucursal, tipo, cantidad positiva y motivo. No existe
+campo para el stock final, ni en la UI, ni en el tipo, ni en el cuerpo del POST.
+
+**Motivo.** Un total calculado en un teléfono es una afirmación sobre un número
+que otra persona puede estar cambiando en el mismo instante. El servidor toma el
+lock, aplica el signo según el tipo, escribe la línea de Kardex y devuelve el
+resultado; la app lo lee de la respuesta.
+
+**Consecuencias.**
+- Los tipos ofrecidos reflejan `StockMovement.MANUAL_TYPES`. `sale_exit` y las
+  transferencias no aparecen: los produce el servidor, y una transferencia
+  escrita a mano por un solo lado es stock que se desvanece.
+- Un **400** es una respuesta de negocio, no un fallo. `StockAdjustmentRejectedError`
+  conserva las palabras del servidor en lugar de sustituirlas por un mensaje
+  genérico.
+- La mutación no reintenta: un POST repetido es un segundo movimiento, y el
+  Kardex tendría dos líneas para un solo hecho físico.
+- Un test estructural lee el código sin comentarios y falla si aparece
+  `quantityAfter` o `new_quantity` en cualquier archivo del módulo.
+
+### DEC-MOBILE-013 — El producto se elige del stock que el servidor ya devolvió
+
+**Fecha:** 2026-09-01 (M7A) · **Estado:** ACEPTADA
+
+**Decisión.** El formulario de ajuste no tiene un campo de texto para el slug del
+producto. Se elige de la lista de stock, y esa elección trae producto y sucursal
+juntos.
+
+**Motivo.** Un campo libre invita a adivinar: slugs de otras empresas, sucursales
+que no son suyas. El servidor los rechazaría —404 en ambos casos— pero la app
+estaría animando a probar. Elegir de lo que ya se devolvió garantiza que las dos
+mitades existen, van juntas y pertenecen a quien pregunta.
+
+**Consecuencias.**
+- El flujo tiene dos pasos: elegir qué y dónde, luego decir qué pasó.
+- Un producto sin fila de stock en ninguna sucursal visible no es alcanzable
+  desde la app. Es una limitación real y está anotada como deuda.
 
 ## Estados de pantalla
 
@@ -771,4 +864,10 @@ un error 500.
 | Tipos internos separados de los de cliente | Ensanchar el tipo compartido acabaría con datos internos en una pantalla de cliente. |
 | Módulos sin permiso no se dibujan, ni atenuados | Enumerar lo que a alguien le falta describe la estructura de la empresa. |
 | Módulos con permiso y sin pantalla se dicen | Un tile que no lleva a nada se lee como app rota, no como incompleta. |
+| La sucursal es la tercera puerta | DEC-MOBILE-010: el stock existe en un lugar; un permiso de empresa no dice en cuál. |
+| `BranchOutOfScopeError` aparte del de membresía | Decir "perdiste el área interna" cuando solo se tocó una tienda ajena es la alarma equivocada. |
+| Sucursal dentro de la clave de cache | DEC-MOBILE-011: sin ella, cambiar de tienda muestra los números de la anterior bajo el nombre de la nueva. |
+| El ajuste manda intención, no resultado | DEC-MOBILE-012: un total calculado en el teléfono es una afirmación sobre un número que otro está cambiando. |
+| Cero sucursales asignadas es `EmptyState`, no `ErrorState` | Es un estado legítimo de la empresa, no una petición fallida. |
+| Transferencias y recuentos fuera de la app | El backend no los expone en v1 porque son flujos de varios pasos; aplanarlos sería inventar semántica. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |
