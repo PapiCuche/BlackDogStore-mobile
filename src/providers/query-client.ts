@@ -71,6 +71,17 @@ function customerPrefix(scope: QueryScope): readonly string[] {
   return [...scopePrefix(scope, 'user'), CUSTOMER_AUDIENCE];
 }
 
+/**
+ * The INTERNAL namespace, in use from M6.
+ *
+ * `INTERNAL_AUDIENCE` was declared when the segment was introduced and had no
+ * caller yet. It has one now, and the separation is what stops a company-wide
+ * order list from landing in a cache slot a customer screen reads.
+ */
+function internalPrefix(scope: QueryScope): readonly string[] {
+  return [...scopePrefix(scope, 'user'), INTERNAL_AUDIENCE];
+}
+
 export const queryKeys = {
   // ── tenant-public ────────────────────────────────────────────────────────
   products: (scope: QueryScope, params: { search?: string; categorySlug?: string } = {}) =>
@@ -98,6 +109,13 @@ export const queryKeys = {
   repair: (scope: QueryScope, id: string) => [...customerPrefix(scope), 'repair', id] as const,
   orders: (scope: QueryScope) => [...customerPrefix(scope), 'orders'] as const,
   order: (scope: QueryScope, id: number) => [...customerPrefix(scope), 'order', id] as const,
+
+  // ── tenant + user private, INTERNAL audience ─────────────────────────────
+  internalContext: (scope: QueryScope) => [...internalPrefix(scope), 'context'] as const,
+  internalOrders: (scope: QueryScope, params: Record<string, unknown> = {}) =>
+    [...internalPrefix(scope), 'orders', JSON.stringify(params)] as const,
+  internalOrder: (scope: QueryScope, id: number) =>
+    [...internalPrefix(scope), 'order', id] as const,
 } as const;
 
 /**

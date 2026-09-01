@@ -49,6 +49,7 @@ src/
 │                           endpoints/customer-orders-v1.ts (cliente)
 │                           endpoints/customer-checkout-v1.ts (compra)
 │                           endpoints/storefront-config-v1.ts (marca)
+│                           endpoints/internal-v1.ts     (interna)
 ├── cart/                   Carrito: provider + persistencia (una sola verdad)
 ├── auth/                   Sesión, política y ciclo de vida de tokens
 │   ├── auth-policy.ts      Qué mecanismo permite esta build (fail-safe)
@@ -619,6 +620,81 @@ una acción.
 reintento de ese intento; se regenera cuando la cesta cambia, porque una cesta
 distinta es una compra distinta.
 
+## Área interna (M6)
+
+Cuatro audiencias. La app respeta la separación que el backend impone.
+
+```
+/api/v1/storefront/<slug>/   PÚBLICA    catalog-v1.ts
+/api/v1/customer/<slug>/     CLIENTE    customer-orders-v1.ts, checkout
+/api/v1/internal/<slug>/     INTERNA    internal-v1.ts
+/api/admin/                  WEB        nunca desde Mobile
+```
+
+### Una corrección de M4 que hay que decir
+
+El backend devuelve `access_contexts` y `platform` desde M4. **Mobile los
+descartaba en silencio**: `IdentityWire` no los declaraba, `SessionSnapshot` no
+los llevaba y `AuthSession` no tenía dónde ponerlos. La documentación de M4
+afirmaba que estaba integrado. No lo estaba.
+
+La consecuencia era que la app no sabía **para qué empresas trabaja** una
+persona, solo con cuáles se relaciona. El área interna es imposible sin eso, que
+es como salió el hueco a la luz.
+
+Corregido en M6, con tests que impiden que vuelva a pasar en silencio.
+
+### Dos preguntas, dos fuentes
+
+| Pregunta | Fuente |
+|---|---|
+| ¿Ofrezco la entrada al área interna? | `AuthSession.accessContexts` — la instantánea del login |
+| ¿Sigue abriéndose ahora? | `GET /internal/<slug>/context/` — el servidor, al entrar |
+
+La segunda existe porque los roles cambian mientras una sesión sigue viva. A
+quien le revocaron un permiso hace una hora no debe seguir viendo un módulo
+porque su token aún vale treinta minutos.
+
+### Las capabilities dibujan; el servidor autoriza
+
+`hasUxCapability` se llama así a propósito. No hay `can()` ni `isAllowed()` en
+este código: esos nombres invitan a leer la respuesta como permiso. Todo endpoint
+interno vuelve a resolver capabilities en el servidor, en cada petición.
+
+`role` **nunca** decide nada. `role === 'admin'` dice cómo se llama alguien, no a
+qué empresa pertenece.
+
+### El shell interno
+
+Stack propio en `/internal`. Un empleado conserva **todas** sus pestañas de
+cliente: nadie es redirigido a un panel tras iniciar sesión, la tienda sigue
+funcionando, y quien también compra ahí sigue comprando.
+
+El home se construye desde las capabilities **frescas**. Un módulo que la persona
+no tiene **no se dibuja** — ni siquiera atenuado: enumerar lo que a alguien le
+falta le describe la estructura de la empresa, y no lo preguntó.
+
+Los módulos que sí tiene pero que la app aún no implementa se dicen en voz alta.
+Alguien con solo `inventory.view` tiene acceso real a algo sin pantalla móvil, y
+callarlo le haría concluir que la app está rota en vez de incompleta.
+
+### Tipos separados por audiencia
+
+`InternalSalesOrder` **no** es `Order`. El contrato de cliente omite teléfono,
+documento y dirección a propósito; el interno los necesita porque alguien tiene
+que llamar y alguien tiene que enviar. Ensanchar el tipo compartido significaría
+que un día una pantalla de cliente renderiza un campo que nunca debió tener, y
+nada en el sistema de tipos objetaría.
+
+### Cache por audiencia
+
+`['tenant', slug, 'user', id, 'internal', …]`. El segmento se declaró en M4 sin
+usuario; M6 es su primer consumidor. Un pedido interno y uno de cliente con el
+**mismo id** producen claves distintas, que es justo la colisión peligrosa.
+
+Se reconocen como privadas **por su forma**, así que el logout las desaloja sin
+que nadie tuviera que registrarlas.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -689,4 +765,10 @@ un error 500.
 | No vaciar hasta el pago confirmado | Volver del navegador solo prueba que se cerró una pestaña. |
 | Stripe Checkout alojado, sin campo de tarjeta | Que los datos de tarjeta no toquen el cliente es la razón de que exista. |
 | Validar la URL de pago aunque venga del servidor | Es el único campo de una respuesta que se convierte en una acción. |
+| Contextos de acceso conservados, no descartados | El backend los enviaba desde M4 y Mobile los tiraba; el área interna es imposible sin ellos. |
+| Dos fuentes: sesión para ofrecer, servidor para abrir | Los roles cambian mientras una sesión sigue viva. |
+| `hasUxCapability`, sin `can()` ni `isAllowed()` | Esos nombres invitan a leer la respuesta como permiso. |
+| Tipos internos separados de los de cliente | Ensanchar el tipo compartido acabaría con datos internos en una pantalla de cliente. |
+| Módulos sin permiso no se dibujan, ni atenuados | Enumerar lo que a alguien le falta describe la estructura de la empresa. |
+| Módulos con permiso y sin pantalla se dicen | Un tile que no lleva a nada se lee como app rota, no como incompleta. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |
