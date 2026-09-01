@@ -788,6 +788,124 @@ mitades existen, van juntas y pertenecen a quien pregunta.
 - Un producto sin fila de stock en ninguna sucursal visible no es alcanzable
   desde la app. Es una limitación real y está anotada como deuda.
 
+## Design system tenant-aware (UI7)
+
+### DEC-MOBILE-014 — La plataforma no tiene color propio; el tenant sí
+
+**Fecha:** 2026-09-01 (UI7) · **Estado:** ACEPTADA
+
+**Decisión.** La paleta base del design system es **acromática**. El color viene
+del tenant, por BR-006, y se aplica a exactamente cuatro tokens: `accent`,
+`accentText`, `accentSurface` y `textOnAccent`.
+
+**Motivo.** `src/theme/colors.ts` declaraba como fuente de verdad el documento
+de marca de la empresa piloto y cargaba su paleta —dorado incluido— como base
+del sistema. Correcto para una app de una sola tienda; en un SaaS significa que
+la empresa piloto es la identidad por defecto de cualquier build, y que un
+segundo cliente hereda el dorado de un competidor salvo que alguien se acuerde
+de sobreescribirlo. Un fallback no es una decisión de producto: es la decisión
+que se toma cuando nadie decide.
+
+**Consecuencias.**
+- El dorado del piloto vive en `domain/company/pilot-brand.ts`, junto al resto
+  de su identidad. Un test comprueba que ese hex no aparece en la paleta base.
+- La app **abre acromática** y toma el color del tenant cuando la marca
+  resuelve. La alternativa es retener la UI esperando la red, o destellar un
+  color que pertenece a quien compiló el fixture.
+- `useCompanyBrand` pasa a un scope de cache **público**, sin sesión, para que
+  el tema pueda leerlo: `AppThemeProvider` vive por encima de `AuthProvider`,
+  porque auth se dibuja con el tema.
+- Un color de marca imposible de parsear devuelve los tokens base sin tocar. No
+  es un crash y no es una pantalla en blanco.
+
+### DEC-MOBILE-015 — La accesibilidad conserva la autoridad sobre la marca
+
+**Fecha:** 2026-09-01 (UI7) · **Estado:** ACEPTADA
+
+**Decisión.** El color de un tenant se aplica **exacto** como relleno, y se
+**deriva** allí donde tiene que leerse. La rampa de estado, el texto, los bordes
+y el fondo del botón primario quedan fuera de su alcance.
+
+**Motivo.** Un color de marca lo elige quien elige una identidad, no quien audita
+contrastes. El dorado del piloto sobre blanco da 2.10:1 — por debajo incluso del
+3:1 de texto grande. La respuesta del sistema no es rechazar el color, sino
+mantener la identidad donde la identidad pertenece —rellenos, marcas, énfasis—
+y calcular la variante legible en vez de suponerla.
+
+**Consecuencias.**
+- `src/theme/contrast.ts`: luminancia relativa, ratio WCAG, composición alfa y
+  una caminata hacia negro o blanco que preserva el tono todo lo posible.
+- `accentText` se corrige contra los **dos** fondos sobre los que puede caer: la
+  página y el lavado de acento detrás de una `Badge`. El lavado está teñido hacia
+  la marca, así que siempre es el más difícil de los dos.
+- `textOnAccent` se elige midiendo, no por convención: un amarillo pastel con
+  etiqueta blanca es el botón ilegible clásico.
+- El contraste se mide **después** de componer la transparencia. Medir el color
+  crudo es cómo una paleta «revisada» sigue enviando una etiqueta que no se lee.
+- **El color de estado no está en venta.** Una tienda cuya marca sea roja no
+  puede acabar con una insignia «entregado» roja.
+- **El botón primario sigue siendo tinta o blanco.** Es la superficie más crítica
+  en contraste de la app.
+- El tema expone un `TenantAccentReport` con los ratios resultantes, para que un
+  test —y un futuro panel de desarrollo— pueda comprobarlo en vez de confiar.
+
+### DEC-MOBILE-016 — El material se nombra; el desenfoque es la mejora
+
+**Fecha:** 2026-09-01 (UI7) · **Estado:** ACEPTADA
+
+**Decisión.** El sistema nombra cuatro **materiales** —`chrome`, `card`,
+`raised`, `overlay`— y cada uno trae un `fallbackColor` opaco. `GlassSurface`
+está escrito fallback primero: la versión esmerilada es la rama, no la base.
+
+**Motivo.** Un token de color no puede describir una capa translúcida, porque el
+resultado depende de la plataforma, de los ajustes de accesibilidad y de si hay
+algo detrás del panel. Y tres situaciones ordinarias apagan el efecto: Android
+—donde el desenfoque eficiente exige SDK 31+ y un `BlurTargetView` detrás de cada
+panel—, «Reducir transparencia», y cualquier superficie que se repita en una
+lista. Un diseño que solo funciona con el desenfoque encendido es un diseño roto
+en tres situaciones normales.
+
+**Consecuencias.**
+- Un test verifica que el texto principal pasa AA sobre el fallback de los cuatro
+  materiales en los dos esquemas.
+- `GlassSurface` es el único módulo que importa `expo-blur`; un test estructural
+  lo vigila, así que apagar el efecto es una prop y no una auditoría.
+- `Card` es sólida por defecto. Un panel desenfocado por fila es una pasada de
+  composición por fila.
+- Los materiales **no se tiñen con la marca**: están hechos de la página. Una
+  tarjeta teñida de marca es un todo teñido de marca, y el acento deja de
+  significar algo.
+- El filo especular es **una hairline, no un gradiente**: un gradiente por panel
+  es una subida de textura por panel.
+
+### DEC-MOBILE-017 — Si el chrome flota, el shell paga el hueco
+
+**Fecha:** 2026-09-01 (UI7) · **Estado:** ACEPTADA
+
+**Decisión.** La barra de pestañas y las barras de navegación son transparentes
+y el contenido pasa por debajo. `Screen` lee `BottomTabBarHeightContext` y
+`HeaderHeightContext` y acolcha por la altura real de cada una.
+
+**Motivo.** Un material esmerilado sobre nada es un rectángulo gris: sin
+contenido debajo, no hay nada que desenfocar. Pero en cuanto la barra flota,
+cada pantalla esconde su última fila detrás de ella. Resolverlo en el shell lo
+resuelve una vez; resolverlo en las pantallas son treinta sitios adivinando 49 o
+56 puntos, y el primero que se olvide es un bug que nadie relaciona con esto.
+
+**Consecuencias.**
+- Se leen los **contextos**, no `useBottomTabBarHeight()` / `useHeaderHeight()`:
+  esos hooks lanzan fuera de su navegador, y `Screen` también se usa en la pila
+  de auth y en cada pantalla empujada. `undefined` es una respuesta válida que
+  significa «aquí no hay barra».
+- La altura del header **ya incluye** el inset de la barra de estado, así que
+  sustituye a `insets.top` en vez de sumarse.
+- Las tres pilas comparten `glassStackScreenOptions`. Antes cada una deletreaba
+  sus propios colores de header, que es como dos acabaron distintas de la
+  tercera.
+- **Deuda:** en pantallas con su propia `FlatList` el hueco se aplica al
+  contenedor, así que el viewport termina encima de la barra en lugar de que las
+  filas viajen por debajo. Menos efecto, correcto sin editar cada lista.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -870,4 +988,12 @@ un error 500.
 | El ajuste manda intención, no resultado | DEC-MOBILE-012: un total calculado en el teléfono es una afirmación sobre un número que otro está cambiando. |
 | Cero sucursales asignadas es `EmptyState`, no `ErrorState` | Es un estado legítimo de la empresa, no una petición fallida. |
 | Transferencias y recuentos fuera de la app | El backend no los expone en v1 porque son flujos de varios pasos; aplanarlos sería inventar semántica. |
+| La plataforma no presta color; el tenant lo pone | DEC-MOBILE-014: un fallback no es una decisión de producto, es la que se toma cuando nadie decide. |
+| Cuatro tokens se mueven con la marca, y ni uno más | El color de estado es significado; el significado no está en venta. |
+| El contraste se calcula, no se supone | DEC-MOBILE-015: el dorado del piloto sobre blanco da 2.10:1. |
+| El botón primario nunca toma el color de marca | Es la superficie más crítica en contraste de toda la app. |
+| Materiales con fallback opaco | DEC-MOBILE-016: Android, «reducir transparencia» y las listas apagan el desenfoque. |
+| Un solo módulo importa `expo-blur` | Apagar el efecto tiene que ser una prop, no una auditoría de treinta archivos. |
+| `Card` sólida por defecto | Un panel desenfocado por fila es una pasada de composición por fila. |
+| El shell paga el hueco del chrome flotante | DEC-MOBILE-017: treinta pantallas adivinando 49 o 56 puntos es un bug esperando. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |

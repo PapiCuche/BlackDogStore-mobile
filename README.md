@@ -519,6 +519,43 @@ Desde M5 la marca, el contacto, las políticas y el enlace de WhatsApp vienen de
 del detalle de producto, inerte desde M0, ahora abre el canal **de esa tienda** —
 nunca un número escrito a mano en el código.
 
+Desde **UI7** también viene de ahí el **color**.
+
+La paleta base del design system era la de la empresa piloto: su dorado era el
+acento de cualquier build, y un segundo cliente lo habría heredado salvo que
+alguien se acordara de sobreescribirlo. Ahora la base es **acromática** —tinta,
+papel y grafito— y `CompanyBrand.primaryColor` se aplica encima. La plataforma
+no tiene color propio que prestar.
+
+**Cuatro tokens se mueven con la marca y ninguno más.** Fuera de su alcance
+quedan la rampa de estado, el texto, los bordes y el fondo del botón primario:
+
+- Una tienda cuyo color de marca sea rojo no puede acabar con una insignia
+  «entregado» roja. El color de estado es significado.
+- El botón primario sigue siendo tinta o blanco. Es la superficie más crítica en
+  contraste de toda la app.
+
+**El contraste se calcula, no se supone.** El color se aplica exacto como
+relleno; donde tiene que leerse, se deriva y se corrige contra WCAG AA. El
+dorado del piloto sobre blanco da 2.10:1 — por debajo incluso del 3:1 de texto
+grande. Un color que la app no puede parsear deja los tokens base intactos: es
+un build sin acento, no un crash.
+
+La app **abre acromática** y toma el color del tenant cuando la marca resuelve.
+
+### Materiales
+
+Barras de navegación, barra de pestañas y banner de sin conexión son paneles de
+material esmerilado; las tarjetas son paneles con filo y una hairline especular.
+
+**El desenfoque es la mejora, no el diseño.** Tres situaciones lo apagan —
+Android, «Reducir transparencia» y cualquier superficie que se repita en una
+lista — así que cada material lleva un fallback **opaco**, y un test verifica que
+el texto principal pasa AA sobre él en los dos esquemas. Si el fallback no fuera
+legible, apagar el efecto sería romper la app en lugar de degradarla.
+
+Detalle en [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md).
+
 ## Área interna
 
 Cuatro audiencias, y la app respeta la separación del backend:
