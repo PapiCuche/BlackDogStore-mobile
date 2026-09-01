@@ -20,16 +20,22 @@ jest.mock('expo-router/js-tabs', () => {
     <MockView testID="tabs-root">{children}</MockView>
   );
 
-  Tabs.Screen = ({ name, options }: { name: string; options?: Record<string, unknown> }) => (
-    <MockView testID={`tab-${name}`}>
-      {/* `href: null` is how a tab is hidden without touching the screen list.
-          `undefined` means the tab is reachable. */}
-      <MockText testID={`tab-${name}-href`}>
-        {options?.href === null ? 'hidden' : 'visible'}
-      </MockText>
-      <MockText testID={`tab-${name}-title`}>{String(options?.title ?? '')}</MockText>
-    </MockView>
-  );
+  // A NAMED function, not an arrow assigned to a property. An anonymous
+  // component has no display name, so React DevTools and every failure message
+  // would call it `Unknown` — which is why `react/display-name` flags it.
+  function TabsScreen({ name, options }: { name: string; options?: Record<string, unknown> }) {
+    return (
+      <MockView testID={`tab-${name}`}>
+        {/* `href: null` is how a tab is hidden without touching the screen list.
+            `undefined` means the tab is reachable. */}
+        <MockText testID={`tab-${name}-href`}>
+          {options?.href === null ? 'hidden' : 'visible'}
+        </MockText>
+        <MockText testID={`tab-${name}-title`}>{String(options?.title ?? '')}</MockText>
+      </MockView>
+    );
+  }
+  Tabs.Screen = TabsScreen;
 
   return { Tabs };
 });
