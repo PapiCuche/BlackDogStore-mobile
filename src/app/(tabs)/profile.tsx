@@ -3,12 +3,14 @@ import * as Linking from 'expo-linking';
 import { View } from 'react-native';
 
 import { useAuth } from '@/auth/auth-provider';
+import { isMemberInTenant, isPlatformMaster } from '@/auth/types';
 import {
   apiBaseUrl,
   appEnvironment,
   configurationIssues,
   isApiConfigured,
   catalogPolicy,
+  companySlug,
   mockDataPolicy,
   tenant,
   useMockData,
@@ -53,6 +55,9 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const brandState = useCompanyBrand();
   const { session, signOut } = useAuth();
+  // Server-verified, never a role. See the comment on the section below.
+  const mayEnterInternal =
+    isMemberInTenant(session, companySlug) || isPlatformMaster(session);
   const { preference, setPreference } = useAppTheme();
   const { state: connectivity } = useConnectivity();
   const queryScope = useQueryScope();
@@ -93,6 +98,35 @@ export default function ProfileScreen() {
       </View>
 
       <View style={{ gap: theme.spacing.xl }}>
+        {/* ── Internal area ─────────────────────────────────────────────── */}
+        {/*
+          Offered ONLY when the server verified a membership in THIS company —
+          or when this account is a platform master. Never because of a coarse
+          role: `role === 'admin'` says what someone is called, not which
+          company they belong to.
+
+          An employee keeps every customer tab exactly as it was. Nobody is
+          redirected into a dashboard after signing in; the shop still works,
+          and someone who also buys here still buys here.
+
+          This decides what to DRAW. `/internal` asks the server again on entry,
+          and every internal endpoint re-resolves capabilities per request.
+        */}
+        {mayEnterInternal ? (
+          <View>
+            <SectionHeader title="Trabajo" />
+            <Card padded={false}>
+              <ListRow
+                label="Área interna"
+                description="Pedidos y operación de la empresa"
+                icon={icons.orders}
+                onPress={() => router.push('/internal')}
+                accessibilityHint="Abre el área interna de la empresa"
+              />
+            </Card>
+          </View>
+        ) : null}
+
         {/* ── Appearance ────────────────────────────────────────────────── */}
         <View>
           <SectionHeader title="Apariencia" />

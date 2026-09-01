@@ -3,13 +3,16 @@ import {
   postLogin,
   postLogout,
   postRefresh,
+  toAccessContexts,
   toCompanies,
   toCustomer,
+  toPlatformContext,
   type AuthCompanyWire,
 } from '@/api/endpoints/auth-v1';
 import { ApiError } from '@/api/errors';
 
 import { RefreshNetworkError, RefreshRejectedError } from '../auth-errors';
+import type { AuthAccessContext, AuthPlatformContext } from '../types';
 import { toTokenPair, type TokenPair } from '../tokens/token-types';
 import type { AuthTransport, AuthTransportResult } from './auth-transport';
 
@@ -34,6 +37,9 @@ import type { AuthTransport, AuthTransportResult } from './auth-transport';
 export type SessionSnapshot = {
   user: AuthTransportResult['user'];
   companies: readonly AuthCompanyWire[];
+  /** Server-verified, per company. Empty means no internal access anywhere. */
+  accessContexts: readonly AuthAccessContext[];
+  platform: AuthPlatformContext;
 };
 
 export type DjangoAuthTransport = AuthTransport & {
@@ -94,7 +100,12 @@ export function createDjangoAuthTransport(): DjangoAuthTransport {
     async getCurrentSession(accessToken: string): Promise<SessionSnapshot> {
       try {
         const wire = await getIdentity(accessToken);
-        return { user: toCustomer(wire.user), companies: toCompanies(wire.available_companies) };
+        return {
+          user: toCustomer(wire.user),
+          companies: toCompanies(wire.available_companies),
+          accessContexts: toAccessContexts(wire.access_contexts),
+          platform: toPlatformContext(wire.platform),
+        };
       } catch (error) {
         // Same distinction as refresh: a rejected token is terminal, an
         // unreachable server is not.

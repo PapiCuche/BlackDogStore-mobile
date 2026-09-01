@@ -62,10 +62,57 @@ export type AuthTenantContext = {
   availableCompanies: readonly AuthCompanyRef[];
 };
 
+/**
+ * Where one identity may act inside ONE company, as the server verified it.
+ *
+ * `customer` and `member` are INDEPENDENT booleans, not a role. The same person
+ * can buy from a company and work for it, and collapsing that into one field
+ * would force the app to choose which of two true things to believe.
+ *
+ * ⚠️  `capabilities` IS FOR DRAWING, NEVER FOR AUTHORISING (DEC-MOBILE-008).
+ * It decides which tab exists, not what may be read. Every internal endpoint
+ * re-resolves capabilities on the server, so a client that lied about holding
+ * one receives a 403 — not the data.
+ *
+ * Strings rather than a union: the catalogue lives on the server and grows
+ * there. An unknown capability is carried through harmlessly instead of being
+ * dropped by a type this app would have to keep in sync.
+ */
+export type AuthAccessContext = {
+  company: AuthCompanyRef;
+  customer: boolean;
+  member: boolean;
+  capabilities: readonly string[];
+};
+
+/**
+ * Platform-master status, reported SEPARATELY from any company.
+ *
+ * Being a platform administrator is not membership of every tenant, and this
+ * flag grants nothing: `accessContexts` is still built from real relations, and
+ * the server decides what a master may do when they name a tenant explicitly.
+ */
+export type AuthPlatformContext = {
+  isMaster: boolean;
+};
+
 export type AuthSession = {
   user: UserProfile;
   /** How this session was obtained. `mock` is visible to the UI on purpose. */
   mode: AuthMode;
+  /**
+   * Server-verified access contexts, one per company the user relates to.
+   *
+   * ⚠️  ADDED IN M6, AND IT SHOULD HAVE BEEN THERE SINCE M4. The backend has
+   * returned `access_contexts` since M4 and the mobile mapper silently dropped
+   * it — the session model had nowhere to put it. Documentation claimed the
+   * field was integrated; it was not. That is corrected here.
+   *
+   * Empty is a valid and safe answer: no context means no internal area.
+   */
+  accessContexts: readonly AuthAccessContext[];
+  /** Platform-master status. Never a substitute for a company relation. */
+  platform: AuthPlatformContext;
   /**
    * ISO-8601 session expiry, or null when unknown / non-expiring (mock).
    * NOT the access token's expiry — that lives with the token, in memory.
@@ -122,3 +169,62 @@ export type RegistrationDetails = {
   email: string;
   password: string;
 };
+
+// ─── Reading a session ──────────────────────────────────────────────────────
+//
+// Pure helpers, so a screen never re-derives these rules inline and no two
+// screens can disagree about what "is a member here" means.
+
+/** The context for one company, or null when the server reported no relation. */
+export function getAccessContext(
+  session: AuthSession | null,
+  companySlug: string | null,
+): AuthAccessContext | null {
+  if (!session || !companySlug) return null;
+  const wanted = companySlug.trim().toLowerCase();
+  return (
+    session.accessContexts.find((entry) => entry.company.slug.toLowerCase() === wanted) ?? null
+  );
+}
+
+/** Buys from this company. */
+export function isCustomerInTenant(
+  session: AuthSession | null,
+  companySlug: string | null,
+): boolean {
+  return getAccessContext(session, companySlug)?.customer === true;
+}
+
+/**
+ * Works for this company.
+ *
+ * NOT derived from `user.role`. A coarse role says what someone is called; a
+ * membership says which company they actually belong to, and only the server
+ * knows that.
+ */
+export function isMemberInTenant(
+  session: AuthSession | null,
+  companySlug: string | null,
+): boolean {
+  return getAccessContext(session, companySlug)?.member === true;
+}
+
+/**
+ * Whether to DRAW something. Named to make misuse read wrong.
+ *
+ * There is deliberately no `can()` or `isAllowed()` in this codebase: those
+ * names invite a reader to treat the answer as permission. This one cannot be
+ * mistaken for authorisation, which is the point — the server decides, every
+ * time, on every request.
+ */
+export function hasUxCapability(
+  session: AuthSession | null,
+  companySlug: string | null,
+  capability: string,
+): boolean {
+  return getAccessContext(session, companySlug)?.capabilities.includes(capability) === true;
+}
+
+export function isPlatformMaster(session: AuthSession | null): boolean {
+  return session?.platform.isMaster === true;
+}

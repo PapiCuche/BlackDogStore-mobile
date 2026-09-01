@@ -39,6 +39,8 @@ function signedInAs(firstName: string): AuthRepository {
       isEmailVerified: true,
     },
     mode: 'mock',
+    accessContexts: [],
+    platform: { isMaster: false },
     expiresAt: null,
     tenant: null,
   };

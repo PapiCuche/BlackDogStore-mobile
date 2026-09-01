@@ -54,10 +54,14 @@ archivo discrepan, **el archivo tiene razón**.
 | Universal Links / App Links | NO IMPLEMENTADO | n/a | n/a | n/a | **INFRA_PENDING** |
 | QR | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
 | Push notifications | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
-| Contexto de acceso (`access_contexts`) | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Contexto de acceso (`access_contexts`) | IMPLEMENTADO | **API_READY** | **INTEGRATED** (desde M6) | **TESTED** | **INTEGRADO** |
 | Gate de acción privada | IMPLEMENTADO | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
-| Área interna (shell) | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
-| APIs internas de negocio | NO IMPLEMENTADO | PENDIENTE | n/a | n/a | **PENDIENTE** |
+| Área interna (shell) | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Pedidos internos de venta | **IMPLEMENTADO** | **API_READY** (`/api/v1/internal/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Fulfillment interno | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Inventario interno | NO IMPLEMENTADO | API_PENDING (v1) | n/a | n/a | **PENDIENTE** |
+| Administración de plataforma | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
+| APIs internas de negocio | **PARCIAL** — ventas sí; inventario y servicio no | **PARCIAL** | **PARCIAL** | **TESTED** | **PARCIAL** |
 | Carrito móvil (público) | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
 | Checkout autenticado móvil | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Stripe Checkout alojado | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
@@ -350,6 +354,30 @@ el carrito local solo expresa intención (DEC-MOBILE-009).
 
 **«El navegador volvió» no es un pago.** El estado real lo da el servidor, que lo
 aprende del webhook. El carrito sobrevive a todo lo que no sea un pago confirmado.
+
+## Área interna y ventas (M6)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master 72042b2)
+Contexto de acceso en sesión   CORREGIDO / TESTED   <- era un hueco de M4
+Cliente /api/v1/internal/      IMPLEMENTADO / TESTED
+Contexto interno fresco        INTEGRADO / TESTED
+Pedidos internos de venta      INTEGRADO / TESTED
+Fulfillment interno            INTEGRADO / TESTED
+Shell interno separado         IMPLEMENTADO / TESTED
+Cache por audiencia            IMPLEMENTADO / TESTED
+Revocación de permiso          IMPLEMENTADO / TESTED
+Inventario interno             PENDIENTE
+Servicio técnico               PENDIENTE / BR-005
+Administración de plataforma   PENDIENTE
+```
+
+### Corrección de un estado declarado en M4
+
+M4 documentó `access_contexts` como **INTEGRADO / TESTED** en Mobile. **No lo
+estaba**: el backend lo enviaba y el mapeador móvil lo descartaba en silencio.
+Se corrigió en M6 y se registra aquí en vez de dejar que el estado declarado
+siguiera sin coincidir con el código.
 
 ## Nota de verificación
 

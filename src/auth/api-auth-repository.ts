@@ -154,6 +154,10 @@ export class ApiAuthRepository implements AuthRepository {
     return {
       user: snapshot.user,
       mode: 'backend',
+      // Carried through from the server, untouched. M6 fixed the gap where
+      // these were fetched and then dropped on the floor.
+      accessContexts: snapshot.accessContexts,
+      platform: snapshot.platform,
       // The SESSION has no expiry of its own: it lives as long as the refresh
       // token can be exchanged. The access token's expiry is a transport detail
       // and stays with the token, in memory.

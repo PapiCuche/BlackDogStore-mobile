@@ -1,3 +1,4 @@
+import type { AuthAccessContext, AuthPlatformContext } from '@/auth/types';
 import type { Customer, CustomerRole } from '@/domain/customers/types';
 
 import { request } from '../client';
@@ -40,6 +41,18 @@ type IdentityWire = {
     name: string;
     relation: string;
   }[];
+  /**
+   * Added by the backend in M4. OPTIONAL here on purpose: a staging server on
+   * an older build would omit it, and an app that crashed on a missing field
+   * would be worse than one that concluded "no internal access".
+   */
+  access_contexts?: {
+    company?: { slug?: string; name?: string };
+    customer?: boolean;
+    member?: boolean;
+    capabilities?: unknown;
+  }[];
+  platform?: { is_master?: boolean };
 };
 
 type TokenWire = {
@@ -102,6 +115,43 @@ export function toCompanies(rows: IdentityWire['available_companies']): AuthComp
       // Anything the app does not recognise is treated as the WEAKER relation.
       relation: row.relation === 'member' ? 'member' : 'customer',
     }));
+}
+
+/**
+ * Server-verified access contexts.
+ *
+ * ⚠️  THIS MAPPER SHOULD HAVE EXISTED SINCE M4. The backend has returned
+ * `access_contexts` since then and this module silently dropped it, so the app
+ * had no idea which companies a person worked for — only which they related to.
+ * The internal area is impossible without it, which is how the gap surfaced.
+ *
+ * FAILS SAFE IN EVERY DIRECTION. A missing field, a malformed row, a
+ * non-array capability list: all produce "no access", never a truthy default.
+ * The cost of a false negative is a hidden button; the cost of a false positive
+ * is offering someone a door the server will slam.
+ */
+export function toAccessContexts(rows: IdentityWire['access_contexts']): AuthAccessContext[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter((row) => row && typeof row.company?.slug === 'string' && row.company.slug.length > 0)
+    .map((row) => ({
+      company: { slug: String(row.company!.slug), name: String(row.company!.name ?? '') },
+      // Strictly `=== true`: an absent flag is not a grant, and neither is a
+      // truthy string that happened to arrive.
+      customer: row.customer === true,
+      member: row.member === true,
+      // Unknown capabilities are carried through rather than filtered against a
+      // local list. The catalogue lives on the server and grows there; dropping
+      // what this build has not heard of would hide a module the moment the
+      // backend adds one.
+      capabilities: Array.isArray(row.capabilities)
+        ? row.capabilities.filter((c): c is string => typeof c === 'string')
+        : [],
+    }));
+}
+
+export function toPlatformContext(raw: IdentityWire['platform']): AuthPlatformContext {
+  return { isMaster: raw?.is_master === true };
 }
 
 export async function postLogin(

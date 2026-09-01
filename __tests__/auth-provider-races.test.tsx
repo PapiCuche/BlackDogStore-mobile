@@ -40,6 +40,8 @@ function makeSession(name: string): AuthSession {
       isEmailVerified: true,
     },
     mode: 'mock',
+    accessContexts: [],
+    platform: { isMaster: false },
     expiresAt: null,
     tenant: null,
   };

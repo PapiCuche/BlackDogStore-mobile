@@ -519,6 +519,44 @@ Desde M5 la marca, el contacto, las políticas y el enlace de WhatsApp vienen de
 del detalle de producto, inerte desde M0, ahora abre el canal **de esa tienda** —
 nunca un número escrito a mano en el código.
 
+## Área interna
+
+Cuatro audiencias, y la app respeta la separación del backend:
+
+| Superficie | Quién |
+|---|---|
+| `storefront/` | cualquiera |
+| `customer/` | cliente, sus propios registros |
+| **`internal/`** | **staff, registros de la empresa** |
+| `/api/admin/` | web — **nunca desde Mobile** |
+
+### Cuándo aparece la entrada
+
+Solo cuando el servidor verificó una **membresía activa** en esta empresa, o
+cuando la cuenta es platform master. **Nunca por un rol**: `role === 'admin'`
+dice cómo se llama alguien, no a qué empresa pertenece.
+
+Un empleado conserva **todas** sus pestañas de cliente. Nadie es redirigido a un
+panel al iniciar sesión, y quien también compra aquí sigue comprando.
+
+### Dos preguntas, dos fuentes
+
+| | |
+|---|---|
+| ¿Ofrezco la entrada? | El contexto de la sesión — instantánea del login |
+| ¿Sigue abriéndose? | `GET /internal/<slug>/context/`, al entrar |
+
+La segunda existe porque los roles cambian mientras una sesión sigue viva.
+
+### Las capabilities dibujan; el servidor autoriza
+
+`hasUxCapability` decide qué pestaña se ve. Todo endpoint interno las revalida en
+el servidor, en cada petición: quien mienta recibe un 403, no los datos.
+
+Un módulo que la persona no tiene **no se dibuja**. Uno que sí tiene pero que la
+app aún no implementa **se dice** — callarlo haría concluir que la app está rota
+en vez de incompleta.
+
 ## EAS
 
 Perfiles en `eas.json`:

@@ -30,12 +30,12 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | ID | Requerimiento | Prioridad |
 |---|---|---|
 | BR-001 | Autenticación nativa **acotada a `/api/v1/`** | **PARCIAL** — BR-001A núcleo de sesión IMPLEMENTADO; BR-001B ciclo de cuenta PENDIENTE |
-| BR-002 | Selección de tenant validada server-side | **PARCIALMENTE RESUELTO** — público y cliente IMPLEMENTADOS; interno pendiente |
+| BR-002 | Selección de tenant validada server-side | **RESUELTO** — público, cliente e interno |
 | BR-003 | Exponer `fulfillment_status` | **IMPLEMENTADO para v1** |
 | BR-004 | Paginación opt-in | MEDIA |
 | BR-005 | Dominio de reparaciones | ALTA |
 | BR-006 | Endpoint público de marca | **IMPLEMENTADO** |
-| BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — catálogo + auth + pedidos de cliente; superficie INTERNA pendiente |
+| BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — catálogo, auth, cliente, checkout e interno de ventas; inventario y servicio pendientes |
 | BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
 
 ---

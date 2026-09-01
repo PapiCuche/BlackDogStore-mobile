@@ -16,6 +16,8 @@ jest.mock('@/api/endpoints/auth-v1', () => ({
   getIdentity: jest.fn(),
   toCustomer: jest.requireActual('@/api/endpoints/auth-v1').toCustomer,
   toCompanies: jest.requireActual('@/api/endpoints/auth-v1').toCompanies,
+  toAccessContexts: jest.requireActual('@/api/endpoints/auth-v1').toAccessContexts,
+  toPlatformContext: jest.requireActual('@/api/endpoints/auth-v1').toPlatformContext,
 }));
 
 const api = jest.requireMock('@/api/endpoints/auth-v1') as {

@@ -70,7 +70,7 @@ function makeTransport(
     },
     async getCurrentSession(): Promise<SessionSnapshot> {
       log.push('transport.getCurrentSession');
-      return { user: USER, companies: [] };
+      return { user: USER, companies: [], accessContexts: [], platform: { isMaster: false } };
     },
     ...overrides,
   };
@@ -101,7 +101,7 @@ function build(
 
 const COMPANIES = (rows: AuthCompanyWire[]) => ({
   async getCurrentSession(): Promise<SessionSnapshot> {
-    return { user: USER, companies: rows };
+    return { user: USER, companies: rows, accessContexts: [], platform: { isMaster: false } };
   },
 });
 

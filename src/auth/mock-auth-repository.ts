@@ -62,6 +62,11 @@ function buildMockSession(identifier: string, firstName?: string): AuthSession {
     user,
     mode: 'mock',
     expiresAt: null,
+    // A mock session verifies nothing, so it grants nothing. Fabricating an
+    // internal context here would put a fake staff area in front of whoever
+    // typed an address into a development build.
+    accessContexts: [],
+    platform: { isMaster: false },
     // No tenant: a mock session has no server-validated company context, and
     // inventing one would be exactly the "slug equals authority" mistake the
     // tenant model exists to prevent.

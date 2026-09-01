@@ -32,6 +32,8 @@ const SESSION: AuthSession = {
     isEmailVerified: true,
   },
   mode: 'backend',
+  accessContexts: [],
+  platform: { isMaster: false },
   expiresAt: null,
   tenant: { activeCompany: { slug: 'blackdog', name: 'Black Dog' }, availableCompanies: [] },
 };

@@ -271,6 +271,48 @@ Empresa desconocida e inactiva → el mismo 404 del catálogo.
 
 ---
 
+## Superficie interna · `/api/v1/internal/` — **INTEGRADA**
+
+```
+VERIFIED_STABLE_MASTER · VERSIONED · PRIVADA · INTEGRADA POR MOBILE (M6)
+```
+
+Verificada en `origin/master` **`72042b2`** (PR #5), leyendo el código en `master`
+y con smoke real.
+
+| Endpoint | Requiere |
+|---|---|
+| `GET /api/v1/internal/<slug>/context/` | membresía activa |
+| `GET /api/v1/internal/<slug>/orders/` | `sales.orders.view` |
+| `GET /api/v1/internal/<slug>/orders/<id>/` | `sales.orders.view` |
+| `PATCH /api/v1/internal/<slug>/orders/<id>/fulfillment/` | `sales.orders.manage` |
+
+### Dos puertas, dos códigos
+
+| Situación | Respuesta |
+|---|---|
+| Empresa desconocida · inactiva · **sin membresía** | **404** idéntico |
+| Con membresía, **sin capability** | **403** |
+
+Mobile los traduce a dos errores distintos —`InternalAccessDeniedError` y
+`InternalCapabilityMissingError`— porque exigen respuestas distintas: uno cierra
+el área, el otro cierra un módulo.
+
+**Una relación de cliente no abre nada de esto.** `manage` **no implica** `view`.
+
+### El detalle trae sus transiciones
+
+`available_fulfillment_transitions` viene **del servidor**. No hay tabla de
+transiciones en la app: una que calculara la suya derivaría en cuanto cambiara la
+regla, y la deriva sería un botón que falla.
+
+### Qué NO viaja
+
+Identificadores de Stripe, `payment_error`, `email_send_error`,
+`cart_session_key`, `company_snapshot`. Allowlist, igual que en cliente.
+
+---
+
 ## Pedidos de cliente · `/api/v1/customer/` — **INTEGRADO**
 
 ```
