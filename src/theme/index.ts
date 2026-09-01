@@ -4,6 +4,7 @@
  */
 
 import { colorSchemes, type ColorSchemeName, type ColorTokens } from './colors';
+import { buildMaterials, type Materials } from './materials';
 import { radius } from './radius';
 import { elevation, type ElevationLevel } from './shadows';
 import { sizes } from './sizes';
@@ -28,6 +29,13 @@ export {
   readableOn,
   type Rgb,
 } from './contrast';
+export {
+  buildMaterials,
+  supportsBlurMaterials,
+  type Material,
+  type MaterialKey,
+  type Materials,
+} from './materials';
 export { radius, cardRadius, controlRadius, type RadiusToken } from './radius';
 export { elevation, type ElevationLevel } from './shadows';
 export { sizes, type SizeToken } from './sizes';
@@ -44,6 +52,8 @@ export { fontFamilies, typography, type TypographyToken } from './typography';
 export type Theme = {
   scheme: ColorSchemeName;
   colors: ColorTokens;
+  /** What surfaces are made of. See `materials.ts`. */
+  materials: Materials;
   spacing: typeof spacing;
   radius: typeof radius;
   sizes: typeof sizes;
@@ -82,6 +92,7 @@ export function buildTheme(scheme: ColorSchemeName, tenantAccent: string | null 
   const theme: Theme = {
     scheme,
     colors,
+    materials: buildMaterials(colors, scheme),
     spacing,
     radius,
     sizes,

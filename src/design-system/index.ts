@@ -12,6 +12,7 @@ export { Badge, type BadgeProps, type BadgeTone } from './badge';
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from './button';
 export { Card, type CardProps } from './card';
 export { Divider, type DividerProps } from './divider';
+export { GlassSurface, type GlassSurfaceProps } from './glass-surface';
 export { Icon, icons, type IconKey, type IconName, type IconProps } from './icon';
 export { IconButton, type IconButtonProps } from './icon-button';
 export { Input, type InputProps } from './input';
