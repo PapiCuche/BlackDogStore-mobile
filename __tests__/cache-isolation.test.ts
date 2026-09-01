@@ -100,7 +100,7 @@ describe('user isolation', () => {
   it('separates repairs and detail views across users', () => {
     expect(queryKeys.repairs(userA)).not.toEqual(queryKeys.repairs(userB));
     expect(queryKeys.order(userA, 1042)).not.toEqual(queryKeys.order(userB, 1042));
-    expect(queryKeys.repair(userA, 'r-1')).not.toEqual(queryKeys.repair(userB, 'r-1'));
+    expect(queryKeys.repair(userA, 96)).not.toEqual(queryKeys.repair(userB, 96));
   });
 
   it('gives anonymous its own bucket, never a signed-in user’s', () => {
@@ -216,7 +216,7 @@ describe('cache key security', () => {
     queryKeys.orders(userA),
     queryKeys.order(userA, 1042),
     queryKeys.repairs(userA),
-    queryKeys.repair(userA, 'r-1042'),
+    queryKeys.repair(userA, 79),
   ];
 
   it('never puts a credential in a query key', () => {

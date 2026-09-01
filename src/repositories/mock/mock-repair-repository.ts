@@ -7,9 +7,12 @@ import { simulateLatency } from './latency';
 /**
  * Repairs backed by bundled fixtures.
  *
- * This is the ONLY repair implementation that exists, and it will stay that way
- * until BR-005 is accepted — Django has no repair model at all. The class is
- * constructor-injected with its data so tests can drive it with a known set
+ * NO LONGER THE ONLY IMPLEMENTATION. M8 shipped
+ * `/api/v1/customer/<slug>/repairs/` and `V1CustomerRepairRepository` speaks to
+ * it; this one survives for development without a server, exactly as
+ * `MockOrderRepository` did after M4.
+ *
+ * Constructor-injected with its data so tests can drive it with a known set
  * instead of asserting against whatever the fixtures happen to contain.
  */
 export class MockRepairRepository implements RepairRepository {
@@ -28,7 +31,7 @@ export class MockRepairRepository implements RepairRepository {
     );
   }
 
-  async getRepairById(id: string, signal?: AbortSignal): Promise<Repair | null> {
+  async getRepairById(id: number, signal?: AbortSignal): Promise<Repair | null> {
     await simulateLatency(signal);
     return this.repairs.find((repair) => repair.id === id) ?? null;
   }

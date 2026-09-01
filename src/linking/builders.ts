@@ -44,7 +44,13 @@ export function buildOrderLink(orderId: string): string {
   return Linking.createURL(`orders/${requireSafe(orderId)}`);
 }
 
-/** Build a link to a technical-service repair. */
+/**
+ * Build a link to a technical-service repair.
+ *
+ * A STRING, even though `Repair.id` became a number in M8: a URL segment is
+ * text, and the linking layer has no business knowing what a primary key looks
+ * like. The screen converts at its own boundary.
+ */
 export function buildRepairLink(repairId: string): string {
   return Linking.createURL(`repairs/${requireSafe(repairId)}`);
 }

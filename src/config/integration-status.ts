@@ -45,8 +45,8 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   },
   repairs: {
     label: 'Reparaciones',
-    status: 'MOCK',
-    note: 'No existe ningún modelo de reparación en Django. Propuesta completa en BR-005.',
+    status: 'INTEGRATED',
+    note: 'GET /api/v1/customer/<empresa>/repairs/ — núcleo de BR-005 (M8). Diagnóstico, cotización y aprobación siguen pendientes.',
   },
   auth: {
     label: 'Autenticación',

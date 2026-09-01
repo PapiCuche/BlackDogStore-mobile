@@ -115,7 +115,7 @@ describe('cache keys keep the audiences apart', () => {
       queryKeys.orders(scope),
       queryKeys.order(scope, 1),
       queryKeys.repairs(scope),
-      queryKeys.repair(scope, 'r-1'),
+      queryKeys.repair(scope, 96),
     ]) {
       expect(key).not.toContain(INTERNAL_AUDIENCE);
     }

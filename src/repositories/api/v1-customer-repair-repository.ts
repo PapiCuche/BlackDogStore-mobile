@@ -1,0 +1,38 @@
+import {
+  fetchCustomerRepair,
+  fetchCustomerRepairs,
+  RepairNotAvailableError,
+} from '@/api/endpoints/customer-repairs-v1';
+import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
+import type { Repair } from '@/domain/repairs/types';
+import type { RepairRepository } from '@/repositories/types';
+
+/**
+ * A customer's repairs, over `/api/v1/customer/<slug>/repairs/`.
+ *
+ * The M8 sibling of `V1CustomerOrderRepository`, and separate from anything
+ * internal for the same reason that one is: "my repairs" and "this company's
+ * repairs" are different questions, and one class that switched between them
+ * would be one refactor away from answering the wrong one.
+ *
+ * `getRepairById` returns null for a repair that is not this person's, because
+ * the interface says a missing repair is null rather than an exception — the
+ * detail screen renders "no encontrada" from it. The server's 404 is
+ * deliberately indistinguishable from "does not exist", and this preserves that.
+ */
+export class V1CustomerRepairRepository implements RepairRepository {
+  constructor(private readonly deps: { refreshCoordinator: RefreshCoordinator }) {}
+
+  async listRepairs(signal?: AbortSignal): Promise<Repair[]> {
+    return fetchCustomerRepairs(this.deps, signal);
+  }
+
+  async getRepairById(id: number, signal?: AbortSignal): Promise<Repair | null> {
+    try {
+      return await fetchCustomerRepair(id, this.deps, signal);
+    } catch (error) {
+      if (error instanceof RepairNotAvailableError) return null;
+      throw error;
+    }
+  }
+}

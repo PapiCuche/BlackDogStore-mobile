@@ -1,126 +1,98 @@
 import { View } from 'react-native';
 
 import { Icon, icons, Text } from '@/design-system';
-import { repairStageLabel } from '@/domain/repairs/status';
-import {
-  REPAIR_STAGES,
-  isStageComplete,
-  isStageCurrent,
-  type Repair,
-} from '@/domain/repairs/types';
+import type { Repair } from '@/domain/repairs/types';
 import { useTheme } from '@/theme/theme-provider';
 import { formatDate } from '@/utils/format';
 
 /**
- * The repair lifecycle, drawn as a vertical timeline.
+ * What has happened to this device, newest last.
  *
- * The stage list is `REPAIR_STAGES`, not the entries in `repair.timeline` — the
- * customer needs to see the stages still ahead of their device, not only the
- * ones it has already passed. Entries supply the dates for the stages that have
- * happened.
+ * M8 CHANGED WHAT THIS DRAWS. It used to render the fixed ladder
+ * `REPAIR_STAGES` and mark the stages still ahead as pending, which was right
+ * for a seven-stage lifecycle that ended in "entregado". The real machine stops
+ * at `waiting_approval`: approval needs a quote, a quote needs a diagnosis, and
+ * neither module exists yet. Drawing "Entregado — pendiente" underneath would
+ * promise a step this version of the product cannot take.
  *
- * Nothing here invents a rule the backend will be held to; the sequence is
- * MOBILE's proposal (BR-005) and lives in the domain layer, not in this view.
+ * So the timeline is now the SERVER's events, and only the ones it decided this
+ * customer may see. Nothing is filtered here — the hidden events never arrive,
+ * which is a stronger guarantee than asking a component not to render them.
+ *
+ * Every label is the tenant's own word, carried on the event.
  */
 export function RepairTimeline({ repair }: { repair: Repair }) {
   const theme = useTheme();
 
-  if (repair.status === 'cancelled') {
+  if (repair.timeline.length === 0) {
     return (
-      <View
-        accessible
-        accessibilityLabel="Esta reparación fue cancelada."
-        style={{
-          padding: theme.spacing.md,
-          borderRadius: theme.radius.md,
-          backgroundColor: theme.colors.statusDangerSurface,
-        }}
-      >
-        <Text variant="subhead" style={{ color: theme.colors.statusDanger }}>
-          Esta reparación fue cancelada.
-        </Text>
-      </View>
+      <Text variant="subhead" color="textSecondary">
+        Todavía no hay novedades para mostrar.
+      </Text>
     );
   }
 
   return (
     <View accessibilityRole="list" style={{ gap: 0 }}>
-      {REPAIR_STAGES.map((stage, index) => {
-        const entry = repair.timeline.find((item) => item.stage === stage);
-        const done = isStageComplete(stage, repair.status);
-        const current = isStageCurrent(stage, repair.status);
-        const isLast = index === REPAIR_STAGES.length - 1;
-
-        const markerColor = current
-          ? theme.colors.statusProgress
-          : done
-            ? theme.colors.statusSuccess
-            : theme.colors.borderStrong;
-
-        const stateWord = current ? 'en curso' : done ? 'completado' : 'pendiente';
+      {repair.timeline.map((entry, index) => {
+        const isLast = index === repair.timeline.length - 1;
+        // The last event is where the device IS. Everything above it happened.
+        const current = isLast;
+        const tone = entry.status === 'cancelled'
+          ? theme.colors.statusDanger
+          : current
+            ? theme.colors.textPrimary
+            : theme.colors.statusSuccess;
 
         return (
           <View
-            key={stage}
-            accessible
+            key={entry.id}
             accessibilityRole="text"
-            accessibilityLabel={
-              entry?.occurredAt
-                ? `${repairStageLabel(stage)}, ${stateWord}, ${formatDate(entry.occurredAt)}`
-                : `${repairStageLabel(stage)}, ${stateWord}`
-            }
+            accessibilityLabel={`${entry.statusLabel}, ${formatDate(entry.occurredAt)}`}
             style={{ flexDirection: 'row', gap: theme.spacing.sm }}
           >
-            {/* Rail: marker plus the connector down to the next stage. */}
+            {/* Rail: marker plus the connector down to the next event. */}
             <View style={{ alignItems: 'center', width: theme.sizes.iconMd }}>
               <View
                 style={{
-                  width: current ? 16 : 12,
-                  height: current ? 16 : 12,
-                  borderRadius: 8,
-                  marginTop: 4,
+                  width: theme.sizes.iconMd,
+                  height: theme.sizes.iconMd,
+                  borderRadius: theme.sizes.iconMd / 2,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: done || current ? markerColor : 'transparent',
-                  borderWidth: done || current ? 0 : 1.5,
-                  borderColor: markerColor,
+                  backgroundColor: current
+                    ? theme.colors.surfaceSubtle
+                    : 'transparent',
+                  borderWidth: theme.sizes.hairline,
+                  borderColor: tone,
                 }}
               >
-                {done ? <Icon name={icons.check} size={8} color={theme.colors.background} /> : null}
+                <Icon
+                  name={entry.status === 'cancelled' ? icons.close : icons.check}
+                  size={theme.sizes.iconSm}
+                  color={tone}
+                />
               </View>
 
               {!isLast ? (
                 <View
                   style={{
                     flex: 1,
-                    width: 2,
-                    minHeight: theme.spacing.xl,
-                    marginVertical: 2,
-                    backgroundColor: done ? theme.colors.statusSuccess : theme.colors.border,
+                    width: theme.sizes.hairline,
+                    minHeight: theme.spacing.md,
+                    backgroundColor: theme.colors.border,
                   }}
                 />
               ) : null}
             </View>
 
             <View style={{ flex: 1, paddingBottom: isLast ? 0 : theme.spacing.md, gap: 2 }}>
-              <Text
-                variant={current ? 'headline' : 'callout'}
-                color={done || current ? 'textPrimary' : 'textTertiary'}
-              >
-                {repairStageLabel(stage)}
+              <Text variant="subhead" color={current ? 'textPrimary' : 'textSecondary'}>
+                {entry.statusLabel}
               </Text>
-
-              {entry?.occurredAt ? (
-                <Text variant="footnote" color="textTertiary">
-                  {formatDate(entry.occurredAt)}
-                </Text>
-              ) : null}
-
-              {entry?.note ? (
-                <Text variant="footnote" color="textSecondary">
-                  {entry.note}
-                </Text>
-              ) : null}
+              <Text variant="caption" color="textTertiary">
+                {formatDate(entry.occurredAt)}
+              </Text>
             </View>
           </View>
         );

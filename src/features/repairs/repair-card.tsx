@@ -20,13 +20,13 @@ export type RepairCardProps = {
  */
 export function RepairCard({ repair, onPress }: RepairCardProps) {
   const theme = useTheme();
-  const status = describeRepairStatus(repair.status);
+  const status = describeRepairStatus(repair.status, repair.statusLabel);
   const updated = formatRelativeTime(repair.updatedAt);
 
   return (
     <Card
       onPress={onPress}
-      accessibilityLabel={`${repair.deviceName}, ${repair.code}. ${status.label}. Actualizado ${updated}`}
+      accessibilityLabel={`${repair.deviceSummary}, ${repair.number}. ${status.label}. Actualizado ${updated}`}
       accessibilityHint="Abre el seguimiento de la reparación"
     >
       <View style={{ gap: theme.spacing.xs }}>
@@ -40,10 +40,10 @@ export function RepairCard({ repair, onPress }: RepairCardProps) {
         >
           <View style={{ flex: 1, gap: 2 }}>
             <Text variant="mono" color="textTertiary">
-              {repair.code}
+              {repair.number}
             </Text>
             <Text variant="headline" numberOfLines={1}>
-              {repair.deviceName}
+              {repair.deviceSummary}
             </Text>
           </View>
         </View>

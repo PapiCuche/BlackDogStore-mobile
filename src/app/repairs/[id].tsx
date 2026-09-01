@@ -14,11 +14,10 @@ import {
   Text,
 } from '@/design-system';
 import { describeRepairStatus } from '@/domain/repairs/status';
-import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { RepairTimeline } from '@/features/repairs/repair-timeline';
 import { useRepair } from '@/hooks/use-repairs';
 import { useTheme } from '@/theme/theme-provider';
-import { formatCurrency, formatDate, formatRelativeTime } from '@/utils/format';
+import { formatDate, formatRelativeTime } from '@/utils/format';
 
 /**
  * Repair detail.
@@ -29,8 +28,14 @@ import { formatCurrency, formatDate, formatRelativeTime } from '@/utils/format';
  */
 export default function RepairDetailScreen() {
   const theme = useTheme();
+  // A URL segment is a string; the domain id is a number. Converted at the
+  // boundary rather than widening the type inwards — the deep-link layer has no
+  // business knowing what a primary key looks like.
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data: repair, isPending, isError, error, refetch } = useRepair(id);
+  const repairId = Number(id);
+  const { data: repair, isPending, isError, error, refetch } = useRepair(
+    Number.isFinite(repairId) ? repairId : undefined,
+  );
 
   if (isPending) {
     return (
@@ -60,23 +65,23 @@ export default function RepairDetailScreen() {
     );
   }
 
-  const status = describeRepairStatus(repair.status);
+  const status = describeRepairStatus(repair.status, repair.statusLabel);
 
   return (
     <>
       {/* The native header title becomes the service code, so the back stack
           reads correctly when several repairs are open. */}
-      <Stack.Screen options={{ title: repair.code }} />
+      <Stack.Screen options={{ title: repair.number }} />
 
       <Screen scrollable>
         <View style={{ gap: theme.spacing.xl, paddingTop: theme.spacing.sm }}>
           <View style={{ gap: theme.spacing.sm }}>
             <View style={{ gap: 2 }}>
               <Text variant="overline" color="textTertiary" style={{ textTransform: 'uppercase' }}>
-                {repair.deviceKind}
+                Servicio técnico
               </Text>
               <Text variant="title1" accessibilityRole="header">
-                {repair.deviceName}
+                {repair.deviceSummary}
               </Text>
             </View>
 
@@ -93,15 +98,15 @@ export default function RepairDetailScreen() {
 
           <Card>
             <View style={{ gap: theme.spacing.sm }}>
-              <DetailRow label="Número de servicio" value={repair.code} mono />
+              <DetailRow label="Número de servicio" value={repair.number} mono />
               <Divider />
-              <DetailRow label="Recibido" value={formatDate(repair.createdAt)} />
+              <DetailRow label="Recibido" value={formatDate(repair.receivedAt)} />
               <Divider />
               <DetailRow label="Motivo" value={repair.reportedIssue} />
-              {repair.quotedTotal ? (
+              {repair.closedAt ? (
                 <>
                   <Divider />
-                  <DetailRow label="Presupuesto" value={formatCurrency(repair.quotedTotal)} />
+                  <DetailRow label="Cerrado" value={formatDate(repair.closedAt)} />
                 </>
               ) : null}
             </View>
@@ -114,7 +119,6 @@ export default function RepairDetailScreen() {
             </Card>
           </View>
 
-          <MockDataNotice message="Datos de ejemplo. El flujo de reparaciones es una propuesta de Mobile (BR-005) y aún no existe en el backend." />
         </View>
       </Screen>
     </>

@@ -146,9 +146,9 @@ export default function HomeScreen() {
               <View style={{ gap: theme.spacing.sm }}>
                 <View style={{ gap: 2 }}>
                   <Text variant="mono" color="textTertiary">
-                    {activeRepair.code}
+                    {activeRepair.number}
                   </Text>
-                  <Text variant="title3">{activeRepair.deviceName}</Text>
+                  <Text variant="title3">{activeRepair.deviceSummary}</Text>
                 </View>
 
                 <View
@@ -160,7 +160,7 @@ export default function HomeScreen() {
                   }}
                 >
                   <StatusBadge
-                    label={describeRepairStatus(activeRepair.status).label}
+                    label={describeRepairStatus(activeRepair.status, activeRepair.statusLabel).label}
                     tone={describeRepairStatus(activeRepair.status).tone}
                     accessibilityPrefix="Estado de la reparación"
                   />
@@ -175,7 +175,7 @@ export default function HomeScreen() {
                   size="compact"
                   fullWidth
                   onPress={() => router.push(`/repairs/${activeRepair.id}`)}
-                  accessibilityHint={`Abre el seguimiento de ${activeRepair.deviceName}`}
+                  accessibilityHint={`Abre el seguimiento de ${activeRepair.deviceSummary}`}
                 />
               </View>
             </Card>
