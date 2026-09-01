@@ -17,6 +17,7 @@ export { Icon, icons, type IconKey, type IconName, type IconProps } from './icon
 export { IconButton, type IconButtonProps } from './icon-button';
 export { Input, type InputProps } from './input';
 export { ListRow, type ListRowProps } from './list-row';
+export { glassStackScreenOptions, renderHeaderBackground } from './navigation-chrome';
 export { OfflineBanner } from './offline-banner';
 export { Screen, type ScreenProps } from './screen';
 export { SearchInput, type SearchInputProps } from './search-input';

@@ -49,6 +49,8 @@ export type TenantAccentReport = {
   rawContrastOnBackground: number;
   /** Contrast of the DERIVED `accentText` against the page. */
   textContrastOnBackground: number;
+  /** Contrast of `accentText` against the accent wash — where badges land. */
+  textContrastOnAccentSurface: number;
   /** Contrast of `textOnAccent` against the accent fill. */
   onAccentContrast: number;
   /** True when the raw colour had to be corrected to be readable. */
@@ -91,6 +93,10 @@ export function applyTenantAccent(
           parseColor(base.accentText) ?? INK,
           background,
         ),
+        textContrastOnAccentSurface: contrastRatio(
+          parseColor(base.accentText) ?? INK,
+          parseColor(base.accentSurface) ?? background,
+        ),
         onAccentContrast: contrastRatio(
           parseColor(base.textOnAccent) ?? PAPER,
           parseColor(base.accent) ?? INK,
@@ -105,13 +111,23 @@ export function applyTenantAccent(
   const accent = toHex(parsed);
 
   const rawContrast = contrastRatio(parsed, background);
-  const readable = ensureContrast(parsed, background, AA_NORMAL);
-  const accentText = toHex(readable);
 
   // A wash, not a tint of the brand at full strength: 8% in light, 14% in dark,
   // because a dark page swallows a low-alpha overlay.
   const surfaceBase = parseColor(base.surfaceSubtle) ?? background;
-  const accentSurface = toHex(mix(surfaceBase, parsed, scheme === 'dark' ? 0.14 : 0.08));
+  const accentSurfaceRgb = mix(surfaceBase, parsed, scheme === 'dark' ? 0.14 : 0.08);
+  const accentSurface = toHex(accentSurfaceRgb);
+
+  // Corrected against BOTH grounds it can land on: the page, and the accent
+  // wash behind an accent badge. Correcting against the page alone is a real
+  // gap — the wash is tinted toward the brand colour, so it is always the
+  // harder of the two, and a badge is exactly where an accent is read.
+  const readable = ensureContrast(
+    ensureContrast(parsed, background, AA_NORMAL),
+    accentSurfaceRgb,
+    AA_NORMAL,
+  );
+  const accentText = toHex(readable);
 
   // Ink or paper, whichever survives on the fill. Never a fixed white: a
   // pastel brand colour with white text is the classic unreadable button.
@@ -124,6 +140,7 @@ export function applyTenantAccent(
       applied: true,
       rawContrastOnBackground: rawContrast,
       textContrastOnBackground: contrastRatio(readable, background),
+      textContrastOnAccentSurface: contrastRatio(readable, accentSurfaceRgb),
       onAccentContrast: contrastRatio(parseColor(textOnAccent) ?? INK, parsed),
       corrected: toHex(parsed) !== accentText,
     },

@@ -142,6 +142,17 @@ describe('accessibility keeps authority over the brand', () => {
     },
   );
 
+  it.each(HARD_CASES)('keeps accent text readable on the accent WASH from %s', (brand) => {
+    // Where an accent badge actually lands. The wash is tinted toward the brand
+    // colour, so it is always the harder of the two grounds — correcting only
+    // against the page would leave every accent Badge slightly under the bar.
+    for (const scheme of SCHEMES) {
+      const { colors } = applyTenantAccent(colorSchemes[scheme], brand, scheme);
+
+      expect(ratio(colors.accentText, colors.accentSurface)).toBeGreaterThanOrEqual(AA_LARGE);
+    }
+  });
+
   it.each(HARD_CASES)('picks a label that survives ON the %s fill', (brand) => {
     for (const scheme of SCHEMES) {
       const { colors } = applyTenantAccent(colorSchemes[scheme], brand, scheme);

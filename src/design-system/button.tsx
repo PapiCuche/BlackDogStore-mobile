@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, View, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { hapticSelection } from '@/utils/haptics';
 import { useTheme } from '@/theme/theme-provider';
@@ -29,10 +29,17 @@ export type ButtonProps = {
 /**
  * The primary control.
  *
- * `primary` is INK on light and WHITE on dark, not gold. That follows the brand
- * master document directly: "Usar negro, blanco y gris como sistema principal.
- * Reservar el dorado para detalles, sellos o llamadas puntuales." Gold at 4.5:1
- * against white is also not a passing contrast ratio for a filled control.
+ * `primary` is INK on light and WHITE on dark, and it stays that way even when
+ * the tenant has a brand colour. That is a deliberate limit on what a brand may
+ * repaint (UI7): the primary button is the most contrast-critical surface in
+ * the app, and a mid-tone brand fill is exactly where "make the button our
+ * colour" quietly costs someone their reading. The tenant's colour reaches the
+ * UI through accents, links and the active tab — places where `accentText` has
+ * already been corrected against the page.
+ *
+ * A filled button carries the same specular top hairline as every other pane,
+ * so it reads as the same material as the cards around it rather than as a
+ * rectangle of paint.
  *
  * Height is `sizes.control` (52) and never drops below `minTouchTarget` (44)
  * even in `compact`, which is the HIG floor.
@@ -102,6 +109,9 @@ export function Button({
           paddingHorizontal: theme.spacing.md,
           paddingVertical: theme.spacing.xs,
           borderRadius: theme.radius.md,
+          // The specular hairline is absolutely positioned; without this it
+          // would run straight past the rounded corners.
+          overflow: 'hidden',
           borderWidth: theme.sizes.hairline,
           borderColor: palette.border,
           backgroundColor: pressed ? palette.pressed : palette.background,
@@ -117,6 +127,14 @@ export function Button({
         style,
       ]}
     >
+      {/* The specular edge, on the DARK filled variant only. A ghost button has
+          no surface to catch light, and in dark mode the primary fill is already
+          white — a white hairline on white is not a highlight, it is nothing.
+          `pointerEvents` none so it never eats a tap. */}
+      {variant === 'primary' && theme.scheme === 'light' ? (
+        <View pointerEvents="none" style={styles.highlight} />
+      ) : null}
+
       {loading ? (
         <ActivityIndicator size="small" color={palette.foreground} />
       ) : icon ? (
@@ -135,3 +153,14 @@ export function Button({
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  highlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+  },
+});

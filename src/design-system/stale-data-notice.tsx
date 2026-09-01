@@ -1,7 +1,6 @@
-import { View } from 'react-native';
-
 import { useTheme } from '@/theme/theme-provider';
 
+import { GlassSurface } from './glass-surface';
 import { Icon, icons } from './icon';
 import { Text } from './text';
 
@@ -24,7 +23,13 @@ export function StaleDataNotice({
   const theme = useTheme();
 
   return (
-    <View
+    // A caveat ABOUT the content, so it reads as a layer over it rather than as
+    // one more row of it. Solid: it appears above lists, and a notice is not
+    // worth a compositing pass.
+    <GlassSurface
+      material="raised"
+      solid
+      radius={theme.radius.sm}
       accessible
       accessibilityRole="text"
       accessibilityLabel={message}
@@ -34,14 +39,12 @@ export function StaleDataNotice({
         gap: theme.spacing.xs,
         paddingVertical: theme.spacing.xs,
         paddingHorizontal: theme.spacing.sm,
-        borderRadius: theme.radius.sm,
-        backgroundColor: theme.colors.surfaceSubtle,
       }}
     >
       <Icon name={icons.offline} size={theme.sizes.iconSm} color={theme.colors.textTertiary} />
       <Text variant="caption" color="textTertiary" style={{ flex: 1 }}>
         {message}
       </Text>
-    </View>
+    </GlassSurface>
   );
 }

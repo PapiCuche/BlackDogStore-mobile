@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 
+import { glassStackScreenOptions } from '@/design-system';
 import { useTheme } from '@/theme/theme-provider';
 
 /**
@@ -16,10 +17,7 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: theme.colors.background },
-        headerTintColor: theme.colors.textPrimary,
-        headerStyle: { backgroundColor: theme.colors.background },
-        headerShadowVisible: false,
+        ...glassStackScreenOptions(theme),
       }}
     >
       <Stack.Screen name="login" />

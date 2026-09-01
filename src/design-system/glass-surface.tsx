@@ -1,12 +1,18 @@
 import { BlurView } from 'expo-blur';
 import { useMemo, type ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 
 import { useReducedTransparency } from '@/hooks/use-reduced-transparency';
 import { supportsBlurMaterials, type MaterialKey } from '@/theme';
 import { useTheme } from '@/theme/theme-provider';
 
-export type GlassSurfaceProps = {
+/**
+ * Everything a `View` accepts, plus the material. Accessibility props pass
+ * straight through: a pane that announced nothing would make every component
+ * built on it reach for a wrapper `View`, and the wrapper is where labels get
+ * lost.
+ */
+export type GlassSurfaceProps = Omit<ViewProps, 'style' | 'children'> & {
   /** Which material this pane is made of. See `theme/materials.ts`. */
   material?: MaterialKey;
   children?: ReactNode;
@@ -25,7 +31,6 @@ export type GlassSurfaceProps = {
    * over scrolling content, not to the content itself.
    */
   solid?: boolean;
-  testID?: string;
 };
 
 /**
@@ -58,7 +63,7 @@ export function GlassSurface({
   bordered = true,
   highlighted = true,
   solid = false,
-  testID,
+  ...rest
 }: GlassSurfaceProps) {
   const theme = useTheme();
   const reducedTransparency = useReducedTransparency();
@@ -95,7 +100,7 @@ export function GlassSurface({
 
   if (!frosted) {
     return (
-      <View style={[shell, style]} testID={testID}>
+      <View style={[shell, style]} {...rest}>
         {body}
       </View>
     );
@@ -106,7 +111,7 @@ export function GlassSurface({
       intensity={tokens.intensity}
       tint={tokens.blurTint}
       style={[shell, style]}
-      testID={testID}
+      {...rest}
     >
       {/* Painted OVER the blur so the pane keeps its tone over any wallpaper.
           Without it, a photo behind the pane decides what colour it is. */}
