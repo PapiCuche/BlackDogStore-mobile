@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { useCompanyBrand } from '@/hooks/use-company-brand';
 import { getPreference, preferenceKeys, setPreference } from '@/storage/preferences-storage';
 
 import { buildTheme, type ColorSchemeName, type Theme } from './index';
@@ -35,10 +36,32 @@ type ThemeContextValue = {
   setPreference: (next: ThemePreference) => void;
   /** False until the stored preference has been read back from disk. */
   isPreferenceLoaded: boolean;
+  /**
+   * The tenant colour actually in effect, or null while the brand is unknown.
+   *
+   * Exposed so a screen can say "this is your company's colour" honestly, and
+   * so a test can assert that a build with no brand renders achromatic rather
+   * than borrowing the pilot's.
+   */
+  tenantAccent: string | null;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/**
+ * The theme, resolved for the scheme AND for the tenant.
+ *
+ * UI7 added the second half. The brand arrives over BR-006 and can arrive after
+ * the first frame, so the app opens in the platform's achromatic palette and
+ * takes on the tenant's colour when it resolves. That order is deliberate: the
+ * alternative is holding the whole UI hostage to a network request, or flashing
+ * a colour that belongs to whoever shipped the fixture.
+ *
+ * Reading the brand here is possible because `useCompanyBrand` now uses the
+ * PUBLIC query scope, which needs no session. The theme sits above
+ * `AuthProvider` in the tree — auth renders using the theme — so a hook that
+ * needed a session could not be called from here at all.
+ */
 export function AppThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
   const [preference, setPreferenceState] = useState<ThemePreference>('system');
@@ -69,15 +92,22 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   const scheme: ColorSchemeName =
     preference === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : preference;
 
+  // Only a READY brand contributes a colour. `loading` and `unavailable` both
+  // mean "we do not know this tenant's colour", and the honest render for that
+  // is the platform's own — never a remembered one from another build.
+  const brand = useCompanyBrand();
+  const tenantAccent = brand.status === 'ready' ? brand.brand.primaryColor : null;
+
   const value = useMemo<ThemeContextValue>(
     () => ({
-      theme: buildTheme(scheme),
+      theme: buildTheme(scheme, tenantAccent),
       scheme,
       preference,
       setPreference: updatePreference,
       isPreferenceLoaded,
+      tenantAccent,
     }),
-    [scheme, preference, updatePreference, isPreferenceLoaded],
+    [scheme, tenantAccent, preference, updatePreference, isPreferenceLoaded],
   );
 
   return <ThemeContext value={value}>{children}</ThemeContext>;

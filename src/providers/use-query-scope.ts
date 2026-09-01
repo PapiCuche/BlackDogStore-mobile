@@ -24,3 +24,16 @@ export function useQueryScope(): QueryScope {
     [userId],
   );
 }
+
+/**
+ * The cache namespace for PUBLIC tenant data, with no session involved.
+ *
+ * `scopePrefix(scope, 'public')` never reads `scope.user`, so a public key is
+ * identical signed in or out. That makes this hook exactly as correct as
+ * `useQueryScope` for public data — and it does not need `AuthProvider`, which
+ * is what lets the THEME read the tenant's brand: the theme provider sits above
+ * auth in the tree, because auth renders using the theme.
+ */
+export function usePublicQueryScope(): QueryScope {
+  return useMemo(() => makeQueryScope({ tenantSlug: companySlug, userId: null }), []);
+}
