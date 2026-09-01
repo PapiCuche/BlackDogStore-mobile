@@ -313,6 +313,79 @@ Identificadores de Stripe, `payment_error`, `email_send_error`,
 
 ---
 
+## Inventario interno · `/api/v1/internal/<slug>/inventory/` — **INTEGRADO**
+
+```
+VERIFIED_STABLE_MASTER · VERSIONED · PRIVADO · INTEGRADO POR MOBILE (M7A)
+```
+
+Verificado en `origin/master` **`fd6ea01`** (PR #6), leyendo el código en
+`master` y con smoke real sobre los cuatro endpoints. Cada nombre de campo de
+`internal-inventory-v1.ts` salió de una respuesta real.
+
+| Endpoint | Requiere |
+|---|---|
+| `GET .../inventory/summary/` | `inventory.view` |
+| `GET .../inventory/stock/` | `inventory.view` |
+| `GET .../inventory/movements/` | `inventory.view` |
+| `POST .../inventory/adjustments/` | `inventory.adjust` |
+
+### TRES puertas, tres códigos
+
+| Situación | Respuesta |
+|---|---|
+| Empresa desconocida · inactiva · **sin membresía** | **404** idéntico |
+| Con membresía, **sin capability** | **403** |
+| Con capability, **sucursal fuera de su acceso** | **404**, no 403 |
+
+El tercero es el que distingue a este módulo. Un 403 confirmaría que la sucursal
+existe, y un empleado con acceso a una sola tienda podría barrer ids hasta
+levantar el mapa de sucursales de su empresa.
+
+Mobile lo traduce a un tercer error, `BranchOutOfScopeError`, en vez de
+reutilizar `InternalAccessDeniedError`: decirle a alguien que perdió toda su
+membresía cuando solo tocó una tienda ajena es la alarma equivocada. La
+distinción se hace por lo que la app **preguntó** (`hadBranch`), no por lo que el
+servidor respondió — el servidor manda el mismo 404 a propósito.
+
+### Sin `branch_id` no es un error
+
+La lectura se agrega sobre las sucursales visibles, y ese conjunto puede ser
+vacío (`branch_access_mode=SELECTED` sin filas asignadas). La respuesta es **200
+con cero filas** y `available_branches: []`. La app lo dice con un `EmptyState`,
+no con un `ErrorState`: no tener sucursales asignadas es un estado legítimo de la
+empresa.
+
+`available_branches` viene del servidor en `summary/`. El selector no se dibuja
+desde una lista cacheada, porque el acceso a una tienda puede retirarse entre dos
+visitas.
+
+### El ajuste manda intención, nunca resultado
+
+`POST adjustments/` acepta `product_slug`, `branch_id`, `movement_type`,
+`quantity` (positiva) y `reason`.
+
+**No existe `quantity_after` ni `new_quantity`**, ni en el contrato ni en
+`StockAdjustmentInput`. Un total calculado en el teléfono es una afirmación sobre
+un número que otra persona puede estar cambiando en ese instante. El signo lo
+pone el tipo; la aritmética, el servidor, bajo `select_for_update()`; el
+resultado vuelve como `stock_after` en la respuesta.
+
+Los tipos ofrecidos reflejan `StockMovement.MANUAL_TYPES`. `sale_exit` no está
+porque lo produce el pipeline de pago, y las transferencias porque una escrita a
+mano por un solo lado es stock que se desvanece. Un test lo vigila.
+
+Un **400** es una respuesta de negocio ("no hay stock suficiente"), no un fallo:
+`StockAdjustmentRejectedError` conserva las palabras del servidor en vez de
+reemplazarlas por «ocurrió un error inesperado».
+
+### Qué NO existe en v1
+
+Transferencias y recuentos. Son flujos de varios pasos en el dominio, y la app no
+inventa un POST que los aplane.
+
+---
+
 ## Pedidos de cliente · `/api/v1/customer/` — **INTEGRADO**
 
 ```
@@ -333,7 +406,7 @@ Verificado en `origin/master` **`b253156`** (PR #3), leyendo el código en
 |---|---|---|
 | `storefront/` | pública | ninguna |
 | `customer/` | **cliente, sus propios registros** | Bearer v1 |
-| `internal/` | staff bajo capability | **no existe todavía** |
+| `internal/` | staff bajo capability | Bearer v1 + capability |
 
 Espacios de URL separados, no un endpoint que ensancha su queryset según quién
 pregunte.
