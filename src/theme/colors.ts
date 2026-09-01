@@ -1,25 +1,43 @@
 /**
- * Colour tokens.
+ * Colour tokens — THE PLATFORM'S, not a tenant's.
  *
- * SOURCE OF TRUTH: `docs/black-dog-store-brand-master.md` in the Web repository,
- * section 19 "Identidad visual recomendada". The raw palette below is copied
- * verbatim from it and must not be re-invented here.
+ * UI7 CHANGED WHAT THIS FILE IS. It used to open by naming
+ * `docs/black-dog-store-brand-master.md` as its SOURCE OF TRUTH and to carry
+ * that company's palette — gold accent included — as the base of the design
+ * system. That was correct for a single-store app and wrong for a SaaS: the
+ * pilot tenant had become the default identity of every build, and a second
+ * customer would have inherited a competitor's gold unless someone remembered
+ * to overwrite it.
  *
- * The brand rule that shapes this file: "Usar negro, blanco y gris como sistema
- * principal. Reservar el dorado para detalles, sellos o llamadas puntuales."
- * So the PRIMARY ACTION colour is ink (light) / white (dark), and gold is an
- * accent only. Gold is also unusable as text on white (#D4AF37 on #FFFFFF is
- * ~1.9:1), which is why `accentText` carries a darkened variant per scheme.
+ * So the base is now deliberately **achromatic**. Ink, paper and a graphite
+ * ramp. The platform has no colour of its own to lend, and does not pretend
+ * otherwise.
+ *
+ * WHERE COLOUR COMES FROM. The tenant, over BR-006
+ * (`/api/v1/storefront/<slug>/config/` → `CompanyBrand.primaryColor`), applied
+ * by `tenant-accent.ts` on top of these tokens. The pilot's gold lives in
+ * `domain/company/pilot-brand.ts`, which is where a tenant's identity belongs.
+ *
+ * WHAT A TENANT MAY NOT REPAINT: the status ramp (success, warning, danger,
+ * info), the text ramp and the borders. Those are meaning and legibility, not
+ * decoration — a shop whose brand colour happens to be red must not end up with
+ * a red "delivered" badge, and no brand colour may push body text below WCAG AA.
  */
 
-/** Raw brand palette — verbatim from the brand master document. */
-export const brandPalette = {
-  black: '#0A0A0A',
-  white: '#FFFFFF',
-  grayDark: '#1A1A1A',
-  grayLight: '#E5E5E5',
-  silver: '#C0C0C0',
-  gold: '#D4AF37',
+/**
+ * The achromatic base.
+ *
+ * Not "grey because grey is safe" — grey because it is the only palette a
+ * multi-tenant platform can hold without borrowing someone's identity. Slightly
+ * cool rather than pure neutral, so tenant accents of any hue sit on it without
+ * looking muddy.
+ */
+export const platformPalette = {
+  ink: '#0A0A0A',
+  paper: '#FFFFFF',
+  graphite: '#1A1A1D',
+  ash: '#E5E5E7',
+  slate: '#8A8F97',
 } as const;
 
 /**
@@ -58,12 +76,24 @@ export type ColorTokens = {
   /** Fill for destructive actions. */
   danger: string;
 
-  /** Decorative gold. Never used for text or for anything load-bearing. */
+  /**
+   * The tenant's colour, or graphite when there is none.
+   *
+   * A FILL, never text: an accent is chosen for identity and identity has no
+   * contrast requirement. Use `accentText` where it has to be read.
+   */
   accent: string;
-  /** Readable gold, for text and icons that must carry the accent. */
+  /** The accent, corrected until it clears AA against `background`. */
   accentText: string;
-  /** Very low-emphasis gold wash behind accent content. */
+  /** Very low-emphasis wash behind accent content. */
   accentSurface: string;
+  /**
+   * Foreground drawn ON TOP of an `accent` fill.
+   *
+   * Computed, never assumed. A tenant accent can be near-white or near-black,
+   * and a hardcoded label colour turns one of those two cases invisible.
+   */
+  textOnAccent: string;
 
   /** Status foregrounds — used for text and icons on `*Surface` fills. */
   statusNeutral: string;
@@ -115,20 +145,23 @@ export const lightColors: ColorTokens = {
   actionBackgroundPressed: '#2A2A2A',
   danger: '#B3261E',
 
-  accent: '#D4AF37',
-  accentText: '#7A5F12',
-  accentSurface: '#FBF4DF',
+  // Achromatic by default. A tenant accent replaces these three (plus
+  // `textOnAccent`) at theme-build time; nothing else in the ramp moves.
+  accent: '#2E2E33',
+  accentText: '#2E2E33',
+  accentSurface: '#F1F1F3',
+  textOnAccent: '#FFFFFF',
 
   statusNeutral: '#5B5F66',
   statusInfo: '#1A4E8A',
-  statusProgress: '#7A5F12',
+  statusProgress: '#5B4B8A',
   statusWarning: '#8A5A00',
   statusSuccess: '#137333',
   statusDanger: '#B3261E',
 
   statusNeutralSurface: '#F1F1F3',
   statusInfoSurface: '#E8F0FB',
-  statusProgressSurface: '#FBF4DF',
+  statusProgressSurface: '#EEEBF7',
   statusWarningSurface: '#FDF1DF',
   statusSuccessSurface: '#E4F4E9',
   statusDangerSurface: '#FBEAE9',
@@ -141,8 +174,9 @@ export const lightColors: ColorTokens = {
 /**
  * Dark scheme.
  *
- * Anchored on the Web storefront's real background (#080808) rather than pure
- * black, so the two products look like the same brand side by side.
+ * Anchored at #080808 rather than pure black: an OLED true-black page makes
+ * every translucent material above it read as a grey rectangle, because there
+ * is nothing behind them to show through.
  */
 export const darkColors: ColorTokens = {
   background: '#080808',
@@ -165,20 +199,21 @@ export const darkColors: ColorTokens = {
   actionBackgroundPressed: '#D9D9DC',
   danger: '#F2837E',
 
-  accent: '#D4AF37',
-  accentText: '#E3C766',
-  accentSurface: '#241E0C',
+  accent: '#D4D4D8',
+  accentText: '#D4D4D8',
+  accentSurface: '#1E1E21',
+  textOnAccent: '#0A0A0A',
 
   statusNeutral: '#A1A6AE',
   statusInfo: '#7FB3F0',
-  statusProgress: '#E3C766',
+  statusProgress: '#B3A5E0',
   statusWarning: '#E3B341',
   statusSuccess: '#4CC38A',
   statusDanger: '#F2837E',
 
   statusNeutralSurface: '#1E1E21',
   statusInfoSurface: '#12213A',
-  statusProgressSurface: '#241E0C',
+  statusProgressSurface: '#1B172B',
   statusWarningSurface: '#2A2009',
   statusSuccessSurface: '#0E2A1C',
   statusDangerSurface: '#2E1413',

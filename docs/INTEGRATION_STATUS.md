@@ -444,3 +444,29 @@ alguien lo añade.
 **Lo que sigue PENDIENTE**: transferencias, recuentos, reportes de inventario
 (`inventory.reports` no tiene superficie v1), clientes internos y servicio
 técnico.
+
+## Design system tenant-aware (UI7)
+
+```
+Paleta base acromática         IMPLEMENTADO / TESTED
+Acento por tenant (BR-006)     INTEGRADO / TESTED
+Contraste calculado (WCAG AA)  IMPLEMENTADO / TESTED
+Materiales semánticos          IMPLEMENTADO / TESTED
+Fallback opaco por material    IMPLEMENTADO / TESTED
+Reduce Transparency            IMPLEMENTADO (iOS; Android ya es opaco)
+Chrome flotante + shell        IMPLEMENTADO / TESTED
+Logo por tenant                PENDIENTE (backend no sirve logo)
+secondaryColor                 PENDIENTE (sin rol semántico todavía)
+Tipografía por tenant          NO PLANIFICADO
+```
+
+**La empresa piloto deja de ser el fallback universal.** El dorado de Black Dog
+era el acento de cualquier build; ahora vive en `pilot-brand.ts` y la base es
+acromática. Un test comprueba que ese hex no aparece en la paleta.
+
+**La accesibilidad conserva la autoridad.** El color del tenant se aplica exacto
+como relleno y se deriva donde tiene que leerse. La rampa de estado, el texto,
+los bordes y el fondo del botón primario quedan fuera de su alcance.
+
+**El desenfoque es la mejora.** Cada material lleva fallback opaco, y el texto
+principal pasa AA sobre los cuatro en los dos esquemas.

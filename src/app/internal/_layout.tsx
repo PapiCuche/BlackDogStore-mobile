@@ -1,5 +1,8 @@
 import { Stack } from 'expo-router';
 
+import { glassStackScreenOptions } from '@/design-system';
+import { useTheme } from '@/theme/theme-provider';
+
 /**
  * The internal area's own stack.
  *
@@ -12,5 +15,9 @@ import { Stack } from 'expo-router';
  * just a clearly marked room inside it.
  */
 export default function InternalLayout() {
-  return <Stack screenOptions={{ headerBackTitle: 'Atrás' }} />;
+  const theme = useTheme();
+
+  return (
+    <Stack screenOptions={{ headerBackTitle: 'Atrás', ...glassStackScreenOptions(theme) }} />
+  );
 }

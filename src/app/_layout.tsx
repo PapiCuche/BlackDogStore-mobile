@@ -3,7 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
 
-import { OfflineBanner } from '@/design-system';
+import { glassStackScreenOptions, OfflineBanner } from '@/design-system';
 import { AppProviders } from '@/providers/app-providers';
 import { useAppTheme } from '@/theme/theme-provider';
 
@@ -71,9 +71,9 @@ function RootNavigator() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: theme.colors.background },
           // The system back-swipe is a gesture iOS users expect everywhere.
           gestureEnabled: true,
+          ...glassStackScreenOptions(theme),
         }}
       >
         <Stack.Screen name="index" />

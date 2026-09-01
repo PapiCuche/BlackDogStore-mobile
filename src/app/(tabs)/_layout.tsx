@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router/js-tabs';
-import { Platform, type ColorValue } from 'react-native';
+import { Platform, StyleSheet, type ColorValue } from 'react-native';
 
-import { Icon, icons, type IconName } from '@/design-system';
+import { GlassSurface, Icon, icons, type IconName } from '@/design-system';
 import type { CompanyFeature } from '@/domain/company/types';
 import { useCompanyFeatures } from '@/hooks/use-company-brand';
 import { useAppTheme } from '@/theme/theme-provider';
@@ -67,14 +67,26 @@ export default function TabsLayout() {
         headerShown: false,
         sceneStyle: { backgroundColor: theme.colors.background },
 
-        tabBarActiveTintColor: theme.colors.textPrimary,
+        // The active tint is the TENANT's, corrected for contrast. This is the
+        // one piece of primary chrome that carries a company's colour, and it
+        // carries `accentText` rather than `accent`: the raw brand colour is a
+        // fill, and a tab label has to be read.
+        tabBarActiveTintColor: theme.colors.accentText,
         tabBarInactiveTintColor: theme.colors.textTertiary,
+        // The bar FLOATS over scrolling content, which is exactly the case the
+        // frosted material exists for — and the one case where the compositing
+        // cost is paid once for the whole screen instead of once per row.
+        tabBarBackground: renderTabBarBackground,
         tabBarStyle: {
-          backgroundColor: theme.colors.background,
+          // Transparent so the material behind it is what shows. `GlassSurface`
+          // falls back to an opaque fill wherever the blur is off, so this is
+          // never a see-through bar.
+          backgroundColor: 'transparent',
           borderTopColor: theme.colors.border,
           // Hairline, not 1pt: on a 3x display a 1pt rule is three device
           // pixels and reads as a heavy line under the content.
           borderTopWidth: theme.sizes.hairline,
+          position: 'absolute',
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -143,4 +155,16 @@ export default function TabsLayout() {
 
 function renderTabIcon(name: IconName, color: ColorValue, size: number) {
   return <Icon name={name} color={color} size={size} />;
+}
+
+/**
+ * Defined at module scope, not inline.
+ *
+ * React Navigation calls `tabBarBackground` on every render; a component
+ * declared inside `TabsLayout` would be a new type each time and remount the
+ * whole pane — which, for a blurred view, means re-creating a native effect
+ * view on every tab change.
+ */
+function renderTabBarBackground() {
+  return <GlassSurface material="chrome" bordered={false} style={StyleSheet.absoluteFill} />;
 }

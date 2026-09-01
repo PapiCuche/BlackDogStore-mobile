@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react';
+import { BottomTabBarHeightContext } from 'expo-router/js-tabs';
+import { HeaderHeightContext } from 'expo-router/react-navigation';
+import { use, type ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -33,11 +35,26 @@ export type ScreenProps = {
  * Owns the four things that are easy to get wrong once per screen and then
  * inconsistent forever:
  *
- *  1. SAFE AREA. Only the TOP and the horizontal edges are consumed here. The
- *     bottom belongs to the tab bar: Expo Router's tabs navigator sits below
- *     the scene and applies the home-indicator inset itself, so the scene
- *     already ends above it. Adding `insets.bottom` here as well would produce
- *     a visible dead band above the tab bar on every notched iPhone.
+ *  1. SAFE AREA AND THE TAB BAR. Only the TOP and the horizontal edges come
+ *     from the insets. The bottom comes from the TAB BAR's own height, read
+ *     from `BottomTabBarHeightContext`.
+ *
+ *     UI7 made that necessary. The tab bar is now a floating frosted pane —
+ *     `position: absolute`, so content passes underneath it and there is
+ *     something for the material to blur. The scene therefore no longer ends
+ *     above the bar, and every screen would hide its last row behind it.
+ *     Reading the real height here fixes that once, for every screen, instead
+ *     of thirty screens each guessing 49 or 56 points.
+ *
+ *     The CONTEXT is read rather than `useBottomTabBarHeight()`: that hook
+ *     throws outside a tab navigator, and this shell is also used by the auth
+ *     stack and by every pushed screen. Undefined is a valid answer meaning
+ *     "no tab bar here", and it costs no padding.
+ *
+ *     The stack HEADER is the same story from the other end. It is transparent
+ *     from UI7, so the scene runs under it; `HeaderHeightContext` says by how
+ *     much, and it already includes the status-bar inset — which is why it
+ *     replaces `insets.top` instead of adding to it.
  *  2. BACKGROUND. Painted from tokens so a theme switch cannot leave a white
  *     gutter behind a dark page.
  *  3. KEYBOARD. `padding` on iOS and `height` on Android is the pairing that
@@ -57,11 +74,18 @@ export function Screen({
 }: ScreenProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  // Undefined outside a tab navigator. That is not a failure — it is a screen
+  // with no tab bar under it.
+  const tabBarHeight = use(BottomTabBarHeightContext);
+  // Defined only under a stack header. It ALREADY includes the status-bar
+  // inset, so it replaces `insets.top` rather than adding to it — the classic
+  // way to end up with a screen that starts an inch too low.
+  const headerHeight = use(HeaderHeightContext);
 
   const frame: ViewStyle = {
     flex: 1,
     backgroundColor: theme.colors.background,
-    paddingTop: insets.top,
+    paddingTop: headerHeight ?? insets.top,
     paddingLeft: insets.left,
     paddingRight: insets.right,
   };
@@ -79,9 +103,10 @@ export function Screen({
       style={{ flex: 1 }}
       contentContainerStyle={[
         inner,
-        // Breathing room at the bottom so the last card is not flush against
-        // the tab bar.
-        { paddingBottom: theme.spacing.xxl },
+        // Breathing room, PLUS whatever the floating tab bar occupies. Without
+        // the second term the last card sits behind the frosted pane, which
+        // looks like a rendering bug rather than a design.
+        { paddingBottom: theme.spacing.xxl + (tabBarHeight ?? 0) },
         contentContainerStyle,
       ]}
       keyboardShouldPersistTaps="handled"
@@ -100,7 +125,16 @@ export function Screen({
       {children}
     </ScrollView>
   ) : (
-    <View testID={testID} style={[{ flex: 1 }, inner, contentContainerStyle]}>
+    // A screen that owns its own FlatList gets the space as padding on the
+    // CONTAINER, which ends the list's viewport above the bar rather than
+    // letting rows travel under it. Slightly less of the effect, and correct
+    // without editing every list in the app: the alternative is threading the
+    // inset into each `contentContainerStyle`, which only the list itself can
+    // do. Recorded as scope, not pretended away.
+    <View
+      testID={testID}
+      style={[{ flex: 1 }, inner, { paddingBottom: tabBarHeight ?? 0 }, contentContainerStyle]}
+    >
       {children}
     </View>
   );

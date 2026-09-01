@@ -37,6 +37,9 @@ jest.mock('expo-router/js-tabs', () => {
 const mockFeatures = jest.fn<readonly CompanyFeature[], []>();
 jest.mock('@/hooks/use-company-brand', () => ({
   useCompanyFeatures: () => mockFeatures(),
+  // The theme provider reads the brand too, from UI7: the tenant's colour is
+  // part of the resolved theme. A build with no brand renders achromatic.
+  useCompanyBrand: () => ({ status: 'unavailable', reason: 'test' }),
 }));
 
 beforeEach(() => {

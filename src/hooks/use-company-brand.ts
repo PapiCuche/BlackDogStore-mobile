@@ -8,7 +8,7 @@ import {
   type CompanyFeature,
 } from '@/domain/company/types';
 import { queryKeys } from '@/providers/query-client';
-import { useQueryScope } from '@/providers/use-query-scope';
+import { usePublicQueryScope } from '@/providers/use-query-scope';
 import { repositories } from '@/repositories';
 
 /**
@@ -38,7 +38,9 @@ const canUsePilotFixture = isPilotTenant && useMockData;
  */
 export function useCompanyBrand(): CompanyBrandState {
   const repository = repositories.company;
-  const scope = useQueryScope();
+  // Public scope: the brand is tenant data, not personal data, and reading it
+  // must not require a session — the theme resolves it above `AuthProvider`.
+  const scope = usePublicQueryScope();
 
   const { data, isPending, isError } = useQuery({
     queryKey: queryKeys.companyBrand(scope),
