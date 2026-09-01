@@ -1,4 +1,5 @@
 import { CAP_INVENTORY_VIEW } from '@/domain/internal/inventory-types';
+import { CAP_SERVICE_ORDERS_VIEW } from '@/domain/internal/service-types';
 import {
   CAP_SALES_ORDERS_VIEW,
   hasUxCapability,
@@ -18,9 +19,10 @@ import {
  * nowhere would be worse than saying so: the person would conclude the app is
  * broken rather than unfinished.
  *
- * Inventory was this docstring's example until M7A built it. That is the shape
- * of the field: entries move from `pending-mobile` to `ready` as screens land,
- * and the capability they name never changes.
+ * Inventory was this docstring's example until M7A built it, and technical
+ * service was `pending-domain` — neither side existed — until M8 built both.
+ * That is the shape of the field: entries move toward `ready` as the code
+ * lands, and the capability they name never changes.
  */
 export type ModuleIntegration =
   /** Built and usable now. */
@@ -68,10 +70,10 @@ export const INTERNAL_MODULES: readonly InternalModule[] = [
   {
     key: 'service',
     title: 'Servicio técnico',
-    description: 'Órdenes de reparación y diagnóstico.',
-    requires: 'service.orders.view',
-    // Neither side exists: there is no repair model in the backend at all.
-    integration: 'pending-domain',
+    description: 'Recepción de equipos y órdenes de servicio.',
+    requires: CAP_SERVICE_ORDERS_VIEW,
+    integration: 'ready',
+    route: '/internal/service',
   },
   {
     key: 'settings',

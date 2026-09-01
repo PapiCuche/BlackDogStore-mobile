@@ -250,11 +250,21 @@ describe('the module registry decides what to DRAW', () => {
     expect(modules[0]!.route).toBeUndefined();
   });
 
-  it('marks technical service as pending DOMAIN, not pending mobile', () => {
-    // Neither side exists: there is no repair model in the backend at all.
+  it('technical service is READY now that M8 built both sides', () => {
+    // Was `pending-domain` through M7A — neither the backend model nor the
+    // screen existed. M8 built `RepairOrder` and the screens that read it.
     const service = INTERNAL_MODULES.find((m) => m.key === 'service');
 
-    expect(service!.integration).toBe('pending-domain');
+    expect(service!.integration).toBe('ready');
+    expect(service!.route).toBe('/internal/service');
+    expect(service!.requires).toBe('service.orders.view');
+  });
+
+  it('no module claims a domain that does not exist', () => {
+    // The `pending-domain` state is not retired, it is unused: every module in
+    // the registry now has a backend. It comes back the day somebody adds one
+    // that does not.
+    expect(INTERNAL_MODULES.map((m) => m.integration)).not.toContain('pending-domain');
   });
 
   it('an inventory-only user gets no fake Sales access', () => {

@@ -1,0 +1,380 @@
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { Alert, ScrollView, View } from 'react-native';
+
+import { serviceErrorMessage } from '@/api/endpoints/internal-service-v1';
+import {
+  Button,
+  Card,
+  Divider,
+  EmptyState,
+  ErrorState,
+  icons,
+  Input,
+  LoadingState,
+  Screen,
+  SectionHeader,
+  StatusBadge,
+  Text,
+} from '@/design-system';
+import {
+  CAP_SERVICE_ORDERS_MANAGE,
+  CAP_SERVICE_ORDERS_VIEW,
+} from '@/domain/internal/service-types';
+import { hasUxCapability } from '@/domain/internal/types';
+import {
+  useAssignTechnician,
+  useServiceAssignmentOptions,
+  useServiceOrder,
+  useServiceTransition,
+} from '@/hooks/use-internal-service';
+import { useInternalContext } from '@/hooks/use-internal-sales';
+import { useTheme } from '@/theme/theme-provider';
+import { formatDate } from '@/utils/format';
+
+/**
+ * One service order, as the people working on it need to see it.
+ *
+ * THE INTERNAL SERIALIZER, not the customer one. Internal notes, the physical
+ * condition recorded at intake, the accessories, the full timeline including
+ * private comments, who received the device and who has it now — all of it is
+ * here, and none of it is on the screen a customer sees.
+ *
+ * THE ACTIONS COME FROM THE SERVER. `availableTransitions` is rendered
+ * verbatim; there is no transition table in this app to drift out of step with
+ * the machine. The server re-validates the move regardless of what was drawn,
+ * so a refusal is a normal outcome rather than a bug.
+ */
+export default function ServiceOrderDetailScreen() {
+  const theme = useTheme();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const orderId = Number(id);
+
+  const [comment, setComment] = useState('');
+
+  const { data: context, isPending: contextPending } = useInternalContext();
+  const mayView = hasUxCapability(context ?? null, CAP_SERVICE_ORDERS_VIEW);
+  const mayManage = hasUxCapability(context ?? null, CAP_SERVICE_ORDERS_MANAGE);
+
+  const query = useServiceOrder(Number.isFinite(orderId) ? orderId : undefined, {
+    enabled: mayView,
+  });
+  const assignment = useServiceAssignmentOptions(
+    Number.isFinite(orderId) ? orderId : undefined,
+    { enabled: mayManage },
+  );
+  const transition = useServiceTransition();
+  const assign = useAssignTechnician();
+
+  const { data: order, isPending, isError, error } = query;
+  const title = order?.number ?? 'Orden de servicio';
+
+  if (contextPending) {
+    return (
+      <>
+        <Stack.Screen options={{ title }} />
+        <Screen scrollable>
+          <LoadingState label="Cargando orden" skeletonCount={4} />
+        </Screen>
+      </>
+    );
+  }
+
+  if (!mayView) {
+    return (
+      <>
+        <Stack.Screen options={{ title }} />
+        <Screen scrollable contentContainerStyle={{ flexGrow: 1 }}>
+          <EmptyState
+            icon={icons.info}
+            title="Ya no tienes acceso a este módulo"
+            message="Tu cuenta no tiene permiso para ver el servicio técnico de esta empresa."
+            actionLabel="Volver al área interna"
+            onAction={() => router.replace('/internal')}
+          />
+        </Screen>
+      </>
+    );
+  }
+
+  if (isError) {
+    return (
+      <>
+        <Stack.Screen options={{ title }} />
+        <Screen scrollable contentContainerStyle={{ flexGrow: 1 }}>
+          <ErrorState error={error} onRetry={() => void query.refetch()} />
+        </Screen>
+      </>
+    );
+  }
+
+  if (isPending) {
+    return (
+      <>
+        <Stack.Screen options={{ title }} />
+        <Screen scrollable>
+          <LoadingState label="Cargando orden" skeletonCount={4} />
+        </Screen>
+      </>
+    );
+  }
+
+  const move = (status: string, label: string) => {
+    transition.mutate(
+      { id: order.id, status, comment: comment.trim() || undefined },
+      {
+        onSuccess: () => {
+          setComment('');
+          Alert.alert('Estado actualizado', `${order.number} ahora está en «${label}».`);
+        },
+      },
+    );
+  };
+
+  return (
+    <>
+      <Stack.Screen options={{ title }} />
+      <Screen scrollable>
+        <View style={{ gap: theme.spacing.lg }}>
+          <View style={{ gap: theme.spacing.xs }}>
+            <Text variant="mono" color="textTertiary">
+              {order.number}
+            </Text>
+            <Text variant="title2" accessibilityRole="header">
+              {order.deviceSummary}
+            </Text>
+            <StatusBadge
+              label={order.statusLabel}
+              tone="neutral"
+              accessibilityPrefix="Estado de la orden"
+            />
+          </View>
+
+          <Card variant="outlined">
+            <View style={{ gap: theme.spacing.sm }}>
+              <Row label="Cliente" value={order.customerName} theme={theme} />
+              <Divider />
+              <Row label="Sucursal" value={order.branchName} theme={theme} />
+              <Divider />
+              <Row label="Recibido" value={formatDate(order.receivedAt)} theme={theme} />
+              <Divider />
+              <Row label="Recibido por" value={order.receivedByName || '—'} theme={theme} />
+              <Divider />
+              <Row
+                label="Técnico"
+                value={order.technicianName || 'Sin asignar'}
+                theme={theme}
+              />
+            </View>
+          </Card>
+
+          <View>
+            <SectionHeader title="Recepción" />
+            <Card variant="outlined">
+              <View style={{ gap: theme.spacing.sm }}>
+                <Field label="Problema reportado" value={order.reportedIssue} theme={theme} />
+                {order.physicalCondition ? (
+                  <Field
+                    label="Condición física"
+                    value={order.physicalCondition}
+                    theme={theme}
+                  />
+                ) : null}
+                {order.receivedAccessories ? (
+                  <Field
+                    label="Accesorios recibidos"
+                    value={order.receivedAccessories}
+                    theme={theme}
+                  />
+                ) : null}
+                {order.internalNotes ? (
+                  <Field label="Notas internas" value={order.internalNotes} theme={theme} />
+                ) : null}
+              </View>
+            </Card>
+          </View>
+
+          {/* Only with `service.orders.manage`. The server re-checks anyway, so
+              a 403 here is a normal outcome — the permission may have been
+              revoked between drawing the button and pressing it. */}
+          {mayManage ? (
+            <View>
+              <SectionHeader title="Mover la orden" />
+              <Card variant="outlined">
+                <View style={{ gap: theme.spacing.sm }}>
+                  {order.availableTransitions.length === 0 ? (
+                    <Text variant="subhead" color="textSecondary">
+                      Esta orden ya no admite más cambios de estado en esta versión.
+                    </Text>
+                  ) : (
+                    <>
+                      <Input
+                        label="Comentario (interno)"
+                        value={comment}
+                        onChangeText={setComment}
+                        multiline
+                        hint="Queda en el historial junto a tu nombre. El cliente no lo ve."
+                      />
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ gap: theme.spacing.xs }}
+                      >
+                        {order.availableTransitions.map((option) => (
+                          <Button
+                            key={option.code}
+                            label={option.label}
+                            size="compact"
+                            loading={transition.isPending}
+                            onPress={() => move(option.code, option.label)}
+                          />
+                        ))}
+                      </ScrollView>
+                    </>
+                  )}
+
+                  {transition.isError ? (
+                    <Text variant="subhead" color="danger">
+                      {serviceErrorMessage(transition.error)}
+                    </Text>
+                  ) : null}
+                </View>
+              </Card>
+            </View>
+          ) : null}
+
+          {mayManage ? (
+            <View>
+              <SectionHeader title="Técnico responsable" />
+              <Card variant="outlined">
+                <View style={{ gap: theme.spacing.sm }}>
+                  {assignment.isPending ? (
+                    <Text variant="subhead" color="textSecondary">
+                      Cargando candidatos…
+                    </Text>
+                  ) : assignment.isError ? (
+                    <Text variant="subhead" color="danger">
+                      {serviceErrorMessage(assignment.error)}
+                    </Text>
+                  ) : (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: theme.spacing.xs }}
+                    >
+                      {/* The candidates are the SERVER's. This app cannot work
+                          out who is staff of a company, and has no business
+                          holding a user list to try. */}
+                      {(assignment.data?.candidates ?? []).map((candidate) => (
+                        <Button
+                          key={candidate.id}
+                          label={candidate.name}
+                          size="compact"
+                          variant={
+                            assignment.data?.current?.technician === candidate.id
+                              ? 'primary'
+                              : 'ghost'
+                          }
+                          loading={assign.isPending}
+                          onPress={() =>
+                            assign.mutate({ id: order.id, technicianId: candidate.id })
+                          }
+                        />
+                      ))}
+                      {assignment.data?.current ? (
+                        <Button
+                          label="Liberar"
+                          size="compact"
+                          variant="destructive"
+                          loading={assign.isPending}
+                          onPress={() => assign.mutate({ id: order.id, technicianId: null })}
+                        />
+                      ) : null}
+                    </ScrollView>
+                  )}
+
+                  {assign.isError ? (
+                    <Text variant="subhead" color="danger">
+                      {serviceErrorMessage(assign.error)}
+                    </Text>
+                  ) : null}
+                </View>
+              </Card>
+            </View>
+          ) : null}
+
+          <View>
+            <SectionHeader title="Historial" />
+            <Card variant="outlined">
+              <View style={{ gap: theme.spacing.sm }}>
+                {order.history.map((event, index) => (
+                  <View key={event.id} style={{ gap: 2 }}>
+                    {index > 0 ? <Divider /> : null}
+                    <Text variant="subhead">
+                      {event.fromStatus ? `${event.fromStatus} → ` : ''}
+                      {event.toStatusLabel}
+                    </Text>
+                    <Text variant="caption" color="textTertiary">
+                      {formatDate(event.createdAt)}
+                      {event.actorName ? ` · ${event.actorName}` : ''}
+                      {event.isCustomerVisible ? '' : ' · no visible para el cliente'}
+                    </Text>
+                    {event.comment ? (
+                      <Text variant="footnote" color="textSecondary">
+                        {event.comment}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            </Card>
+          </View>
+        </View>
+      </Screen>
+    </>
+  );
+}
+
+function Row({
+  label,
+  value,
+  theme,
+}: {
+  label: string;
+  value: string;
+  theme: ReturnType<typeof useTheme>;
+}) {
+  return (
+    <View
+      style={{ flexDirection: 'row', justifyContent: 'space-between', gap: theme.spacing.sm }}
+    >
+      <Text variant="subhead" color="textSecondary">
+        {label}
+      </Text>
+      <Text variant="subhead" style={{ flex: 1, textAlign: 'right' }} numberOfLines={2}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function Field({
+  label,
+  value,
+  theme,
+}: {
+  label: string;
+  value: string;
+  theme: ReturnType<typeof useTheme>;
+}) {
+  return (
+    <View style={{ gap: 2 }}>
+      <Text variant="footnote" color="textTertiary">
+        {label}
+      </Text>
+      <Text variant="subhead" style={{ marginBottom: theme.spacing.xxs }}>
+        {value}
+      </Text>
+    </View>
+  );
+}
