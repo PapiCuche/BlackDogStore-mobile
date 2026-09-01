@@ -106,7 +106,7 @@ export const queryKeys = {
   // Adding the segment now costs one array element. Retrofitting it later would
   // mean auditing every key already in flight.
   repairs: (scope: QueryScope) => [...customerPrefix(scope), 'repairs'] as const,
-  repair: (scope: QueryScope, id: string) => [...customerPrefix(scope), 'repair', id] as const,
+  repair: (scope: QueryScope, id: number) => [...customerPrefix(scope), 'repair', id] as const,
   orders: (scope: QueryScope) => [...customerPrefix(scope), 'orders'] as const,
   order: (scope: QueryScope, id: number) => [...customerPrefix(scope), 'order', id] as const,
 
@@ -139,6 +139,36 @@ export const queryKeys = {
   /** The whole module, for invalidation after a movement. */
   internalInventoryRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'inventory'] as const,
+
+  // ── INTERNAL service (M8) ────────────────────────────────────────────────
+  //
+  // A separate namespace from `repairs`, which is the CUSTOMER's view of the
+  // same workshop. The two carry different fields — one has internal notes and
+  // a technician, the other must never — and sharing a cache slot would mean
+  // the first screen to load decides what the second one shows.
+  internalServiceContext: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'service', 'context'] as const,
+  internalServiceOrders: (
+    scope: QueryScope,
+    branchId: number | null,
+    params: Record<string, unknown> = {},
+  ) =>
+    [...internalPrefix(scope), 'service', 'orders', branchId, JSON.stringify(params)] as const,
+  internalServiceOrder: (scope: QueryScope, id: number) =>
+    [...internalPrefix(scope), 'service', 'order', id] as const,
+  internalServiceAssignment: (scope: QueryScope, id: number) =>
+    [...internalPrefix(scope), 'service', 'assignment', id] as const,
+  internalServiceCustomers: (scope: QueryScope, search: string) =>
+    [...internalPrefix(scope), 'service', 'customers', search] as const,
+  internalServiceDevices: (
+    scope: QueryScope,
+    customerId: number | null,
+    search: string,
+  ) =>
+    [...internalPrefix(scope), 'service', 'devices', customerId, search] as const,
+  /** The whole module, for invalidation after a write. */
+  internalServiceRoot: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'service'] as const,
 } as const;
 
 /**

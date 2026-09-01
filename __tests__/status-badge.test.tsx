@@ -28,14 +28,12 @@ describe('StatusBadge', () => {
   });
 
   it('renders every repair status the domain can produce', async () => {
+    // The four M8 supports, and only those. The list used to carry seven
+    // because the lifecycle was Mobile's proposal; the backend shipped four.
     const statuses = [
       'received',
-      'diagnosis',
-      'awaiting_approval',
-      'in_repair',
-      'quality_check',
-      'ready_for_pickup',
-      'delivered',
+      'diagnosing',
+      'waiting_approval',
       'cancelled',
     ] as const;
 

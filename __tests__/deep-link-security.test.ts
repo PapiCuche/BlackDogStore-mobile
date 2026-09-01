@@ -192,8 +192,8 @@ describe('builders', () => {
   });
 
   it('round-trips a repair link', () => {
-    const parsed = parseDeepLink(buildRepairLink('r-1042'));
-    expect(parsed).toEqual({ ok: true, intent: { kind: 'repair', repairId: 'r-1042' } });
+    const parsed = parseDeepLink(buildRepairLink('1042'));
+    expect(parsed).toEqual({ ok: true, intent: { kind: 'repair', repairId: '1042' } });
   });
 
   it.each([
@@ -208,7 +208,7 @@ describe('builders', () => {
   });
 
   it('emits no query string, so no builder can leak a secret', () => {
-    for (const url of [buildProductLink('abc'), buildOrderLink('1'), buildRepairLink('r-1')]) {
+    for (const url of [buildProductLink('abc'), buildOrderLink('1'), buildRepairLink('1')]) {
       expect(url).not.toContain('?');
       expect(url).not.toContain('token');
     }

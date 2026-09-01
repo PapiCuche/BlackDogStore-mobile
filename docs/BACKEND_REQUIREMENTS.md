@@ -33,7 +33,7 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | BR-002 | Selección de tenant validada server-side | **RESUELTO** — público, cliente e interno |
 | BR-003 | Exponer `fulfillment_status` | **IMPLEMENTADO para v1** |
 | BR-004 | Paginación opt-in | MEDIA |
-| BR-005 | Dominio de reparaciones | ALTA |
+| BR-005 | Dominio de reparaciones | ALTA — **NÚCLEO ENTREGADO en M8**, resto pendiente |
 | BR-006 | Endpoint público de marca | **IMPLEMENTADO** |
 | BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — catálogo, auth, cliente, checkout e interno de ventas; inventario y servicio pendientes |
 | BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
@@ -473,6 +473,22 @@ está — que es más limpio que un flag.
 
 ## BR-005 — Dominio de reparaciones (servicio técnico)
 
+> **ESTADO: PARCIAL — el núcleo se entregó en M8** (`origin/master` `43fffb0`).
+> Existen `Device`, `RepairOrder`, el ciclo de vida con códigos estables y
+> etiquetas por empresa, el historial inmutable y la asignación de técnico, más
+> `/api/v1/internal/<slug>/service/` y `/api/v1/customer/<slug>/repairs/`.
+>
+> **El backend NO aceptó la propuesta tal cual, y con razón**: esta sección
+> proponía siete etapas y se implementaron cuatro. `in_repair`,
+> `quality_check`, `ready_for_pickup` y `delivered` necesitan módulos —
+> repuestos, una lista de comprobación, un flujo de entrega — que M8 no
+> construyó, y un estado sobre el que ningún código puede actuar es un estado
+> que miente.
+>
+> Sigue **PENDIENTE**: diagnóstico, cotización, aprobación del cliente,
+> ejecución, repuestos, control de calidad, garantía y evidencias.
+
+
 **Estado:** PROPUESTA · **Prioridad:** ALTA · **Bloquea:** reparaciones
 **Base:** `VERIFIED_STABLE_MASTER` (verificado también en el árbol en progreso)
 
@@ -626,7 +642,7 @@ Solo datos **comerciales públicos**. Nunca `tax_id` ni `legal_name`: eso ya est
 
 **Estado:** PROPUESTA · **Prioridad:** ALTA · **Bloquea:** seguimiento por enlace
 **Base:** `VERIFIED_STABLE_MASTER` — verificado en `2624d478af5cd3cc90c4b65d9aa4c81bb2439cfc`
-**Depende de:** BR-005 (no hay nada que seguir sin `RepairOrder`)
+**Depende de:** BR-005 — `RepairOrder` **ya existe** desde M8; lo que falta es el token opaco, su caducidad, su revocación y su rate limit.
 
 **Motivo**
 

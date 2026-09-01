@@ -78,9 +78,9 @@ describe('HomeScreen', () => {
   it('surfaces the active repair, not a finished one', async () => {
     await renderWithProviders(<HomeScreen />);
 
-    // 'r-1042' is in_repair and most recently updated; 'r-1021' is delivered.
+    // 1042 is `diagnosing` and most recently updated; 1021 is `cancelled`.
     await waitFor(() => {
-      expect(screen.getByText('MacBook Pro 14"')).toBeOnTheScreen();
+      expect(screen.getByText('Genérica X100')).toBeOnTheScreen();
     });
     expect(screen.queryByText('iPad Air 4')).not.toBeOnTheScreen();
   });
@@ -88,7 +88,7 @@ describe('HomeScreen', () => {
   it('shows the repair status as text', async () => {
     await renderWithProviders(<HomeScreen />);
     await waitFor(() => {
-      expect(screen.getByLabelText('Estado de la reparación: En reparación')).toBeOnTheScreen();
+      expect(screen.getByLabelText('Estado de la reparación: En diagnóstico')).toBeOnTheScreen();
     });
   });
 
@@ -98,7 +98,7 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(screen.getByText('Ver seguimiento')).toBeOnTheScreen());
     await fireEvent.press(screen.getByRole('button', { name: 'Ver seguimiento' }));
 
-    expect(mockPush).toHaveBeenCalledWith('/repairs/r-1042');
+    expect(mockPush).toHaveBeenCalledWith('/repairs/1042');
   });
 
   it('shows the most recent order with both statuses separated', async () => {

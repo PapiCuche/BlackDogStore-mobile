@@ -906,6 +906,86 @@ resuelve una vez; resolverlo en las pantallas son treinta sitios adivinando 49 o
   contenedor, así que el viewport termina encima de la barra en lugar de que las
   filas viajen por debajo. Menos efecto, correcto sin editar cada lista.
 
+## Servicio técnico (M8)
+
+### DEC-MOBILE-018 — Una reparación de cliente y una orden de taller son dos tipos
+
+**Fecha:** 2026-09-01 (M8) · **Estado:** ACEPTADA
+
+**Decisión.** `@/domain/repairs` describe lo que ve un CLIENTE.
+`@/domain/internal/service-types` describe lo que ven las personas que trabajan
+en el taller. Son tipos distintos, con repositorios distintos y namespaces de
+caché distintos, sobre el mismo `RepairOrder` del servidor.
+
+**Motivo.** El contrato de cliente omite las notas internas, la condición física
+anotada en recepción, los accesorios, el historial de asignaciones, la identidad
+del técnico y los comentarios de cada evento. La tentación es siempre escribir
+`if (isStaff)` dentro de un serializer o de un tipo compartido; eso está a un
+refactor de devolverle a un cliente la nota privada de un técnico, y el fallo es
+silencioso. Es la misma llamada que hizo M6 para pedidos.
+
+**Consecuencias.**
+- La duplicación es la propiedad de seguridad, no un defecto a refactorizar.
+- Un test estructural comprueba que el mapeador de cliente no puede exponer un
+  campo interno aunque un payload futuro lo traiga.
+- Las claves de caché están separadas: la misma reparación tiene dos ranuras,
+  una por audiencia.
+
+### DEC-MOBILE-019 — El ciclo de vida es el del servidor, incluidas sus palabras
+
+**Fecha:** 2026-09-01 (M8) · **Estado:** ACEPTADA
+
+**Decisión.** Mobile no tiene tabla de transiciones. El detalle interno dibuja
+`availableTransitions` tal cual llega, y la etiqueta de cada estado es la que
+manda el servidor para ese tenant. El mapa local de etiquetas queda como
+respaldo para un payload que no traiga ninguna, nunca como preferencia.
+
+**Motivo.** Este módulo llegó con una propuesta de Mobile de **siete** etapas y
+el backend implementó **cuatro**, porque las otras tres necesitan módulos que no
+existen. Si la app hubiera conservado su tabla, habría ofrecido botones para
+estados que el servidor rechaza, y la deriva se lee como app rota en vez de como
+política. Lo mismo con las etiquetas: una empresa que renombró «Recibido» a «En
+mostrador» tomó una decisión, y una tabla local la contradiría en silencio.
+
+**Consecuencias.**
+- `REPAIR_STAGES` bajó de siete entradas a tres más `cancelled`.
+- `Repair.id` pasó de string a número: Django reparte claves primarias enteras,
+  y el id era string solo mientras el dato era un fixture que elegía el suyo.
+- `quotedTotal` desapareció. No hay cotización hasta M9, y un campo que siempre
+  vale null es una promesa que el producto no ha hecho.
+- La línea de tiempo dejó de ser una escalera fija con el futuro pre-dibujado:
+  ahora son los eventos que ocurrieron. Dibujar «Entregado — pendiente» sería
+  prometer un paso que esta versión no puede dar.
+- Un test estructural falla si aparece `TRANSITIONS` en el módulo.
+
+### DEC-MOBILE-020 — La recepción manda una intención, y el servidor la identidad
+
+**Fecha:** 2026-09-01 (M8) · **Estado:** ACEPTADA
+
+**Decisión.** El formulario de recepción no tiene campo para el número de orden,
+el estado, la empresa, quién recibió el equipo ni cuándo. El cliente se busca, no
+se lista; el equipo se elige de lo que el servidor devolvió, o se registra.
+
+**Motivo.** Tener un campo es poder rellenarlo. La única garantía de que un
+cliente no fija su propio número de orden es que no exista dónde escribirlo — la
+misma razón por la que el ajuste de inventario de M7A no tiene «stock final».
+
+Y «descárgame todos los clientes de esta empresa» no es una petición que una
+recepción necesite hacer nunca: el endpoint está construido para devolver los
+últimos cuando no hay término de búsqueda.
+
+**Consecuencias.**
+- No hay campo de texto para un id de equipo: escribirlo a mano sería invitar a
+  adivinar la propiedad de otra persona, con el servidor respondiendo 404
+  mientras la app anima a intentarlo.
+- Los candidatos a técnico los da el servidor. Esta app no puede averiguar quién
+  es personal de una empresa, y no tiene por qué sostener una lista de usuarios
+  para intentarlo.
+- Ninguna mutación reintenta ni se encola offline: una orden repetida es una
+  segunda orden, una transición repetida una segunda fila de historial.
+- Un test estructural comprueba que el payload de equipo no declara ningún campo
+  de credencial — ni PIN, ni patrón, ni Apple ID.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -996,4 +1076,10 @@ un error 500.
 | Un solo módulo importa `expo-blur` | Apagar el efecto tiene que ser una prop, no una auditoría de treinta archivos. |
 | `Card` sólida por defecto | Un panel desenfocado por fila es una pasada de composición por fila. |
 | El shell paga el hueco del chrome flotante | DEC-MOBILE-017: treinta pantallas adivinando 49 o 56 puntos es un bug esperando. |
+| Reparación de cliente y orden de taller son dos tipos | DEC-MOBILE-018: un `if (isStaff)` dentro de un tipo compartido acaba enseñando una nota privada. |
+| Sin tabla de transiciones en el cliente | DEC-MOBILE-019: la propuesta tenía siete etapas y el servidor implementó cuatro. |
+| La etiqueta del estado la manda el tenant | Una tabla local contradiría en silencio una decisión que la empresa tomó. |
+| La recepción no tiene campo para el número ni el estado | DEC-MOBILE-020: tener un campo es poder rellenarlo. |
+| Los candidatos a técnico los da el servidor | La app no puede saber quién es personal de una empresa, ni debe sostener una lista de usuarios. |
+| Ninguna mutación de servicio reintenta | Una transición repetida es una segunda fila de historial para un solo hecho. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |

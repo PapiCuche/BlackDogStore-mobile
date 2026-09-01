@@ -29,7 +29,7 @@ nunca **qué puede ver**.
 | Custom scheme `blackdogstore` | **IMPLEMENTADO / COMPATIBILIDAD PILOTO** |
 | Enlace de producto | **IMPLEMENTADO** (público) |
 | Enlace de pedido | **IMPLEMENTADO** (navegación; datasource según estado real) |
-| Enlace de reparación | **IMPLEMENTADO** (navegación; MOCK / API_PENDING) |
+| Enlace de reparación | **IMPLEMENTADO** — resuelve contra la API real desde M8 |
 | Secure customer tracking | **API_PENDING** (BR-008) |
 | iOS Universal Links | **PROPUESTA / INFRA_PENDING** |
 | Android App Links | **PROPUESTA / INFRA_PENDING** |

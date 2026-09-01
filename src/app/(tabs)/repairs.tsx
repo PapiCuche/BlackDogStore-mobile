@@ -12,7 +12,6 @@ import {
 } from '@/design-system';
 import { useConnectivity } from '@/connectivity/connectivity-provider';
 import { useListRefresh } from '@/hooks/use-list-refresh';
-import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { RepairCard } from '@/features/repairs/repair-card';
 import { useRepairs } from '@/hooks/use-repairs';
 import { screenGutter } from '@/theme';
@@ -47,7 +46,6 @@ export default function RepairsScreen() {
       <View style={{ marginBottom: theme.spacing.md, gap: theme.spacing.xs }}>
         {/* Cached data plus no network: keep the data, state the caveat. */}
         {isOffline && hasCachedData ? <StaleDataNotice /> : null}
-        <MockDataNotice message="Datos de ejemplo. El backend aún no tiene un módulo de reparaciones." />
       </View>
     </View>
   );
@@ -74,7 +72,7 @@ export default function RepairsScreen() {
     <Screen padded={false}>
       <FlatList
         data={data}
-        keyExtractor={(repair) => repair.id}
+        keyExtractor={(repair) => String(repair.id)}
         ListHeaderComponent={header}
         renderItem={({ item }) => (
           <RepairCard repair={item} onPress={() => router.push(`/repairs/${item.id}`)} />

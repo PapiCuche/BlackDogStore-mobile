@@ -44,7 +44,8 @@
             "image": "./assets/icon/splash-mark-dark.png"
           }
         }
-      ]
+      ],
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,

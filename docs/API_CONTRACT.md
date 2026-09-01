@@ -667,3 +667,76 @@ no se "redescubran" más adelante:
 - `/api/reviews/`
 - Toda la superficie `/api/admin/*` — inventario, kardex, notas de venta, empresas, roles.
 - `/api/me/memberships/`, `/api/me/company-access/`, `/api/me/internal-dashboard/`
+
+---
+
+## Servicio técnico · interno y cliente — **INTEGRADO** (núcleo)
+
+```
+VERIFIED_STABLE_MASTER · VERSIONED · INTEGRADO POR MOBILE (M8)
+```
+
+Verificado en `origin/master` **`43fffb0`** (PR #7), leyendo el código en
+`master` y con smoke real sobre las once rutas. Cada nombre de campo de
+`internal-service-v1.ts` y `customer-repairs-v1.ts` salió de una respuesta.
+
+### Interna — `/api/v1/internal/<slug>/service/`
+
+| Endpoint | Requiere |
+|---|---|
+| `GET context/` | `service.orders.view` |
+| `GET customers/?search=` | `service.customers.view` |
+| `GET · POST devices/` | `service.devices.view` · `.manage` |
+| `GET devices/<id>/` | `service.devices.view` |
+| `GET · POST orders/` | `service.orders.view` · `.create` |
+| `GET orders/<id>/` | `service.orders.view` |
+| `GET orders/<id>/history/` | `service.orders.view` |
+| `POST orders/<id>/transition/` | `service.orders.manage` |
+| `GET · POST orders/<id>/assignment/` | `service.orders.manage` |
+
+Tres puertas, como en M7A: pertenencia → 404, capability → 403, **sucursal u
+orden fuera de alcance → 404**. Mobile lo traduce a `ServiceOutOfScopeError`,
+distinto de `InternalAccessDeniedError`: perder el acceso a una tienda no es
+perder el área interna.
+
+### Cliente — `/api/v1/customer/<slug>/repairs/`
+
+| Endpoint | Qué |
+|---|---|
+| `GET repairs/` | Solo las reparaciones del llamante. **Array crudo**, sin envoltorio |
+| `GET repairs/<id>/` | 404 si no es suya |
+
+La lista es un ViewSet, así que devuelve un array; la superficie interna es
+`APIView` y devuelve `{count, page, page_size, results}`. Es la convención de la
+casa, no un descuido.
+
+### Qué NO viaja al cliente
+
+`internal_notes`, `physical_condition`, `received_accessories`, `assignments`,
+nombre/correo/teléfono del técnico, `branch`, `available_transitions` y el
+`comment` de cualquier evento.
+
+El timeline se filtra **en el servidor**: la app no recibe el evento oculto, que
+es una garantía más fuerte que pedirle que no lo dibuje. Y
+`is_customer_visible` se congela al escribir el evento, así que cambiar la
+política mañana no revela retroactivamente lo que un cliente ya vio.
+
+### El servidor manda la máquina y las palabras
+
+`available_transitions` llega calculado, con `{code, label}`. No hay tabla de
+transiciones en esta app y un test estructural falla si aparece. Las etiquetas
+son las que **esa empresa** configuró: renombrar «Recibido» a «En mostrador» se
+ve en la app sin que la app sepa nada.
+
+### La identidad la fija el servidor
+
+`number`, `status`, `company`, `received_by` y `received_at` no tienen campo en
+ningún payload de Mobile. Comprobado con smoke: enviar `status:
+'waiting_approval'` y `number: 'HACKEADO-1'` devolvió `received` y `SRV-000001`.
+
+### Pendiente
+
+Diagnóstico, cotización, aprobación, ejecución, repuestos, control de calidad,
+garantía. Evidencias fotográficas siguen `API_PENDING` (DEC-016: no hay
+proveedor de almacenamiento y no existe un solo `FileField` en el backend).
+BR-008 sigue `API_PENDING`, ahora con un modelo real contra el que diseñarse.

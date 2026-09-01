@@ -7,6 +7,7 @@ import {
 import { V1ApiCatalogRepository } from './api/v1-api-catalog-repository';
 import { V1CompanyRepository } from './api/v1-company-repository';
 import { V1CustomerOrderRepository } from './api/v1-customer-order-repository';
+import { V1CustomerRepairRepository } from './api/v1-customer-repair-repository';
 import { MockCatalogRepository } from './mock/mock-catalog-repository';
 import { MockCompanyRepository } from './mock/mock-company-repository';
 import { MockOrderRepository } from './mock/mock-order-repository';
@@ -109,6 +110,31 @@ function resolveOrderRepository(): OrderRepository | null {
  * The pilot fixture keeps its narrow gate rather than being deleted: it is what
  * makes the app runnable straight after a clone, with no server.
  */
+/**
+ * Where this build's repairs come from.
+ *
+ * M8 — BR-005A landed, so there is finally a real source. Until then this was
+ * the ONLY feature still gated on the raw `useMockData` flag rather than on the
+ * auth policy, and that was correct while the alternative to a fixture was
+ * nothing at all.
+ *
+ * It is not correct now. A repair is PRIVATE data: reading it needs a session,
+ * so the deciding input is the same one orders use — `authRuntimePolicy.mode`,
+ * not whether mocks happen to be switched on.
+ */
+function resolveRepairRepository(): RepairRepository | null {
+  switch (authRuntimePolicy.mode) {
+    case 'backend':
+      return new V1CustomerRepairRepository({
+        refreshCoordinator: getAuthRuntime().coordinator,
+      });
+    case 'mock':
+      return useMockData ? new MockRepairRepository() : null;
+    case 'unavailable':
+      return null;
+  }
+}
+
 function resolveCompanyRepository(): CompanyRepository | null {
   if (useMockData) {
     return isPilotTenant ? new MockCompanyRepository() : null;
@@ -123,7 +149,7 @@ export const repositories: {
   company: CompanyRepository | null;
 } = {
   catalog: resolveCatalogRepository(),
-  repairs: useMockData ? new MockRepairRepository() : null,
+  repairs: resolveRepairRepository(),
   orders: resolveOrderRepository(),
   company: resolveCompanyRepository(),
 };

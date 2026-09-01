@@ -16,8 +16,8 @@ archivo discrepan, **el archivo tiene razón**.
 | Detalle de producto | IMPLEMENTADO | **API_READY** (`/api/v1/`, tenant-safe) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Pedidos (cliente) | IMPLEMENTADO | **API_READY** (`/api/v1/customer/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Detalle de pedido | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
-| Reparaciones | IMPLEMENTADO | MOCK | MOCK | TESTED UI | PARCIAL |
-| Detalle de reparación | IMPLEMENTADO | MOCK | MOCK | TESTED UI | PARCIAL |
+| Reparaciones | **IMPLEMENTADO** | **API_READY** (`/api/v1/customer/<slug>/repairs/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Detalle de reparación | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Autenticación (login) | IMPLEMENTADO | **API_READY** (`/api/v1/auth/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Refresh con rotación | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Logout | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
@@ -48,7 +48,7 @@ archivo discrepan, **el archivo tiene razón**.
 | Deep links (parser + gate) | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Enlace de producto | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Enlace de pedido | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
-| Enlace de reparación | IMPLEMENTADO | MOCK | MOCK | TESTED | PARCIAL |
+| Enlace de reparación | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Resume tras autenticarse | IMPLEMENTADO | n/a | n/a | TESTED | IMPLEMENTADO |
 | Seguimiento seguro (tracking) | NO IMPLEMENTADO | API_PENDING (BR-008) | n/a | TESTED (rechazo) | **PENDIENTE** |
 | Universal Links / App Links | NO IMPLEMENTADO | n/a | n/a | n/a | **INFRA_PENDING** |
@@ -146,10 +146,21 @@ comprueba que los módulos ya no se pueden importar.
 "Sin información" cuando el backend no envía el estado operativo — en lugar de
 suponer `pending`.
 
-### Reparaciones — `MOCK`
+### Reparaciones — `INTEGRADO` (núcleo)
 
-No existe backend. Ni modelo, ni endpoint — verificado en `master`. Propuesta
-completa en **BR-005**.
+Existe backend desde **M8**: `RepairOrder`, su ciclo de vida y su historial
+inmutable, más `GET /api/v1/customer/<empresa>/repairs/`. Verificado en
+`origin/master` `43fffb0` con smoke real.
+
+El dominio de Mobile se **reescribió contra el contrato**, no se adaptó: la
+propuesta tenía siete etapas y el backend implementó cuatro, porque
+`in_repair`, `quality_check`, `ready_for_pickup` y `delivered` necesitan
+módulos que M8 no construyó. `Repair.id` pasó de string a número, `code` a
+`number`, y la etiqueta del estado la manda el servidor porque cada empresa la
+configura.
+
+Sigue **PENDIENTE**: diagnóstico, cotización, aprobación del cliente, ejecución,
+repuestos, control de calidad, garantía y evidencias.
 
 ### Autenticación — `API_PENDING`
 
@@ -206,7 +217,7 @@ y renderiza neutral. **BR-006.**
 | Pedidos (cliente) | ~~BR-001, BR-003~~ **DESBLOQUEADO** | **Hecho en M4.** `V1CustomerOrderRepository` sobre `/api/v1/customer/`. BR-003 cerrado en el serializer v1. |
 | Pedidos (interno) | ~~superficie interna~~ **DESBLOQUEADO** | **Hecho en M6.** `V1InternalSalesRepository` sobre `/api/v1/internal/`. Otra superficie, no un ensanche de la de cliente. |
 | Inventario (interno) | ~~superficie interna~~ **DESBLOQUEADO** | **Hecho en M7A.** `V1InternalInventoryRepository` sobre `/api/v1/internal/<empresa>/inventory/`. Tercera puerta: la sucursal. |
-| Reparaciones | BR-005 | Escribir `ApiRepairRepository`; el dominio ya está modelado. |
+| Reparaciones | ~~BR-005~~ **DESBLOQUEADO** | **Hecho en M8.** `V1CustomerRepairRepository` sobre `/api/v1/customer/<empresa>/repairs/`. El dominio se reescribió contra el contrato real: siete etapas propuestas eran cuatro. |
 | Auth (sesión) | ~~BR-001, BR-007~~ **DESBLOQUEADO** | **Hecho en M3.** `DjangoAuthTransport` + `ApiAuthRepository` escritos, `isBackendAuthAvailable = true` en el mismo commit. El coordinator, el vault y el pipeline no se tocaron: la apuesta de M1 se sostuvo. |
 | Auth (cuenta) | **BR-001B** | Escribir los flujos de registro/verificación/reset cuando existan endpoints nativos. Hoy la app los oculta en modo backend. |
 | Marca | ~~BR-006~~ **DESBLOQUEADO** | **Hecho en M5.** `V1CompanyRepository` sobre `/api/v1/storefront/<empresa>/config/`; el fixture del piloto queda solo para desarrollo con mocks. |
@@ -256,7 +267,7 @@ Push                          PENDIENTE
 Ver `docs/LINKING_STRATEGY.md` y las decisiones DEC-MOBILE-004 / DEC-MOBILE-005.
 
 Un enlace **no integra nada**: lleva a una pantalla cuyo estado de integración es
-el que ya tenía. Un enlace de reparación sigue llegando a datos `MOCK`.
+el que ya tenía. Desde M8 un enlace de reparación llega a datos reales.
 
 ## Catálogo real (M2)
 
@@ -470,3 +481,38 @@ los bordes y el fondo del botón primario quedan fuera de su alcance.
 
 **El desenfoque es la mejora.** Cada material lleva fallback opaco, y el texto
 principal pasa AA sobre los cuatro en los dos esquemas.
+
+## Servicio técnico (M8 / BR-005A)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master 43fffb0)
+Reparaciones de cliente        INTEGRADO / TESTED
+Enlace profundo a reparación   INTEGRADO / TESTED
+Servicio interno (recepción)   INTEGRADO / TESTED
+Órdenes internas               INTEGRADO / TESTED
+Transiciones desde el servidor  INTEGRADO / TESTED
+Asignación de técnico          INTEGRADO / TESTED
+Búsqueda de clientes (intake)  INTEGRADO / TESTED
+Registro de equipos            INTEGRADO / TESTED
+Diagnóstico · cotización       PENDIENTE (M9)
+Repuestos · calidad · garantía PENDIENTE
+Evidencias fotográficas        API_PENDING (DEC-016, sin proveedor)
+Seguimiento público (BR-008)   API_PENDING
+```
+
+**Dos experiencias separadas, y no se mezclan.** `@/domain/repairs` es lo que ve
+un CLIENTE; `@/domain/internal/service-types` es lo que ven los que trabajan en
+el taller. Tipos distintos, repositorios distintos, namespaces de caché
+distintos. Ensanchar el tipo de cliente para que cargara notas internas dejaría
+a una pantalla de cliente capaz de renderizarlas, y el sistema de tipos no
+protestaría.
+
+**El servidor manda las transiciones.** No hay tabla de transiciones en esta
+app, y un test estructural falla si alguien escribe una.
+
+**El servidor manda las etiquetas.** Una empresa que renombró «Recibido» a «En
+mostrador» ve su palabra; el mapa local quedó solo como respaldo cuando el
+payload no trae ninguna.
+
+**Ninguna mutación reintenta ni se encola offline.** Una orden repetida es una
+segunda orden, una transición repetida es una segunda fila de historial.

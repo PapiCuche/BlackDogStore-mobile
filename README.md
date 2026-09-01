@@ -594,6 +594,35 @@ Un módulo que la persona no tiene **no se dibuja**. Uno que sí tiene pero que 
 app aún no implementa **se dice** — callarlo haría concluir que la app está rota
 en vez de incompleta.
 
+### Servicio técnico (M8)
+
+**Dos experiencias, y no se mezclan.** Un cliente ve SUS reparaciones en la
+pestaña de Reparaciones; el personal ve las órdenes de la empresa en el área
+interna. Tipos distintos, repositorios distintos, cachés distintas. La misma
+persona puede ser ambas cosas y cada superficie le responde lo suyo.
+
+**El cliente no ve nada interno**: ni notas del taller, ni la condición física
+anotada en recepción, ni los accesorios, ni quién es el técnico, ni los
+comentarios de ningún evento. Y el filtrado es del servidor: la app no recibe el
+evento oculto, que es más fuerte que pedirle que no lo dibuje.
+
+**El ciclo de vida es el del servidor, incluidas sus palabras.** Esta app no
+tiene tabla de transiciones: dibuja lo que el servidor ofrece y el servidor
+vuelve a validar. Una empresa que renombró «Recibido» a «En mostrador» ve su
+palabra en la app sin que la app sepa nada.
+
+**Cuatro estados, no siete.** Mobile había propuesto siete; el backend
+implementó cuatro porque los otros tres necesitan módulos que aún no existen.
+El dominio se reescribió contra el contrato, no al revés.
+
+**La recepción manda una intención.** No hay campo para el número de orden, el
+estado, la empresa ni quién recibió el equipo — tener un campo es poder
+rellenarlo. Y no se piden contraseñas ni códigos de desbloqueo del equipo.
+
+**Ninguna operación de servicio se encola offline ni reintenta.** Una orden
+repetida es una segunda orden; una transición repetida, una segunda fila de
+historial para un solo hecho.
+
 ### Inventario: una tercera puerta
 
 El stock solo existe en un lugar, así que el módulo de inventario pregunta

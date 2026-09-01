@@ -28,7 +28,9 @@ export type CatalogRepository = {
 
 export type RepairRepository = {
   listRepairs(signal?: AbortSignal): Promise<Repair[]>;
-  getRepairById(id: string, signal?: AbortSignal): Promise<Repair | null>;
+  // `number` since M8: Django hands out integer primary keys, and the id was a
+  // string only while the data was a fixture that could pick its own.
+  getRepairById(id: number, signal?: AbortSignal): Promise<Repair | null>;
 };
 
 export type OrderRepository = {
