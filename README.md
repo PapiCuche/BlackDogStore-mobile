@@ -654,6 +654,41 @@ oferta sigue abierta.
 **El motivo que escribe el cliente no vuelve a su pantalla.** Lo lee el taller,
 que es quien lo necesita.
 
+### Ejecución y repuestos (M10)
+
+**Un estado que esta app no conoce se muestra igual.** `toRepairStatus`
+coaccionaba cualquier código desconocido a `received`, y eso dibujó «Recibido»
+sobre una reparación que el cliente acababa de aprobar. Ahora el código llega
+intacto, se dibuja con la etiqueta que manda el taller y un tono neutral, y no
+recibe posición en la escalera de progreso. Solo un estado **ausente** cae a
+`received`.
+
+**Empezar, pausar y terminar son hechos, no opciones.** `in_repair`,
+`waiting_parts` y `repaired` son event-only en el servidor: el endpoint genérico
+los rechaza. Cada uno tiene su operación, que escribe la fila que le da sentido
+al estado.
+
+**Una pieza sale de la sucursal de SU reparación**, y traza a una línea de la
+cotización que el cliente aprobó. No hay campo de sucursal ni de producto en
+ninguna petición: la app manda la línea, la cantidad y una clave.
+
+**La app no resta stock en pantalla.** Mostrar «disponible menos cantidad» sería
+afirmar un número sobre una estantería que otra caja puede estar cambiando en
+ese mismo momento. Después de escribir se vuelve a preguntar.
+
+**Un timeout no descuenta dos veces.** La clave de idempotencia se acuña una vez
+por intención, vive en un `ref` y se reenvía idéntica si la persona reintenta.
+Nada reintenta solo: la idempotencia del servidor protege al servidor, no la
+intención de quien pulsó.
+
+**Deshacer devuelve las unidades; no borra nada.** Y después de finalizar el
+trabajo la pieza queda congelada: una batería instalada no vuelve a la
+estantería porque alguien pulse deshacer.
+
+**`repaired` significa que el técnico terminó.** No revisado, no listo para
+recoger, no avisado, no pagado. La reparación sigue apareciendo como activa en
+la Home del cliente, porque el equipo sigue en el taller.
+
 ### Inventario: una tercera puerta
 
 El stock solo existe en un lugar, así que el módulo de inventario pregunta

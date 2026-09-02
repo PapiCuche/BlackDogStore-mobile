@@ -1,4 +1,14 @@
 import {
+  fetchServiceExecution,
+  fetchServicePartCandidates,
+  fetchServicePartUsages,
+  patchServiceExecution,
+  postServiceExecutionComplete,
+  postServiceExecutionPause,
+  postServiceExecutionResume,
+  postServiceExecutionStart,
+  postServicePartUsage,
+  postServicePartUsageReverse,
   deleteServiceQuoteItem,
   fetchServiceAssignmentOptions,
   fetchServiceDiagnostics,
@@ -23,6 +33,9 @@ import {
 } from '@/api/endpoints/internal-service-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type {
+  ServiceCompleteInput,
+  ServiceExecutionInput,
+  ServicePartUsageInput,
   ServiceAssignmentOptions,
   ServiceDiagnostic,
   ServiceDiagnosticInput,
@@ -214,5 +227,82 @@ export class V1InternalServiceRepository {
     signal?: AbortSignal,
   ): Promise<ServiceQuote> {
     return postServiceQuoteCancel(orderId, quoteId, this.deps, signal);
+  }
+
+  // ---------------------------------------------------------------------
+  // M10 / BR-005C — the bench
+  // ---------------------------------------------------------------------
+
+  async getExecution(orderId: number, signal?: AbortSignal) {
+    return fetchServiceExecution(orderId, this.deps, signal);
+  }
+
+  /**
+   * Begin the work.
+   *
+   * Deliberately NOT called `setInRepair`. The order moving is a CONSEQUENCE of
+   * a technician starting, not the thing being asked for — the same naming rule
+   * `publishQuote` follows, and for the same reason: a name that described the
+   * side effect would invite somebody to look for a way to produce it without
+   * the record that gives it meaning.
+   */
+  async startRepair(orderId: number, signal?: AbortSignal) {
+    return postServiceExecutionStart(orderId, this.deps, signal);
+  }
+
+  async updateExecution(
+    orderId: number,
+    input: ServiceExecutionInput,
+    signal?: AbortSignal,
+  ) {
+    return patchServiceExecution(orderId, input, this.deps, signal);
+  }
+
+  async completeRepair(
+    orderId: number,
+    input: ServiceCompleteInput,
+    signal?: AbortSignal,
+  ) {
+    return postServiceExecutionComplete(orderId, input, this.deps, signal);
+  }
+
+  async pauseForParts(orderId: number, comment: string, signal?: AbortSignal) {
+    return postServiceExecutionPause(orderId, comment, this.deps, signal);
+  }
+
+  async resumeRepair(orderId: number, signal?: AbortSignal) {
+    return postServiceExecutionResume(orderId, this.deps, signal);
+  }
+
+  async listPartCandidates(orderId: number, signal?: AbortSignal) {
+    return fetchServicePartCandidates(orderId, this.deps, signal);
+  }
+
+  async listPartUsages(orderId: number, signal?: AbortSignal) {
+    return fetchServicePartUsages(orderId, this.deps, signal);
+  }
+
+  /**
+   * Consume one approved part.
+   *
+   * The key comes from the CALLER, held across retries. Minting one here would
+   * mint a new one per attempt, which is the one thing an idempotency key must
+   * never do.
+   */
+  async recordPartUsage(
+    orderId: number,
+    input: ServicePartUsageInput,
+    signal?: AbortSignal,
+  ) {
+    return postServicePartUsage(orderId, input, this.deps, signal);
+  }
+
+  async reversePartUsage(
+    orderId: number,
+    usageId: number,
+    reason: string,
+    signal?: AbortSignal,
+  ) {
+    return postServicePartUsageReverse(orderId, usageId, reason, this.deps, signal);
   }
 }

@@ -9,6 +9,7 @@ import {
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import { useCart } from '@/cart/cart-provider';
 import type { Cart } from '@/domain/cart/types';
+import { makeIdempotencyKey } from '@/domain/idempotency';
 
 /**
  * Driving one purchase attempt.
@@ -36,23 +37,8 @@ function basketShape(cart: Cart): string {
   return cart.lines.map((line) => `${line.productSlug}x${line.quantity}`).sort().join('|');
 }
 
-/** A key that is stable for one basket and different for the next. */
-function makeIdempotencyKey(shape: string): string {
-  // Enough entropy that two devices never collide, plus the basket shape so a
-  // changed basket cannot reuse a key by accident.
-  const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-  return `${nonce}-${hash(shape)}`.slice(0, 100);
-}
-
-/** Small non-cryptographic hash. This identifies a retry; it protects nothing. */
-function hash(value: string): string {
-  let h = 2166136261;
-  for (let i = 0; i < value.length; i += 1) {
-    h ^= value.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0).toString(36);
-}
+// The key generator moved to `@/domain/idempotency` in M10, when a second
+// caller needed it. Same function, same behaviour, one copy.
 
 export function useCheckout() {
   const { cart } = useCart();

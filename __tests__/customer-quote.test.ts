@@ -100,8 +100,16 @@ describe('the lifecycle learned the two states M9 added', () => {
     expect(toRepairStatus('rejected')).toBe('rejected');
   });
 
-  it('still refuses to guess an unknown code forward', () => {
-    expect(toRepairStatus('in_repair')).toBe('received');
+  it('still refuses to render an unknown code as further along', () => {
+    // M10 built `in_repair`, so it is a known code now. The guarantee moved
+    // rather than went away: a code this build has never heard of is carried
+    // through verbatim and given NO ladder position, instead of being coerced
+    // into one — which is what made M9's "safe" fallback show "Recibido" over
+    // an approved repair.
+    expect(toRepairStatus('in_repair')).toBe('in_repair');
+    expect(toRepairStatus('quality_control')).toBe('quality_control');
+    expect(repairStageIndex('quality_control')).toBe(-1);
+    // Only an absent status falls back.
     expect(toRepairStatus(undefined)).toBe('received');
   });
 

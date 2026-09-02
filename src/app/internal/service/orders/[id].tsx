@@ -19,11 +19,14 @@ import {
 } from '@/design-system';
 import {
   CAP_SERVICE_DIAGNOSTIC_MANAGE,
+  CAP_SERVICE_REPAIR_MANAGE,
   CAP_SERVICE_ORDERS_MANAGE,
   CAP_SERVICE_ORDERS_VIEW,
 } from '@/domain/internal/service-types';
 import { hasUxCapability } from '@/domain/internal/types';
 import { ServiceDiagnosticSection } from '@/features/internal/service-diagnostic-section';
+import { ServiceExecutionSection } from '@/features/internal/service-execution-section';
+import { ServicePartsSection } from '@/features/internal/service-parts-section';
 import { ServiceQuoteSection } from '@/features/internal/service-quote-section';
 import {
   useAddQuoteItem,
@@ -36,7 +39,17 @@ import {
   useServiceAssignmentOptions,
   useServiceDiagnostics,
   useServiceOrder,
+  useServiceExecution,
+  useServicePartCandidates,
+  useServicePartUsages,
   useServiceQuotes,
+  useStartRepair,
+  useUpdateExecution,
+  useCompleteRepair,
+  usePauseForParts,
+  useResumeRepair,
+  useRecordPartUsage,
+  useReversePartUsage,
   useServiceTransition,
   useUpdateDiagnostic,
 } from '@/hooks/use-internal-service';
@@ -94,6 +107,23 @@ export default function ServiceOrderDetailScreen() {
   const removeItem = useRemoveQuoteItem(orderId);
   const publishQuote = usePublishQuote(orderId);
   const cancelQuote = useCancelQuote(orderId);
+
+  // M10. Working the bench is its OWN capability, separate from moving the
+  // order and separate from quoting. A shop can hand the counter one without
+  // the others, and the server re-checks every write regardless of what this
+  // drew.
+  const mayRepair = hasUxCapability(context ?? null, CAP_SERVICE_REPAIR_MANAGE);
+  const execution = useServiceExecution(safeId, { enabled: mayView });
+  const partUsages = useServicePartUsages(safeId, { enabled: mayView });
+  const partCandidates = useServicePartCandidates(safeId, { enabled: mayView });
+
+  const startRepair = useStartRepair(orderId);
+  const updateExecution = useUpdateExecution(orderId);
+  const completeRepair = useCompleteRepair(orderId);
+  const pauseForParts = usePauseForParts(orderId);
+  const resumeRepair = useResumeRepair(orderId);
+  const recordPart = useRecordPartUsage(orderId);
+  const reversePart = useReversePartUsage(orderId);
 
   const { data: order, isPending, isError, error } = query;
   const title = order?.number ?? 'Orden de servicio';
@@ -259,6 +289,45 @@ export default function ServiceOrderDetailScreen() {
             onRemoveItem={(quoteId, itemId) => removeItem.mutate({ quoteId, itemId })}
             onPublish={(quoteId) => publishQuote.mutate({ quoteId })}
             onCancel={(quoteId) => cancelQuote.mutate({ quoteId })}
+          />
+
+          {/* M10 / BR-005C. These two are the FORWARD PATH from `approved`.
+              The status buttons below cannot reach `in_repair`, `waiting_parts`
+              or `repaired` — all three are event-only on the server — so
+              starting the work is what moves the order now, and finishing it is
+              what moves it again. */}
+          <ServiceExecutionSection
+            execution={execution.data ?? null}
+            status={order.status}
+            canManage={mayRepair}
+            isBusy={
+              startRepair.isPending || updateExecution.isPending
+              || completeRepair.isPending || pauseForParts.isPending
+              || resumeRepair.isPending
+            }
+            error={
+              startRepair.error ?? updateExecution.error ?? completeRepair.error
+              ?? pauseForParts.error ?? resumeRepair.error
+            }
+            onStart={() => startRepair.mutate()}
+            onSaveWork={(input) => updateExecution.mutate(input)}
+            onComplete={(input) => completeRepair.mutate(input)}
+            onPause={(comment) => pauseForParts.mutate({ comment })}
+            onResume={() => resumeRepair.mutate()}
+          />
+
+          <ServicePartsSection
+            candidates={partCandidates.data?.results ?? []}
+            usages={partUsages.data?.results ?? []}
+            canManage={mayRepair && !execution.data?.isCompleted}
+            /* A completed repair freezes its parts on the SERVER; hiding the
+               button as well only spares somebody a refusal they cannot act
+               on. */
+            canReverse={mayRepair && !!execution.data && !execution.data.isCompleted}
+            isBusy={recordPart.isPending || reversePart.isPending}
+            error={recordPart.error ?? reversePart.error}
+            onUse={(input) => recordPart.mutate(input)}
+            onReverse={(usageId) => reversePart.mutate({ usageId })}
           />
 
           {/* Only with `service.orders.manage`. The server re-checks anyway, so

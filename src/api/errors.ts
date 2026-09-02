@@ -34,17 +34,33 @@ export class ApiError extends Error {
   readonly kind: ApiErrorKind;
   readonly status: number | null;
   readonly fieldErrors: FieldErrors | null;
+  /**
+   * A machine-readable discriminator the server chose to send, or ''.
+   *
+   * Added in M10. Two conflicts on the service surface — stock the shop does
+   * not have, and a reused idempotency key — are different situations behind
+   * one 409, and the Spanish sentence is not stable API surface: three
+   * templates already exist for the stock case alone. So the server names the
+   * case and the client branches on the name.
+   */
+  readonly code: string;
 
   constructor(
     kind: ApiErrorKind,
     message: string,
-    options: { status?: number | null; fieldErrors?: FieldErrors | null; cause?: unknown } = {},
+    options: {
+      status?: number | null;
+      fieldErrors?: FieldErrors | null;
+      code?: string;
+      cause?: unknown;
+    } = {},
   ) {
     super(message, { cause: options.cause });
     this.name = 'ApiError';
     this.kind = kind;
     this.status = options.status ?? null;
     this.fieldErrors = options.fieldErrors ?? null;
+    this.code = options.code ?? '';
   }
 
   /** Whether retrying the same request could plausibly succeed. */
@@ -108,6 +124,13 @@ export function kindFromStatus(status: number): ApiErrorKind {
  * `{"email": ["..."]}` for a serializer one. Only the second is a field error,
  * so `detail` is filtered out rather than presented as a field named "detail".
  */
+/** The server's own `code` discriminator, or '' when it sent none. */
+export function parseErrorCode(body: unknown): string {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return '';
+  const code = (body as { code?: unknown }).code;
+  return typeof code === 'string' ? code : '';
+}
+
 export function parseFieldErrors(body: unknown): FieldErrors | null {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
 

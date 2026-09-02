@@ -179,6 +179,16 @@ export const queryKeys = {
     [...internalPrefix(scope), 'service', 'order', orderId, 'diagnostics'] as const,
   internalServiceQuotes: (scope: QueryScope, orderId: number) =>
     [...internalPrefix(scope), 'service', 'order', orderId, 'quotes'] as const,
+  // M10. The bench and the parts hang off the same order, for the same reason:
+  // consuming a part changes the parts list, the execution that owns it and —
+  // when it is the last one — nothing else, but a reversal or a completion
+  // changes the order's status too.
+  internalServiceExecution: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'execution'] as const,
+  internalServiceParts: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'parts'] as const,
+  internalServicePartCandidates: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'part-candidates'] as const,
   /** The whole module, for invalidation after a write. */
   internalServiceRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'service'] as const,
