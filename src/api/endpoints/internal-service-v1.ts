@@ -2,6 +2,14 @@ import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import { companySlug } from '@/config/env';
 import type {
   ServiceAssignment,
+  ServiceDiagnostic,
+  ServiceDiagnosticInput,
+  ServiceDiagnosticList,
+  ServiceQuote,
+  ServiceQuoteInput,
+  ServiceQuoteItem,
+  ServiceQuoteItemInput,
+  ServiceQuoteList,
   ServiceAssignmentOptions,
   ServiceContext,
   ServiceCustomerPage,
@@ -523,3 +531,338 @@ export function serviceErrorMessage(error: unknown): string {
 }
 
 export { InternalAccessDeniedError, InternalCapabilityMissingError, MissingTenantError };
+
+// ---------------------------------------------------------------------------
+// BR-005B — diagnosis and quotes
+// ---------------------------------------------------------------------------
+
+function orderPath(id: number): string {
+  return `${servicePath(requireTenant())}/orders/${encodeURIComponent(String(id))}`;
+}
+
+export function toServiceDiagnostic(raw: unknown): ServiceDiagnostic {
+  const row = raw as Row;
+  return {
+    id: Number(row.id),
+    revision: Number(row.revision ?? 1),
+    status: str(row.status),
+    statusLabel: str(row.status_label),
+    description: str(row.description),
+    rootCause: str(row.root_cause),
+    recommendedAction: str(row.recommended_action),
+    internalNotes: str(row.internal_notes),
+    diagnosedByName: str(row.diagnosed_by_name),
+    createdAt: str(row.created_at),
+    updatedAt: str(row.updated_at),
+    finalizedAt: row.finalized_at ? str(row.finalized_at) : null,
+  };
+}
+
+export function toServiceQuoteItem(raw: unknown): ServiceQuoteItem {
+  const row = raw as Row;
+  return {
+    id: Number(row.id),
+    itemType: str(row.item_type),
+    itemTypeLabel: str(row.item_type_label),
+    description: str(row.description),
+    // Decimal strings, carried verbatim. Nothing in this app multiplies them.
+    quantity: str(row.quantity, '0'),
+    unitPrice: str(row.unit_price, '0'),
+    lineTotal: str(row.line_total, '0'),
+    product: row.product === null || row.product === undefined ? null : Number(row.product),
+    sortOrder: Number(row.sort_order ?? 0),
+  };
+}
+
+export function toServiceQuote(raw: unknown): ServiceQuote {
+  const row = raw as Row;
+  const decision = row.decision as Row | null | undefined;
+  return {
+    id: Number(row.id),
+    revision: Number(row.revision ?? 1),
+    status: str(row.status),
+    statusLabel: str(row.status_label),
+    diagnostic:
+      row.diagnostic === null || row.diagnostic === undefined
+        ? null
+        : Number(row.diagnostic),
+    currency: str(row.currency),
+    subtotal: str(row.subtotal, '0'),
+    discountAmount: str(row.discount_amount, '0'),
+    taxAmount: str(row.tax_amount, '0'),
+    total: str(row.total, '0'),
+    validUntil: row.valid_until ? str(row.valid_until) : null,
+    // Strictly `=== true`: an absent flag is not a grant, and these two decide
+    // whether an editor is drawn and whether a quote can still be published.
+    isExpired: row.is_expired === true,
+    isEditable: row.is_editable === true,
+    customerNotes: str(row.customer_notes),
+    internalNotes: str(row.internal_notes),
+    items: Array.isArray(row.items) ? row.items.map(toServiceQuoteItem) : [],
+    decision: decision
+      ? {
+          decision: str(decision.decision),
+          reason: str(decision.reason),
+          channel: str(decision.channel),
+          decidedAt: str(decision.decided_at),
+        }
+      : null,
+    createdByName: str(row.created_by_name),
+    createdAt: str(row.created_at),
+    updatedAt: str(row.updated_at),
+    sentAt: row.sent_at ? str(row.sent_at) : null,
+    approvedAt: row.approved_at ? str(row.approved_at) : null,
+    rejectedAt: row.rejected_at ? str(row.rejected_at) : null,
+    cancelledAt: row.cancelled_at ? str(row.cancelled_at) : null,
+  };
+}
+
+/**
+ * Every function below names an order id in its path.
+ *
+ * So every one is `scoped: true` when it translates a 404: the server answers
+ * that for an order, a quote or a diagnosis this member cannot reach, and the
+ * app must say "that is not available to you" rather than "your membership is
+ * gone".
+ */
+export async function fetchServiceDiagnostics(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceDiagnosticList> {
+  try {
+    const raw = await authenticatedRequest<Row>(
+      `${orderPath(orderId)}/diagnostics/`,
+      { scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return {
+      count: Number(raw.count ?? 0),
+      results: Array.isArray(raw.results) ? raw.results.map(toServiceDiagnostic) : [],
+    };
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+export async function postServiceDiagnostic(
+  orderId: number,
+  input: ServiceDiagnosticInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceDiagnostic> {
+  const body: Record<string, unknown> = {
+    description: input.description,
+    recommended_action: input.recommendedAction,
+  };
+  if (input.rootCause) body.root_cause = input.rootCause;
+  if (input.internalNotes) body.internal_notes = input.internalNotes;
+
+  try {
+    return toServiceDiagnostic(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/diagnostics/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+export async function patchServiceDiagnostic(
+  orderId: number,
+  diagnosticId: number,
+  input: Partial<ServiceDiagnosticInput>,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceDiagnostic> {
+  const body: Record<string, unknown> = {};
+  if (input.description !== undefined) body.description = input.description;
+  if (input.recommendedAction !== undefined) {
+    body.recommended_action = input.recommendedAction;
+  }
+  if (input.rootCause !== undefined) body.root_cause = input.rootCause;
+  if (input.internalNotes !== undefined) body.internal_notes = input.internalNotes;
+
+  try {
+    return toServiceDiagnostic(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/diagnostics/${encodeURIComponent(String(diagnosticId))}/`,
+        { method: 'PATCH', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+export async function fetchServiceQuotes(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQuoteList> {
+  try {
+    const raw = await authenticatedRequest<Row>(
+      `${orderPath(orderId)}/quotes/`,
+      { scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return {
+      count: Number(raw.count ?? 0),
+      results: Array.isArray(raw.results) ? raw.results.map(toServiceQuote) : [],
+    };
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+function quoteBody(input: ServiceQuoteInput): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (input.diagnosticId !== undefined) body.diagnostic_id = input.diagnosticId;
+  if (input.validUntil !== undefined) body.valid_until = input.validUntil;
+  if (input.customerNotes !== undefined) body.customer_notes = input.customerNotes;
+  if (input.internalNotes !== undefined) body.internal_notes = input.internalNotes;
+  if (input.discountAmount !== undefined) body.discount_amount = input.discountAmount;
+  return body;
+}
+
+export async function postServiceQuote(
+  orderId: number,
+  input: ServiceQuoteInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQuote> {
+  try {
+    return toServiceQuote(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/quotes/`,
+        { method: 'POST', body: quoteBody(input), scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+export async function patchServiceQuote(
+  orderId: number,
+  quoteId: number,
+  input: ServiceQuoteInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQuote> {
+  try {
+    return toServiceQuote(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/quotes/${encodeURIComponent(String(quoteId))}/`,
+        { method: 'PATCH', body: quoteBody(input), scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+export async function postServiceQuoteItem(
+  orderId: number,
+  quoteId: number,
+  input: ServiceQuoteItemInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQuote> {
+  const body: Record<string, unknown> = {
+    item_type: input.itemType,
+    description: input.description,
+    quantity: input.quantity,
+    unit_price: input.unitPrice,
+  };
+  if (input.productId !== undefined && input.productId !== null) {
+    body.product_id = input.productId;
+  }
+  if (input.sortOrder !== undefined) body.sort_order = input.sortOrder;
+
+  try {
+    return toServiceQuote(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/quotes/${encodeURIComponent(String(quoteId))}/items/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+export async function deleteServiceQuoteItem(
+  orderId: number,
+  quoteId: number,
+  itemId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQuote> {
+  try {
+    return toServiceQuote(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/quotes/${encodeURIComponent(String(quoteId))}`
+          + `/items/${encodeURIComponent(String(itemId))}/`,
+        { method: 'DELETE', scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Send the quote to the customer.
+ *
+ * THE ONLY WAY AN ORDER REACHES `waiting_approval`. The server removed that
+ * state from `available_transitions` in M9 precisely so this is the only route,
+ * and it re-checks everything — order in diagnosis, quote a draft, at least one
+ * line — whatever the app drew.
+ */
+export async function postServiceQuotePublish(
+  orderId: number,
+  quoteId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQuote> {
+  try {
+    return toServiceQuote(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/quotes/${encodeURIComponent(String(quoteId))}/publish/`,
+        { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/** Withdraw a quote the customer has not answered. Returns the order to diagnosis. */
+export async function postServiceQuoteCancel(
+  orderId: number,
+  quoteId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQuote> {
+  try {
+    return toServiceQuote(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/quotes/${encodeURIComponent(String(quoteId))}/cancel/`,
+        { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}

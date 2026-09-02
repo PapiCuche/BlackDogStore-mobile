@@ -231,3 +231,156 @@ export const SERVICE_DEVICE_TYPES = [
   { value: 'wearable', label: 'Wearable' },
   { value: 'other', label: 'Otro' },
 ] as const;
+
+// ---------------------------------------------------------------------------
+// BR-005B — diagnosis, quotes and the customer's decision (M9)
+// ---------------------------------------------------------------------------
+
+/**
+ * What the technician found. Versioned, and frozen once a quote goes out.
+ *
+ * `internalNotes` lives HERE and has no counterpart on the customer side. That
+ * asymmetry is the point of keeping the two domains apart.
+ */
+export type ServiceDiagnostic = {
+  id: number;
+  revision: number;
+  status: string;
+  statusLabel: string;
+  description: string;
+  rootCause: string;
+  recommendedAction: string;
+  internalNotes: string;
+  diagnosedByName: string;
+  createdAt: string;
+  updatedAt: string;
+  /** ISO-8601 once a quote built on it was published; null while it is a draft. */
+  finalizedAt: string | null;
+};
+
+export type ServiceQuoteItem = {
+  id: number;
+  itemType: string;
+  itemTypeLabel: string;
+  description: string;
+  /** Decimal STRINGS. Parsed only at the point of display, never for arithmetic. */
+  quantity: string;
+  unitPrice: string;
+  lineTotal: string;
+  /** A catalogue reference, not the authority for this historical price. */
+  product: number | null;
+  sortOrder: number;
+};
+
+/** The customer's answer, as the people doing the work need to read it. */
+export type ServiceQuoteDecision = {
+  decision: string;
+  /** THE CUSTOMER'S WORDS. Internal only — never on the customer contract. */
+  reason: string;
+  channel: string;
+  decidedAt: string;
+};
+
+export type ServiceQuote = {
+  id: number;
+  revision: number;
+  status: string;
+  statusLabel: string;
+  diagnostic: number | null;
+  currency: string;
+  subtotal: string;
+  discountAmount: string;
+  taxAmount: string;
+  total: string;
+  validUntil: string | null;
+  /** Server-computed. Never recalculated here from `validUntil`. */
+  isExpired: boolean;
+  /** Whether the quote may still be edited — a draft, and nothing else. */
+  isEditable: boolean;
+  customerNotes: string;
+  internalNotes: string;
+  items: readonly ServiceQuoteItem[];
+  decision: ServiceQuoteDecision | null;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+  sentAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  cancelledAt: string | null;
+};
+
+/**
+ * The collection shape these two endpoints use: `{count, results}`.
+ *
+ * NOT the four-field page envelope the order and device lists return. Neither
+ * of these paginates — an order has a handful of revisions, not a board of
+ * them — and inventing `page`/`page_size` fields the server does not send would
+ * be describing a contract that does not exist.
+ */
+export type ServiceDiagnosticList = {
+  count: number;
+  results: readonly ServiceDiagnostic[];
+};
+
+export type ServiceQuoteList = {
+  count: number;
+  results: readonly ServiceQuote[];
+};
+
+/**
+ * Recording a diagnosis. An intention.
+ *
+ * No `diagnosedBy` and no `technicianId`: the authenticated actor is the only
+ * claim M9 supports. Recording a diagnosis in somebody else's name is a
+ * business decision nobody has made.
+ *
+ * No `status` — finalising happens by publishing a quote, not by asking.
+ */
+export type ServiceDiagnosticInput = {
+  description: string;
+  recommendedAction: string;
+  /** Optional on purpose: a technician often knows WHAT before they know WHY. */
+  rootCause?: string;
+  internalNotes?: string;
+};
+
+/**
+ * Composing a quote's header.
+ *
+ * No `revision`, no `currency`, no `subtotal`, no `total`, no `status`: all of
+ * them are the server's, and having no field is the only way to guarantee a
+ * client cannot set one.
+ */
+export type ServiceQuoteInput = {
+  diagnosticId?: number | null;
+  validUntil?: string | null;
+  customerNotes?: string;
+  internalNotes?: string;
+  discountAmount?: string;
+};
+
+/** One line. `lineTotal` is quantity × unitPrice, computed by the server. */
+export type ServiceQuoteItemInput = {
+  itemType: string;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  productId?: number | null;
+  sortOrder?: number;
+};
+
+export const CAP_SERVICE_DIAGNOSTIC_MANAGE = 'service.diagnostic.manage';
+
+/**
+ * The line types a quote may carry.
+ *
+ * Mirrors Django's `RepairQuoteItem.TYPE_CHOICES`. The labels are a fallback
+ * for a payload that arrives without `item_type_label`; the server rejects any
+ * value outside this set regardless of what this app offers.
+ */
+export const SERVICE_QUOTE_ITEM_TYPES = [
+  { value: 'labor', label: 'Mano de obra' },
+  { value: 'part', label: 'Repuesto' },
+  { value: 'service', label: 'Servicio' },
+] as const;

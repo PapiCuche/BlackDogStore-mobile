@@ -5,7 +5,10 @@ import type { ServiceOrderQuery } from '@/api/endpoints/internal-service-v1';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import type {
   ServiceDeviceInput,
+  ServiceDiagnosticInput,
   ServiceOrderInput,
+  ServiceQuoteInput,
+  ServiceQuoteItemInput,
 } from '@/domain/internal/service-types';
 import { queryKeys } from '@/providers/query-client';
 import { useQueryScope } from '@/providers/use-query-scope';
@@ -167,5 +170,99 @@ export function useServiceTransition() {
 export function useAssignTechnician() {
   return useServiceMutation<{ id: number; technicianId: number | null }, unknown>(
     (input) => repository().assignTechnician(input),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BR-005B — diagnosis and quotes
+// ---------------------------------------------------------------------------
+
+/**
+ * Reading uses `service.orders.view`, so these two queries are enabled by the
+ * same capability that opened the order. Composing needs
+ * `service.diagnostic.manage`, and that gate lives on the buttons.
+ */
+export function useServiceDiagnostics(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceDiagnostics(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().listDiagnostics(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+export function useServiceQuotes(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceQuotes(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().listQuotes(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+export function useCreateDiagnostic(orderId: number) {
+  return useServiceMutation<ServiceDiagnosticInput, unknown>((input) =>
+    repository().createDiagnostic(orderId, input),
+  );
+}
+
+export function useUpdateDiagnostic(orderId: number) {
+  return useServiceMutation<
+    { diagnosticId: number; input: Partial<ServiceDiagnosticInput> },
+    unknown
+  >(({ diagnosticId, input }) =>
+    repository().updateDiagnostic(orderId, diagnosticId, input),
+  );
+}
+
+export function useCreateQuote(orderId: number) {
+  return useServiceMutation<ServiceQuoteInput, unknown>((input) =>
+    repository().createQuote(orderId, input),
+  );
+}
+
+export function useUpdateQuote(orderId: number) {
+  return useServiceMutation<{ quoteId: number; input: ServiceQuoteInput }, unknown>(
+    ({ quoteId, input }) => repository().updateQuote(orderId, quoteId, input),
+  );
+}
+
+export function useAddQuoteItem(orderId: number) {
+  return useServiceMutation<{ quoteId: number; input: ServiceQuoteItemInput }, unknown>(
+    ({ quoteId, input }) => repository().addQuoteItem(orderId, quoteId, input),
+  );
+}
+
+export function useRemoveQuoteItem(orderId: number) {
+  return useServiceMutation<{ quoteId: number; itemId: number }, unknown>(
+    ({ quoteId, itemId }) => repository().removeQuoteItem(orderId, quoteId, itemId),
+  );
+}
+
+/**
+ * Publish, and withdraw.
+ *
+ * Both move the ORDER as well as the quote, which is why they use the same
+ * whole-namespace invalidation as every other write here: the order's status,
+ * its history and its quote list all change together, and a screen that
+ * refetched one of the three would contradict itself.
+ */
+export function usePublishQuote(orderId: number) {
+  return useServiceMutation<{ quoteId: number }, unknown>(({ quoteId }) =>
+    repository().publishQuote(orderId, quoteId),
+  );
+}
+
+export function useCancelQuote(orderId: number) {
+  return useServiceMutation<{ quoteId: number }, unknown>(({ quoteId }) =>
+    repository().cancelQuote(orderId, quoteId),
   );
 }
