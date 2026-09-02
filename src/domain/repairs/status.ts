@@ -31,6 +31,11 @@ export const repairStatusMeta: Record<KnownRepairStatus, StatusMeta> = {
   in_repair: { label: 'En reparación', tone: 'info' },
   waiting_parts: { label: 'Esperando repuestos', tone: 'warning' },
   repaired: { label: 'Reparado', tone: 'success' },
+  // M11. `quality_control` is 'info' — being tested is progress, not a problem.
+  // `ready_for_pickup` is the only genuinely good news in the ladder, and its
+  // label says what it means and nothing more.
+  quality_control: { label: 'En control de calidad', tone: 'info' },
+  ready_for_pickup: { label: 'Listo para recoger', tone: 'success' },
   rejected: { label: 'Rechazado', tone: 'danger' },
   cancelled: { label: 'Cancelado', tone: 'danger' },
 };

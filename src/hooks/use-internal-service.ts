@@ -4,6 +4,7 @@ import { InternalCapabilityMissingError } from '@/api/endpoints/internal-v1';
 import type { ServiceOrderQuery } from '@/api/endpoints/internal-service-v1';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import type {
+  ServiceQualityResultInput,
   ServiceCompleteInput,
   ServiceExecutionInput,
   ServicePartUsageInput,
@@ -388,5 +389,57 @@ export function useRecordPartUsage(orderId: number) {
 export function useReversePartUsage(orderId: number) {
   return useStockTouchingMutation<{ usageId: number; reason?: string }, unknown>(
     ({ usageId, reason }) => repository().reversePartUsage(orderId, usageId, reason ?? ''),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// M11 / BR-005D — quality control
+// ---------------------------------------------------------------------------
+
+export function useServiceQualityCheck(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceQuality(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().getQualityCheck(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+export function useServiceQualityHistory(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceQualityHistory(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().listQualityChecks(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+export function useStartQualityCheck(orderId: number) {
+  return useServiceMutation<void, unknown>(() => repository().startQualityCheck(orderId));
+}
+
+export function useRecordQualityResult(orderId: number) {
+  return useServiceMutation<
+    { itemId: number; input: ServiceQualityResultInput }, unknown
+  >(({ itemId, input }) => repository().recordQualityResult(orderId, itemId, input));
+}
+
+export function usePassQualityCheck(orderId: number) {
+  return useServiceMutation<{ notes?: string }, unknown>(({ notes }) =>
+    repository().passQualityCheck(orderId, notes ?? ''),
+  );
+}
+
+export function useFailQualityCheck(orderId: number) {
+  return useServiceMutation<{ notes?: string }, unknown>(({ notes }) =>
+    repository().failQualityCheck(orderId, notes ?? ''),
   );
 }

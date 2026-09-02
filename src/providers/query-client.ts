@@ -189,6 +189,13 @@ export const queryKeys = {
     [...internalPrefix(scope), 'service', 'order', orderId, 'parts'] as const,
   internalServicePartCandidates: (scope: QueryScope, orderId: number) =>
     [...internalPrefix(scope), 'service', 'order', orderId, 'part-candidates'] as const,
+  // M11. The inspection and its history hang off the same order. A pass or a
+  // fail changes the order's status, its executions AND its checks at once, so
+  // every write invalidates the service root rather than one of these.
+  internalServiceQuality: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'quality'] as const,
+  internalServiceQualityHistory: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'quality-history'] as const,
   /** The whole module, for invalidation after a write. */
   internalServiceRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'service'] as const,

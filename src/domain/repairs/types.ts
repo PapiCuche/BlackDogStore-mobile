@@ -46,6 +46,11 @@ export const REPAIR_STAGES = [
   // advanced when a shop ran out of a battery would be lying in the flattering
   // direction.
   'in_repair', 'repaired',
+  // M11 — the inspection, and what passing it means. `ready_for_pickup` says
+  // the device passed its tests and may go to handover. It does NOT say anybody
+  // was called: this platform has no notification channel, and a stage that
+  // implied one would have customers turning up for nothing.
+  'quality_control', 'ready_for_pickup',
 ] as const;
 
 export type RepairStage = (typeof REPAIR_STAGES)[number];

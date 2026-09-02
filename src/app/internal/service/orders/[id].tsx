@@ -19,6 +19,7 @@ import {
 } from '@/design-system';
 import {
   CAP_SERVICE_DIAGNOSTIC_MANAGE,
+  CAP_SERVICE_QUALITY_MANAGE,
   CAP_SERVICE_REPAIR_MANAGE,
   CAP_SERVICE_ORDERS_MANAGE,
   CAP_SERVICE_ORDERS_VIEW,
@@ -27,6 +28,7 @@ import { hasUxCapability } from '@/domain/internal/types';
 import { ServiceDiagnosticSection } from '@/features/internal/service-diagnostic-section';
 import { ServiceExecutionSection } from '@/features/internal/service-execution-section';
 import { ServicePartsSection } from '@/features/internal/service-parts-section';
+import { ServiceQualitySection } from '@/features/internal/service-quality-section';
 import { ServiceQuoteSection } from '@/features/internal/service-quote-section';
 import {
   useAddQuoteItem,
@@ -43,6 +45,12 @@ import {
   useServicePartCandidates,
   useServicePartUsages,
   useServiceQuotes,
+  useServiceQualityCheck,
+  useServiceQualityHistory,
+  useStartQualityCheck,
+  useRecordQualityResult,
+  usePassQualityCheck,
+  useFailQualityCheck,
   useStartRepair,
   useUpdateExecution,
   useCompleteRepair,
@@ -124,6 +132,18 @@ export default function ServiceOrderDetailScreen() {
   const resumeRepair = useResumeRepair(orderId);
   const recordPart = useRecordPartUsage(orderId);
   const reversePart = useReversePartUsage(orderId);
+
+  // M11. Inspecting is its OWN capability, separate from working the bench: a
+  // shop that wants a second pair of eyes grants one role each. The server
+  // re-checks regardless of what this drew.
+  const mayInspect = hasUxCapability(context ?? null, CAP_SERVICE_QUALITY_MANAGE);
+  const qualityCheck = useServiceQualityCheck(safeId, { enabled: mayView });
+  const qualityHistory = useServiceQualityHistory(safeId, { enabled: mayView });
+
+  const startQuality = useStartQualityCheck(orderId);
+  const recordQuality = useRecordQualityResult(orderId);
+  const passQuality = usePassQualityCheck(orderId);
+  const failQuality = useFailQualityCheck(orderId);
 
   const { data: order, isPending, isError, error } = query;
   const title = order?.number ?? 'Orden de servicio';
@@ -328,6 +348,32 @@ export default function ServiceOrderDetailScreen() {
             error={recordPart.error ?? reversePart.error}
             onUse={(input) => recordPart.mutate(input)}
             onReverse={(usageId) => reversePart.mutate({ usageId })}
+          />
+
+          {/* M11 / BR-005D. `repaired` is not the end: the device is inspected
+              before it can be collected, and a failure sends it back to the
+              bench with a NEW execution. Both `quality_control` and
+              `ready_for_pickup` are event-only on the server, so the status
+              buttons below cannot reach either. */}
+          <ServiceQualitySection
+            check={qualityCheck.data ?? null}
+            history={qualityHistory.data?.results ?? []}
+            status={order.status}
+            canManage={mayInspect}
+            isBusy={
+              startQuality.isPending || recordQuality.isPending
+              || passQuality.isPending || failQuality.isPending
+            }
+            error={
+              startQuality.error ?? recordQuality.error
+              ?? passQuality.error ?? failQuality.error
+            }
+            onStart={() => startQuality.mutate()}
+            onAnswer={(itemId, result, itemNotes) =>
+              recordQuality.mutate({ itemId, input: { result, notes: itemNotes } })
+            }
+            onPass={(notes) => passQuality.mutate({ notes })}
+            onFail={(notes) => failQuality.mutate({ notes })}
           />
 
           {/* Only with `service.orders.manage`. The server re-checks anyway, so

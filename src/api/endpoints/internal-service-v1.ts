@@ -2,6 +2,9 @@ import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import { companySlug } from '@/config/env';
 import type {
   ServiceAssignment,
+  ServiceQualityCheck,
+  ServiceQualityItem,
+  ServiceQualityResultInput,
   ServiceCompleteInput,
   ServiceExecution,
   ServiceExecutionInput,
@@ -1253,6 +1256,200 @@ export async function postServicePartUsageReverse(
     return toServicePartUsage(
       await authenticatedRequest<unknown>(
         `${orderPath(orderId)}/parts/${encodeURIComponent(String(usageId))}/reverse/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// M11 / BR-005D — quality control
+// ---------------------------------------------------------------------------
+//
+// Verified against `PapiCuche/BlackDogStore-web` @ `origin/master` `e26e77d`
+// (PR #12) with a live smoke over all five routes. Every field name below came
+// back from a real response.
+
+function toServiceQualityItem(raw: unknown): ServiceQualityItem {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: num(row.id),
+    code: str(row.code),
+    label: str(row.label),
+    isRequired: row.is_required === true,
+    result: str(row.result),
+    notes: str(row.notes),
+    sortOrder: num(row.sort_order),
+  };
+}
+
+function toServiceQualityCheck(raw: unknown): ServiceQualityCheck {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: num(row.id),
+    status: str(row.status),
+    statusLabel: str(row.status_label),
+    isOpen: row.is_open === true,
+    templateName: str(row.template_name),
+    notes: str(row.notes),
+    checkedByName: str(row.checked_by_name),
+    completedByName: str(row.completed_by_name),
+    executionId: num(row.execution_id),
+    startedAt: str(row.started_at),
+    completedAt: row.completed_at == null ? null : str(row.completed_at),
+    items: Array.isArray(row.items) ? row.items.map(toServiceQualityItem) : [],
+  };
+}
+
+/**
+ * The inspection on this order, or null.
+ *
+ * `null` is ordinary: most orders have never been inspected, and treating that
+ * as missing would put an error card on a healthy screen.
+ */
+export async function fetchServiceQualityCheck(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQualityCheck | null> {
+  try {
+    const payload = await authenticatedRequest<{ quality_check?: unknown }>(
+      `${orderPath(orderId)}/quality/`,
+      { method: 'GET', scope: 'authenticated-v1', signal },
+      deps,
+    );
+    const raw = payload?.quality_check;
+    return raw == null ? null : toServiceQualityCheck(raw);
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/** Every inspection this order has had. More than one is normal after a rework. */
+export async function fetchServiceQualityHistory(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<{ count: number; results: ServiceQualityCheck[] }> {
+  try {
+    const payload = await authenticatedRequest<{ count?: unknown; results?: unknown }>(
+      `${orderPath(orderId)}/quality/history/`,
+      { method: 'GET', scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return {
+      count: num(payload?.count),
+      results: Array.isArray(payload?.results)
+        ? payload.results.map(toServiceQualityCheck)
+        : [],
+    };
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Open an inspection.
+ *
+ * THE ONLY WAY AN ORDER REACHES `quality_control`. The server copies the
+ * checklist at this moment; the app draws whatever came back and holds no
+ * template of its own.
+ */
+export async function postServiceQualityStart(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQualityCheck> {
+  try {
+    return toServiceQualityCheck(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/quality/`,
+        { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/** Answer ONE point. A result and, optionally, why. Never a verdict. */
+export async function patchServiceQualityItem(
+  orderId: number,
+  itemId: number,
+  input: ServiceQualityResultInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQualityCheck> {
+  const body: Record<string, unknown> = { result: input.result };
+  if (input.notes) body.notes = input.notes;
+
+  try {
+    return toServiceQualityCheck(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/quality/items/${encodeURIComponent(String(itemId))}/`,
+        { method: 'PATCH', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * The device passed.
+ *
+ * THE SERVER DECIDES. This sends an optional internal note and nothing else —
+ * there is no field that asserts a verdict, because a checklist whose result
+ * could be sent by whoever filled it in is a checklist that proves nothing. If
+ * a required point is unanswered or any point failed, the server answers 400.
+ */
+export async function postServiceQualityPass(
+  orderId: number,
+  notes: string,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQualityCheck> {
+  const body: Record<string, unknown> = {};
+  if (notes.trim()) body.notes = notes.trim();
+
+  try {
+    return toServiceQualityCheck(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/quality/pass/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Send it back to the bench.
+ *
+ * The server opens a NEW execution; the previous one stays finished with its
+ * parts intact, and no stock moves. Requires at least one failed point — a
+ * rework order with nothing marked wrong tells the next technician nothing.
+ */
+export async function postServiceQualityFail(
+  orderId: number,
+  notes: string,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQualityCheck> {
+  const body: Record<string, unknown> = {};
+  if (notes.trim()) body.notes = notes.trim();
+
+  try {
+    return toServiceQualityCheck(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/quality/fail/`,
         { method: 'POST', body, scope: 'authenticated-v1', signal },
         deps,
       ),

@@ -689,6 +689,32 @@ estantería porque alguien pulse deshacer.
 recoger, no avisado, no pagado. La reparación sigue apareciendo como activa en
 la Home del cliente, porque el equipo sigue en el taller.
 
+### Control de calidad (M11)
+
+**La lista de control no está en esta app.** Cada taller configura la suya y el
+servidor la manda como un snapshot al abrir la inspección; la app dibuja lo que
+llegó. Editar la plantilla mañana no cambia lo que se probó hoy — y por eso el
+contrato ni siquiera envía el id de la plantilla.
+
+**El veredicto lo calcula el servidor.** «Aprobar» manda una nota interna
+opcional y nada más. Si falta un punto obligatorio o algo falló, responde 400,
+diga lo que diga la pantalla. El resumen que ve el técnico es una vista previa.
+
+**«No aplica» es una respuesta.** Una lista que pregunta por la cámara le está
+preguntando a una laptop algo que no tiene.
+
+**Un fallo devuelve el equipo al banco con un trabajo nuevo.** El anterior queda
+finalizado con sus repuestos intactos, y **no se devuelve nada al stock**: una
+pieza que falló una prueba sigue instalada.
+
+**Inspeccionar es un permiso distinto de reparar.** Un taller que quiere un
+segundo par de ojos concede uno a cada rol. La plataforma no lo obliga —un
+taller de una persona quedaría fuera— pero guarda quién revisó aparte de quién
+reparó.
+
+**«Listo para recoger» no significa que se avisó a nadie.** El equipo pasó sus
+pruebas. Esta plataforma no tiene canal de notificaciones.
+
 ### Inventario: una tercera puerta
 
 El stock solo existe en un lugar, así que el módulo de inventario pregunta

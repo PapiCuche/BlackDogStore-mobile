@@ -938,9 +938,74 @@ comprueba que el payload son exactamente diez campos.
 un `get()` cuya firma no acepta `quote_id`: TypeError sin convertir, 500 en vez
 de 405. Ahora `http_method_names = ['post']`.
 
+## Control de calidad — **INTEGRADO** (M11 / BR-005D)
+
+```
+VERIFIED_STABLE_MASTER · VERSIONED · INTEGRADO POR MOBILE (M11)
+```
+
+Verificado en `origin/master` **`e26e77d`** (PR #12) con smoke real sobre las
+cinco rutas.
+
+### Interna — `/api/v1/internal/<slug>/service/orders/<id>/quality/`
+
+| Endpoint | Requiere |
+|---|---|
+| `GET quality/` | `service.orders.view` |
+| `GET quality/history/` | `service.orders.view` |
+| `POST quality/` | `service.quality.manage` |
+| `PATCH quality/items/<id>/` | `service.quality.manage` |
+| `POST quality/pass/` · `POST quality/fail/` | `service.quality.manage` |
+
+`GET quality/` responde `{"quality_check": null}` mientras nadie haya
+inspeccionado. Es la respuesta normal, no un error.
+
+### La lista llega como snapshot
+
+Los puntos se **copian** al abrir el control. El payload trae `template_name`
+pero **no** el id de la plantilla, a propósito: un cliente con ese id está a un
+refactor de dibujar un control antiguo con la lista de hoy.
+
+Mobile no tiene ninguna lista escrita. Un test estructural falla si aparece.
+
+### El servidor calcula el veredicto
+
+`pass/` y `fail/` mandan **solo** una nota interna opcional. No hay campo para
+`status`, `result`, `completed_at` ni `checked_by`. El servidor lee las
+respuestas y devuelve 400 si falta un obligatorio o si algo falló.
+
+La app puede mostrar un resumen —«faltan 2 puntos»— pero es **preview**, nunca
+autoridad. Un test estructural comprueba que no existe `items.every(...)`
+alimentando una petición.
+
+`not_applicable` es una respuesta, no un hueco, y no bloquea.
+
+### FAIL abre el retrabajo en el mismo acto
+
+El servidor crea una **segunda** `RepairExecution`. La anterior queda finalizada
+con sus repuestos intactos y **no se mueve stock**: una pieza que falló una
+prueba sigue instalada.
+
+### Dos capabilities, no una
+
+`service.quality.manage` es propia. Un taller que quiere un segundo par de ojos
+concede el banco a un rol y la inspección a otro. La plataforma **no** lo exige
+—un taller de una persona quedaría fuera— pero guarda `checked_by` aparte.
+
+### `ready_for_pickup` no significa avisado
+
+El equipo pasó sus pruebas y puede ir a entrega. No hay canal de notificaciones
+en esta plataforma. La etiqueta por defecto lo dice y un test comprueba que no
+dice «avisado», «pagado» ni «entregado».
+
+### Al cliente le llega la etapa, nunca la lista
+
+El serializer de cliente no ganó ningún campo. Ve `quality_control` y
+`ready_for_pickup` con la etiqueta de su empresa; no ve qué se probó, qué falló,
+qué escribió el técnico ni quién inspeccionó.
+
 ### Pendiente
 
-Control de calidad, listo para recoger, entrega, pago del servicio, garantía.
-Reserva de stock al cotizar **no existe y es deliberado**. Devolución de piezas
-después de finalizar: pendiente, necesita inspección física. Evidencias
-fotográficas siguen `API_PENDING` (DEC-016). BR-008 sigue `API_PENDING`.
+Entrega, pago del servicio, garantía. Reserva de stock **no existe y es
+deliberado**. Devolución de piezas tras finalizar. Evidencias fotográficas
+`API_PENDING` (DEC-016). BR-008 `API_PENDING`.

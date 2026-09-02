@@ -508,10 +508,22 @@ está — que es más limpio que un flag.
 > disciplina propia y coincidían — documento primero, `BranchStock` al final,
 > `Product` nunca — así que M10 concatenó en vez de inventar.
 >
-> Sigue **PENDIENTE**: control de calidad, listo para recoger, entrega,
-> garantía, pagos de servicio, evidencias fotográficas y la devolución de piezas
-> posterior a la finalización. **No hay reserva de stock al cotizar y es
-> deliberado**: el stock cambia cuando la pieza se usa y nunca antes.
+> **M11 entregó el control de calidad** (`origin/master` `e26e77d`):
+> `QualityCheck`, `QualityCheckItem`, plantillas por empresa y tipo de
+> dispositivo, `QUALITY_CONTROL`, `READY_FOR_PICKUP` y el retrabajo con una
+> segunda `RepairExecution`. Precedido por **H1B**, que pagó la asimetría del
+> preset técnico histórico.
+>
+> Esta sección proponía checklists «configurables» sin decir cuánto. El backend
+> eligió lo mínimo que se adapta —una lista con nombre, por empresa y
+> opcionalmente por tipo de dispositivo— y se negó a construir un motor de
+> formularios. También añadió algo que la propuesta no contemplaba y resultó
+> ser el punto entero: el **snapshot**. Sin él, editar la plantilla reescribía
+> lo que se probó el mes pasado.
+>
+> Sigue **PENDIENTE**: entrega, garantía, pagos de servicio, evidencias
+> fotográficas y la devolución de piezas posterior a la finalización. **No hay
+> reserva de stock al cotizar y es deliberado.**
 
 
 **Estado:** PROPUESTA · **Prioridad:** ALTA · **Bloquea:** reparaciones

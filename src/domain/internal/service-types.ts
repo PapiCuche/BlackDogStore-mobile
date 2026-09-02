@@ -498,3 +498,67 @@ export type ServicePartUsageInput = {
 };
 
 export const CAP_SERVICE_REPAIR_MANAGE = 'service.repair.manage';
+
+// ---------------------------------------------------------------------------
+// M11 / BR-005D — quality control. INTERNAL ONLY.
+// ---------------------------------------------------------------------------
+//
+// No customer counterpart, and the omission is structural. A customer sees the
+// STAGE — "en control de calidad", then "listo para recoger" — through the
+// ordinary status and their tenant's own label. They do not see which points
+// were tested, which one failed, what the technician wrote about it, or who ran
+// the inspection.
+//
+// "Falló la cámara frontal" is a note between a shop and itself. Publishing it
+// would turn every rework into an argument.
+
+/** How one point of a checklist came out. Mirrors Django's `QualityResultCode`. */
+export const QUALITY_RESULTS = [
+  { value: 'pass', label: 'Correcto' },
+  { value: 'fail', label: 'Falla' },
+  { value: 'not_applicable', label: 'No aplica' },
+] as const;
+
+export type QualityResult = (typeof QUALITY_RESULTS)[number]['value'];
+
+/**
+ * One point of the SNAPSHOT.
+ *
+ * `code` and `label` were copied when the inspection opened, not joined to a
+ * template. An administrator who renames a point tomorrow has not changed what
+ * a technician read on the screen today.
+ */
+export type ServiceQualityItem = {
+  id: number;
+  code: string;
+  label: string;
+  isRequired: boolean;
+  /** '' until somebody answers. `not_applicable` IS an answer. */
+  result: string;
+  notes: string;
+  sortOrder: number;
+};
+
+export type ServiceQualityCheck = {
+  id: number;
+  status: string;
+  statusLabel: string;
+  isOpen: boolean;
+  /** The list's name at the moment it was copied. There is deliberately no id. */
+  templateName: string;
+  notes: string;
+  checkedByName: string;
+  completedByName: string;
+  executionId: number;
+  startedAt: string;
+  completedAt: string | null;
+  items: readonly ServiceQualityItem[];
+};
+
+/** Answering one point: a result and, optionally, why. */
+export type ServiceQualityResultInput = {
+  result: QualityResult;
+  notes?: string;
+};
+
+export const CAP_SERVICE_QUALITY_MANAGE = 'service.quality.manage';
