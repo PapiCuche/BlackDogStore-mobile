@@ -494,7 +494,7 @@ Transiciones desde el servidor  INTEGRADO / TESTED
 Asignación de técnico          INTEGRADO / TESTED
 Búsqueda de clientes (intake)  INTEGRADO / TESTED
 Registro de equipos            INTEGRADO / TESTED
-Diagnóstico · cotización       PENDIENTE (M9)
+Diagnóstico · cotización       INTEGRADO / TESTED (M9)
 Repuestos · calidad · garantía PENDIENTE
 Evidencias fotográficas        API_PENDING (DEC-016, sin proveedor)
 Seguimiento público (BR-008)   API_PENDING
@@ -516,3 +516,45 @@ payload no trae ninguna.
 
 **Ninguna mutación reintenta ni se encola offline.** Una orden repetida es una
 segunda orden, una transición repetida es una segunda fila de historial.
+
+## Diagnóstico, cotización y aprobación (M9 / BR-005B)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master 36b8a8c)
+Diagnóstico interno            INTEGRADO / TESTED
+Cotización versionada          INTEGRADO / TESTED
+Líneas de cotización           INTEGRADO / TESTED
+Publicar · cancelar            INTEGRADO / TESTED
+Cotización del cliente         INTEGRADO / TESTED
+Aprobación · rechazo           INTEGRADO / TESTED
+Ejecución de la reparación     PENDIENTE
+Repuestos · stock              PENDIENTE
+Control de calidad · entrega   PENDIENTE
+Garantía · pagos de servicio   PENDIENTE
+Evidencias fotográficas        API_PENDING (DEC-016, sin proveedor)
+Seguimiento público (BR-008)   API_PENDING
+```
+
+**Aprobar no es pagar.** El cuerpo de una decisión tiene dos campos y uno es
+opcional. No hay importe, ni identidad, ni fecha, ni canal: el servidor ya sabe
+las cuatro cosas, y un cliente capaz de decirlas es un cliente capaz de decir una
+versión mejor de lo que pasó.
+
+**El `409` es el caso normal, no el raro.** El mostrador contesta por teléfono un
+segundo antes. La app refresca en `onSettled` y no en `onSuccess`, para que quien
+pierde esa carrera acabe mirando el estado verdadero.
+
+**El servidor hace las cuentas.** `line_total`, `subtotal` y `total` son
+respuesta. Los importes viajan como string decimal y se parsean en el punto de
+dibujo; un test estructural falla si alguien multiplica un precio en el teléfono.
+
+**La caducidad no la decide el teléfono.** `is_expired` y `can_be_decided` llegan
+calculados y la app exige que sean estrictamente `true`.
+
+**`waiting_approval` salió de `available_transitions` y la app no se enteró.**
+Publicar una cotización es ahora el camino hacia adelante en la pantalla interna.
+No haber tenido nunca una tabla de transiciones es lo que hizo que ese cambio de
+servidor no rompiera nada.
+
+**El motivo que escribe el cliente vive solo en el lado interno.** Lo lee el
+taller, que es quien lo necesita. La superficie de cliente no tiene ese campo.

@@ -1,5 +1,15 @@
 import {
+  deleteServiceQuoteItem,
   fetchServiceAssignmentOptions,
+  fetchServiceDiagnostics,
+  fetchServiceQuotes,
+  patchServiceDiagnostic,
+  patchServiceQuote,
+  postServiceDiagnostic,
+  postServiceQuote,
+  postServiceQuoteCancel,
+  postServiceQuoteItem,
+  postServiceQuotePublish,
   fetchServiceContext,
   fetchServiceDevices,
   fetchServiceOrder,
@@ -14,6 +24,13 @@ import {
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type {
   ServiceAssignmentOptions,
+  ServiceDiagnostic,
+  ServiceDiagnosticInput,
+  ServiceDiagnosticList,
+  ServiceQuote,
+  ServiceQuoteInput,
+  ServiceQuoteItemInput,
+  ServiceQuoteList,
   ServiceContext,
   ServiceCustomerPage,
   ServiceDeviceCreated,
@@ -108,5 +125,94 @@ export class V1InternalServiceRepository {
     signal?: AbortSignal,
   ): Promise<ServiceOrderDetail> {
     return postServiceAssignment(input, this.deps, signal);
+  }
+
+  // ── BR-005B ────────────────────────────────────────────────────────────
+
+  async listDiagnostics(
+    orderId: number,
+    signal?: AbortSignal,
+  ): Promise<ServiceDiagnosticList> {
+    return fetchServiceDiagnostics(orderId, this.deps, signal);
+  }
+
+  async createDiagnostic(
+    orderId: number,
+    input: ServiceDiagnosticInput,
+    signal?: AbortSignal,
+  ): Promise<ServiceDiagnostic> {
+    return postServiceDiagnostic(orderId, input, this.deps, signal);
+  }
+
+  async updateDiagnostic(
+    orderId: number,
+    diagnosticId: number,
+    input: Partial<ServiceDiagnosticInput>,
+    signal?: AbortSignal,
+  ): Promise<ServiceDiagnostic> {
+    return patchServiceDiagnostic(orderId, diagnosticId, input, this.deps, signal);
+  }
+
+  async listQuotes(orderId: number, signal?: AbortSignal): Promise<ServiceQuoteList> {
+    return fetchServiceQuotes(orderId, this.deps, signal);
+  }
+
+  async createQuote(
+    orderId: number,
+    input: ServiceQuoteInput,
+    signal?: AbortSignal,
+  ): Promise<ServiceQuote> {
+    return postServiceQuote(orderId, input, this.deps, signal);
+  }
+
+  async updateQuote(
+    orderId: number,
+    quoteId: number,
+    input: ServiceQuoteInput,
+    signal?: AbortSignal,
+  ): Promise<ServiceQuote> {
+    return patchServiceQuote(orderId, quoteId, input, this.deps, signal);
+  }
+
+  async addQuoteItem(
+    orderId: number,
+    quoteId: number,
+    input: ServiceQuoteItemInput,
+    signal?: AbortSignal,
+  ): Promise<ServiceQuote> {
+    return postServiceQuoteItem(orderId, quoteId, input, this.deps, signal);
+  }
+
+  async removeQuoteItem(
+    orderId: number,
+    quoteId: number,
+    itemId: number,
+    signal?: AbortSignal,
+  ): Promise<ServiceQuote> {
+    return deleteServiceQuoteItem(orderId, quoteId, itemId, this.deps, signal);
+  }
+
+  /**
+   * Send the quote to the customer.
+   *
+   * Deliberately NOT called `setWaitingApproval`. The order moving is a
+   * CONSEQUENCE of publishing, not the thing being asked for, and a name that
+   * described the side effect would invite somebody to look for a way to
+   * produce it without a quote — which is the exact thing M9 closed.
+   */
+  async publishQuote(
+    orderId: number,
+    quoteId: number,
+    signal?: AbortSignal,
+  ): Promise<ServiceQuote> {
+    return postServiceQuotePublish(orderId, quoteId, this.deps, signal);
+  }
+
+  async cancelQuote(
+    orderId: number,
+    quoteId: number,
+    signal?: AbortSignal,
+  ): Promise<ServiceQuote> {
+    return postServiceQuoteCancel(orderId, quoteId, this.deps, signal);
   }
 }

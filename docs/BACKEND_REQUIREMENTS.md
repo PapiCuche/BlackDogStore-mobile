@@ -485,8 +485,20 @@ está — que es más limpio que un flag.
 > construyó, y un estado sobre el que ningún código puede actuar es un estado
 > que miente.
 >
-> Sigue **PENDIENTE**: diagnóstico, cotización, aprobación del cliente,
-> ejecución, repuestos, control de calidad, garantía y evidencias.
+> **M9 cerró la segunda mitad** (`origin/master` `36b8a8c`): diagnóstico,
+> cotización versionada con líneas, publicación y la aprobación o rechazo del
+> cliente. `approved` y `rejected` son ahora estados reales, y
+> `waiting_approval` salió de `available_transitions` — publicar una cotización
+> es lo que mueve una orden ahí, y responderla lo que la mueve de ahí.
+>
+> El backend tampoco aceptó esta parte tal cual, y otra vez con razón:
+> `quoted_total` como campo de `RepairOrder` no sobrevivió. Una cotización tiene
+> revisiones, líneas, caducidad y una decisión con su fecha; aplanarla a un
+> decimal en la orden habría hecho imposible contar qué se ofreció antes.
+>
+> Sigue **PENDIENTE**: ejecución de la reparación, repuestos y consumo de stock,
+> control de calidad, entrega, garantía, pagos de servicio y evidencias
+> fotográficas.
 
 
 **Estado:** PROPUESTA · **Prioridad:** ALTA · **Bloquea:** reparaciones

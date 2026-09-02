@@ -1,9 +1,12 @@
 import {
   fetchCustomerRepair,
+  fetchCustomerRepairQuote,
   fetchCustomerRepairs,
+  postQuoteDecision,
   RepairNotAvailableError,
 } from '@/api/endpoints/customer-repairs-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
+import type { QuoteDecision, RepairQuote } from '@/domain/repairs/quote';
 import type { Repair } from '@/domain/repairs/types';
 import type { RepairRepository } from '@/repositories/types';
 
@@ -34,5 +37,26 @@ export class V1CustomerRepairRepository implements RepairRepository {
       if (error instanceof RepairNotAvailableError) return null;
       throw error;
     }
+  }
+
+  async getRepairQuote(
+    repairId: number,
+    signal?: AbortSignal,
+  ): Promise<RepairQuote | null> {
+    return fetchCustomerRepairQuote(repairId, this.deps, signal);
+  }
+
+  /**
+   * Answer the quote.
+   *
+   * Deliberately NOT called `approveQuote`. One method for both answers keeps
+   * the decision a single, symmetric act — and a name that mentioned only
+   * approval would invite a second, subtly different path for rejection.
+   */
+  async decideQuote(
+    input: { repairId: number; quoteId: number; decision: QuoteDecision; reason?: string },
+    signal?: AbortSignal,
+  ): Promise<RepairQuote> {
+    return postQuoteDecision(input, this.deps, signal);
   }
 }

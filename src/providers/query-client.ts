@@ -107,6 +107,12 @@ export const queryKeys = {
   // mean auditing every key already in flight.
   repairs: (scope: QueryScope) => [...customerPrefix(scope), 'repairs'] as const,
   repair: (scope: QueryScope, id: number) => [...customerPrefix(scope), 'repair', id] as const,
+  // BR-005B. NESTED under the repair's own key rather than a flat
+  // `'repair-quote'` segment, so invalidating the repair sweeps its quote too —
+  // answering a quote changes the repair's status, and the two must never be
+  // refetched half a step apart.
+  repairQuote: (scope: QueryScope, repairId: number) =>
+    [...customerPrefix(scope), 'repair', repairId, 'quote'] as const,
   orders: (scope: QueryScope) => [...customerPrefix(scope), 'orders'] as const,
   order: (scope: QueryScope, id: number) => [...customerPrefix(scope), 'order', id] as const,
 
@@ -166,6 +172,13 @@ export const queryKeys = {
     search: string,
   ) =>
     [...internalPrefix(scope), 'service', 'devices', customerId, search] as const,
+  // BR-005B. NESTED under the order they belong to, so invalidating an order
+  // sweeps its diagnosis and its quotes: publishing changes all three, and
+  // refetching one without the others shows a screen that disagrees with itself.
+  internalServiceDiagnostics: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'diagnostics'] as const,
+  internalServiceQuotes: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'quotes'] as const,
   /** The whole module, for invalidation after a write. */
   internalServiceRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'service'] as const,

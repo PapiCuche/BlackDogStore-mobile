@@ -21,6 +21,10 @@ export const repairStatusMeta: Record<RepairStatus, StatusMeta> = {
   received: { label: 'Recibido', tone: 'neutral' },
   diagnosing: { label: 'En diagnóstico', tone: 'info' },
   waiting_approval: { label: 'Esperando aprobación', tone: 'warning' },
+  // M9. The fallback labels match Django's own display strings, so a tenant
+  // that never renamed anything sees the same word from either side.
+  approved: { label: 'Aprobado', tone: 'success' },
+  rejected: { label: 'Rechazado', tone: 'danger' },
   cancelled: { label: 'Cancelado', tone: 'danger' },
 };
 

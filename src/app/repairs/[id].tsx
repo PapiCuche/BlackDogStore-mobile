@@ -15,7 +15,8 @@ import {
 } from '@/design-system';
 import { describeRepairStatus } from '@/domain/repairs/status';
 import { RepairTimeline } from '@/features/repairs/repair-timeline';
-import { useRepair } from '@/hooks/use-repairs';
+import { RepairQuoteCard } from '@/features/repairs/repair-quote-card';
+import { useDecideQuote, useRepair, useRepairQuote } from '@/hooks/use-repairs';
 import { useTheme } from '@/theme/theme-provider';
 import { formatDate, formatRelativeTime } from '@/utils/format';
 
@@ -33,9 +34,13 @@ export default function RepairDetailScreen() {
   // business knowing what a primary key looks like.
   const { id } = useLocalSearchParams<{ id: string }>();
   const repairId = Number(id);
-  const { data: repair, isPending, isError, error, refetch } = useRepair(
-    Number.isFinite(repairId) ? repairId : undefined,
-  );
+  const resolvedId = Number.isFinite(repairId) ? repairId : undefined;
+  const { data: repair, isPending, isError, error, refetch } = useRepair(resolvedId);
+  // SECONDARY on purpose: this query never gates the page. Most of a repair's
+  // life has no quote, and a screen that failed to load because an absent thing
+  // failed to load would be worse than the absence.
+  const quote = useRepairQuote(resolvedId);
+  const decide = useDecideQuote(resolvedId);
 
   if (isPending) {
     return (
@@ -111,6 +116,25 @@ export default function RepairDetailScreen() {
               ) : null}
             </View>
           </Card>
+
+          {/* The decision is the one thing here the customer can act on, so it
+              sits above the history and below the identity of the device. The
+              whole section disappears when the server answers `{quote: null}`. */}
+          {quote.data ? (
+            <View>
+              <SectionHeader title="Presupuesto" />
+              <Card>
+                <RepairQuoteCard
+                  quote={quote.data}
+                  isDeciding={decide.isPending}
+                  error={decide.error}
+                  onDecide={(input) =>
+                    decide.mutate({ quoteId: quote.data!.id, ...input })
+                  }
+                />
+              </Card>
+            </View>
+          ) : null}
 
           <View>
             <SectionHeader title="Seguimiento" />

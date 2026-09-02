@@ -13,11 +13,12 @@
  * amended it, and the shape here now follows what shipped rather than what was
  * proposed:
  *
- *   · SEVEN stages became FOUR codes. `in_repair`, `quality_check`,
- *     `ready_for_pickup` and `delivered` are real states of a real workshop and
- *     none of them exists yet: each needs a module — parts, a checklist, a
- *     pickup flow — that M8 did not build. A state no server code can act on is
- *     a state that lies.
+ *   · SEVEN stages became FOUR codes, and M9 made them six by building the
+ *     quote and the decision that give `approved` and `rejected` meaning.
+ *     `in_repair`, `quality_check`, `ready_for_pickup` and `delivered` are real
+ *     states of a real workshop and none of them exists yet: each needs a
+ *     module — parts, a checklist, a pickup flow — that nobody has built. A
+ *     state no server code can act on is a state that lies.
  *   · `id` became a NUMBER. Django hands out integer primary keys.
  *   · `code` became `number`, which is what the shop prints on the ticket.
  *   · The LABEL comes from the server, per tenant. A company that renamed
@@ -30,16 +31,22 @@
 /**
  * The lifecycle codes the platform defines, in order.
  *
- * STABLE STRINGS, mirrored from Django's `RepairStatusCode`. `cancelled` sits
- * outside the sequence because it can happen from anywhere and is not a step a
- * device passes through.
+ * STABLE STRINGS, mirrored from Django's `RepairStatusCode`. M9 added
+ * `approved`: the customer said go ahead, which is a step the device passes
+ * through on its way to being worked on.
+ *
+ * `cancelled` and `rejected` sit OUTSIDE the sequence. Both can end a repair
+ * from more than one place, and neither is a stage the device advances into —
+ * a rejected quote means the shop stops, not that the repair progressed.
  */
-export const REPAIR_STAGES = ['received', 'diagnosing', 'waiting_approval'] as const;
+export const REPAIR_STAGES = [
+  'received', 'diagnosing', 'waiting_approval', 'approved',
+] as const;
 
 export type RepairStage = (typeof REPAIR_STAGES)[number];
-export type RepairStatus = RepairStage | 'cancelled';
+export type RepairStatus = RepairStage | 'rejected' | 'cancelled';
 
-const KNOWN_STATUSES: readonly string[] = [...REPAIR_STAGES, 'cancelled'];
+const KNOWN_STATUSES: readonly string[] = [...REPAIR_STAGES, 'rejected', 'cancelled'];
 
 /**
  * Narrow a wire value, or fall back to where every repair starts.
@@ -94,9 +101,14 @@ export type Repair = {
   timeline: readonly RepairTimelineEntry[];
 };
 
-/** Index in the linear sequence; -1 for `cancelled`. */
+/**
+ * Index in the linear sequence; -1 for anything outside it.
+ *
+ * `cancelled` and `rejected` both end a repair without advancing it, so neither
+ * may compare as "further along" than a stage the device really passed.
+ */
 export function repairStageIndex(status: RepairStatus): number {
-  if (status === 'cancelled') return -1;
+  if (status === 'cancelled' || status === 'rejected') return -1;
   return REPAIR_STAGES.indexOf(status);
 }
 
@@ -111,13 +123,18 @@ export function isStageCurrent(stage: RepairStage, status: RepairStatus): boolea
 }
 
 /**
- * Whether the shop still has the device.
+ * Whether the repair is still going somewhere.
  *
- * `cancelled` is the only finished state M8 can reach. When delivery exists,
- * this is the function that learns about it — one place, not every screen.
+ * `rejected` joined `cancelled` in M9: the customer declined the work, the shop
+ * stops, and a declined repair must not sit on the Home screen as the active
+ * one. `approved` is deliberately NOT here — approval authorises work rather
+ * than finishing it, and the backend stamps no completion of any kind.
+ *
+ * When delivery exists, this is the function that learns about it — one place,
+ * not every screen.
  */
 export function isRepairOpen(repair: Repair): boolean {
-  return repair.status !== 'cancelled';
+  return repair.status !== 'cancelled' && repair.status !== 'rejected';
 }
 
 /**

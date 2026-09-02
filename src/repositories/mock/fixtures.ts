@@ -1,5 +1,6 @@
 import type { Order } from '@/domain/orders/types';
 import type { Category, Product } from '@/domain/products/types';
+import type { RepairQuote } from '@/domain/repairs/quote';
 import type { Repair } from '@/domain/repairs/types';
 
 /**
@@ -249,4 +250,55 @@ export const mockOrders: readonly Order[] = [
       },
     ],
   },
+];
+
+/**
+ * Quotes, keyed by the repair they belong to.
+ *
+ * A MAP RATHER THAN A FIELD, mirroring the real contract: the server sends a
+ * quote from its own endpoint and never as part of the repair. Only SRV-001039
+ * has one, because it is the fixture sitting in `waiting_approval` — the state
+ * that exists precisely because a quote is waiting.
+ */
+export const mockRepairQuotes: readonly [number, RepairQuote][] = [
+  [
+    1039,
+    {
+      id: 5001,
+      revision: 1,
+      status: 'sent',
+      statusLabel: 'Enviada',
+      currency: 'PEN',
+      subtotal: '245.00',
+      discountAmount: '20.00',
+      taxAmount: '0.00',
+      total: '225.00',
+      validUntil: days(-7),
+      isExpired: false,
+      canBeDecided: true,
+      customerNotes: 'Incluye 3 meses de garantía sobre el repuesto.',
+      items: [
+        {
+          id: 1,
+          itemType: 'part',
+          itemTypeLabel: 'Repuesto',
+          description: 'Batería original',
+          quantity: '1.00',
+          unitPrice: '185.00',
+          lineTotal: '185.00',
+        },
+        {
+          id: 2,
+          itemType: 'labor',
+          itemTypeLabel: 'Mano de obra',
+          description: 'Reemplazo y calibración',
+          quantity: '1.00',
+          unitPrice: '60.00',
+          lineTotal: '60.00',
+        },
+      ],
+      decision: null,
+      sentAt: days(1),
+    },
+  ],
 ];

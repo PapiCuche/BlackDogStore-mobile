@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '@/providers/query-client';
 import { useQueryScope } from '@/providers/use-query-scope';
+import type { QuoteDecision } from '@/domain/repairs/quote';
 import { repositories } from '@/repositories';
 import { featureUnavailable } from '@/repositories/errors';
 
@@ -39,6 +40,64 @@ export function useRepair(id: number | undefined) {
     queryFn: ({ signal }) =>
       repository ? repository.getRepairById(id!, signal) : featureUnavailable('repairs', UNAVAILABLE),
     enabled: id !== undefined && Number.isFinite(id),
+    retry: false,
+  });
+}
+
+/**
+ * The quote on one of my repairs, or null.
+ *
+ * SECONDARY to the repair itself: the detail screen renders its own inline
+ * pending and error states for this and never gates the whole page on it. Most
+ * of a repair's life has no quote, and a screen that failed to load because an
+ * absent thing failed to load would be worse than the absence.
+ */
+export function useRepairQuote(id: number | undefined, options: { enabled?: boolean } = {}) {
+  const repository = repositories.repairs;
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.repairQuote(scope, id ?? -1),
+    queryFn: ({ signal }) =>
+      repository
+        ? repository.getRepairQuote(id!, signal)
+        : featureUnavailable('repairs', UNAVAILABLE),
+    enabled: (options.enabled ?? true) && id !== undefined && Number.isFinite(id),
+    retry: false,
+  });
+}
+
+/**
+ * Answer the quote.
+ *
+ * NO RETRY AND NO OFFLINE QUEUE. The server is idempotent for a repeat of the
+ * same answer, but that is a safety net rather than a licence: a decision is
+ * the customer authorising work, and a client that resent one on its own would
+ * be deciding on their behalf when the network hiccuped.
+ *
+ * On success the whole repair key is invalidated — the quote AND the repair's
+ * status and timeline all moved, and refetching one without the others would
+ * show a screen that disagrees with itself.
+ */
+export function useDecideQuote(repairId: number | undefined) {
+  const client = useQueryClient();
+  const scope = useQueryScope();
+
+  return useMutation({
+    mutationFn: (input: { quoteId: number; decision: QuoteDecision; reason?: string }) => {
+      const repository = repositories.repairs;
+      if (!repository || repairId === undefined) {
+        return featureUnavailable('repairs', UNAVAILABLE);
+      }
+      return repository.decideQuote({ repairId, ...input });
+    },
+    onSettled: () => {
+      // On SETTLED, not on success: a 409 means somebody already answered, and
+      // the screen has to show what the quote really says rather than the state
+      // it was drawn from.
+      if (repairId === undefined) return;
+      void client.invalidateQueries({ queryKey: queryKeys.repair(scope, repairId) });
+      void client.invalidateQueries({ queryKey: queryKeys.repairs(scope) });
+    },
     retry: false,
   });
 }

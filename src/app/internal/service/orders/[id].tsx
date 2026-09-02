@@ -18,15 +18,27 @@ import {
   Text,
 } from '@/design-system';
 import {
+  CAP_SERVICE_DIAGNOSTIC_MANAGE,
   CAP_SERVICE_ORDERS_MANAGE,
   CAP_SERVICE_ORDERS_VIEW,
 } from '@/domain/internal/service-types';
 import { hasUxCapability } from '@/domain/internal/types';
+import { ServiceDiagnosticSection } from '@/features/internal/service-diagnostic-section';
+import { ServiceQuoteSection } from '@/features/internal/service-quote-section';
 import {
+  useAddQuoteItem,
   useAssignTechnician,
+  useCancelQuote,
+  useCreateDiagnostic,
+  useCreateQuote,
+  usePublishQuote,
+  useRemoveQuoteItem,
   useServiceAssignmentOptions,
+  useServiceDiagnostics,
   useServiceOrder,
+  useServiceQuotes,
   useServiceTransition,
+  useUpdateDiagnostic,
 } from '@/hooks/use-internal-service';
 import { useInternalContext } from '@/hooks/use-internal-sales';
 import { useTheme } from '@/theme/theme-provider';
@@ -65,6 +77,23 @@ export default function ServiceOrderDetailScreen() {
   );
   const transition = useServiceTransition();
   const assign = useAssignTechnician();
+
+  // BR-005B. Reading uses `service.orders.view` — the same capability that
+  // opened this order — so these two load alongside it. Composing is gated on
+  // `service.diagnostic.manage`, and that gate lives on the buttons inside the
+  // sections rather than on the queries.
+  const mayQuote = hasUxCapability(context ?? null, CAP_SERVICE_DIAGNOSTIC_MANAGE);
+  const safeId = Number.isFinite(orderId) ? orderId : undefined;
+  const diagnostics = useServiceDiagnostics(safeId, { enabled: mayView });
+  const quotes = useServiceQuotes(safeId, { enabled: mayView });
+
+  const createDiagnostic = useCreateDiagnostic(orderId);
+  const updateDiagnostic = useUpdateDiagnostic(orderId);
+  const createQuote = useCreateQuote(orderId);
+  const addItem = useAddQuoteItem(orderId);
+  const removeItem = useRemoveQuoteItem(orderId);
+  const publishQuote = usePublishQuote(orderId);
+  const cancelQuote = useCancelQuote(orderId);
 
   const { data: order, isPending, isError, error } = query;
   const title = order?.number ?? 'Orden de servicio';
@@ -193,6 +222,44 @@ export default function ServiceOrderDetailScreen() {
               </View>
             </Card>
           </View>
+
+          {/* BR-005B. These two sections are not an addition to this screen —
+              they are the FORWARD PATH. M9 removed `waiting_approval` from the
+              server's `availableTransitions`, so the status buttons below can
+              no longer move an order onward; publishing a quote is what does
+              that now, and a customer answering it is what moves it again. */}
+          <ServiceDiagnosticSection
+            diagnostics={diagnostics.data?.results ?? []}
+            canManage={mayQuote}
+            isSaving={createDiagnostic.isPending || updateDiagnostic.isPending}
+            error={createDiagnostic.error ?? updateDiagnostic.error}
+            onCreate={(input) => createDiagnostic.mutate(input)}
+            onUpdate={(diagnosticId, input) =>
+              updateDiagnostic.mutate({ diagnosticId, input })
+            }
+          />
+
+          <ServiceQuoteSection
+            quotes={quotes.data?.results ?? []}
+            canManage={mayQuote}
+            isBusy={
+              createQuote.isPending || addItem.isPending || removeItem.isPending
+              || publishQuote.isPending || cancelQuote.isPending
+            }
+            error={
+              createQuote.error ?? addItem.error ?? removeItem.error
+              ?? publishQuote.error ?? cancelQuote.error
+            }
+            onCreate={() =>
+              createQuote.mutate({
+                diagnosticId: diagnostics.data?.results[0]?.id ?? null,
+              })
+            }
+            onAddItem={(quoteId, input) => addItem.mutate({ quoteId, input })}
+            onRemoveItem={(quoteId, itemId) => removeItem.mutate({ quoteId, itemId })}
+            onPublish={(quoteId) => publishQuote.mutate({ quoteId })}
+            onCancel={(quoteId) => cancelQuote.mutate({ quoteId })}
+          />
 
           {/* Only with `service.orders.manage`. The server re-checks anyway, so
               a 403 here is a normal outcome — the permission may have been
