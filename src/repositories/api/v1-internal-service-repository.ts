@@ -1,4 +1,10 @@
 import {
+  fetchServiceQualityCheck,
+  fetchServiceQualityHistory,
+  patchServiceQualityItem,
+  postServiceQualityFail,
+  postServiceQualityPass,
+  postServiceQualityStart,
   fetchServiceExecution,
   fetchServicePartCandidates,
   fetchServicePartUsages,
@@ -33,6 +39,7 @@ import {
 } from '@/api/endpoints/internal-service-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type {
+  ServiceQualityResultInput,
   ServiceCompleteInput,
   ServiceExecutionInput,
   ServicePartUsageInput,
@@ -304,5 +311,46 @@ export class V1InternalServiceRepository {
     signal?: AbortSignal,
   ) {
     return postServicePartUsageReverse(orderId, usageId, reason, this.deps, signal);
+  }
+
+  // ---------------------------------------------------------------------
+  // M11 / BR-005D — quality control
+  // ---------------------------------------------------------------------
+
+  async getQualityCheck(orderId: number, signal?: AbortSignal) {
+    return fetchServiceQualityCheck(orderId, this.deps, signal);
+  }
+
+  async listQualityChecks(orderId: number, signal?: AbortSignal) {
+    return fetchServiceQualityHistory(orderId, this.deps, signal);
+  }
+
+  /**
+   * Open an inspection.
+   *
+   * Deliberately NOT called `setQualityControl`. The order moving is a
+   * CONSEQUENCE of a checklist being opened against a finished repair, not the
+   * thing being asked for — the same naming rule `publishQuote` and
+   * `startRepair` follow.
+   */
+  async startQualityCheck(orderId: number, signal?: AbortSignal) {
+    return postServiceQualityStart(orderId, this.deps, signal);
+  }
+
+  async recordQualityResult(
+    orderId: number,
+    itemId: number,
+    input: ServiceQualityResultInput,
+    signal?: AbortSignal,
+  ) {
+    return patchServiceQualityItem(orderId, itemId, input, this.deps, signal);
+  }
+
+  async passQualityCheck(orderId: number, notes: string, signal?: AbortSignal) {
+    return postServiceQualityPass(orderId, notes, this.deps, signal);
+  }
+
+  async failQualityCheck(orderId: number, notes: string, signal?: AbortSignal) {
+    return postServiceQualityFail(orderId, notes, this.deps, signal);
   }
 }

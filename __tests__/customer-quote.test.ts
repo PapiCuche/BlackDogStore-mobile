@@ -107,8 +107,10 @@ describe('the lifecycle learned the two states M9 added', () => {
     // into one — which is what made M9's "safe" fallback show "Recibido" over
     // an approved repair.
     expect(toRepairStatus('in_repair')).toBe('in_repair');
-    expect(toRepairStatus('quality_control')).toBe('quality_control');
-    expect(repairStageIndex('quality_control')).toBe(-1);
+    // M11 built `quality_control`, so the example moves to one that still has
+    // no module. The guarantee has not moved at all.
+    expect(toRepairStatus('delivered')).toBe('delivered');
+    expect(repairStageIndex('delivered')).toBe(-1);
     // Only an absent status falls back.
     expect(toRepairStatus(undefined)).toBe('received');
   });

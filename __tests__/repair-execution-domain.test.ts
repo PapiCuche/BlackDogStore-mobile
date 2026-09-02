@@ -86,27 +86,30 @@ describe('an UNKNOWN code — the M9 bug, fixed', () => {
     // M9 shipped `approved` before this app knew it, and `toRepairStatus`
     // turned it into `received`: a repair the customer had just approved
     // rendered as "Recibido". There is no safe guess, so there is no guess.
-    for (const future of ['quality_control', 'ready_for_pickup', 'delivered', 'warranty']) {
+    // M11 built `quality_control` and `ready_for_pickup`, so the examples move
+    // again — which is exactly what this test is FOR. Two codes still have no
+    // module, and the guarantee is about them and about whatever comes next.
+    for (const future of ['delivered', 'warranty']) {
       expect(toRepairStatus(future)).toBe(future);
       expect(isKnownRepairStatus(future)).toBe(false);
     }
   });
 
   it('gets NO position on the ladder', () => {
-    expect(repairStageIndex('quality_control')).toBe(-1);
-    expect(isStageComplete('received', 'quality_control')).toBe(false);
+    expect(repairStageIndex('delivered')).toBe(-1);
+    expect(isStageComplete('received', 'delivered')).toBe(false);
   });
 
   it('renders with the SERVER label and a neutral tone', () => {
-    const meta = describeRepairStatus('quality_control', 'En control de calidad');
-    expect(meta.label).toBe('En control de calidad');
+    const meta = describeRepairStatus('delivered', 'Entregado al cliente');
+    expect(meta.label).toBe('Entregado al cliente');
     expect(meta.tone).toBe('neutral');
   });
 
   it('falls back to the raw code when the server sent no label', () => {
     // Ugly on purpose. An unlabelled unknown state is a contract gap somebody
     // should see, not something to paper over with an invented word.
-    expect(describeRepairStatus('quality_control').label).toBe('quality_control');
+    expect(describeRepairStatus('delivered').label).toBe('delivered');
   });
 
   it('counts as OPEN, because nothing says it finished', () => {

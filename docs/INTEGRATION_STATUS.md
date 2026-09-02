@@ -570,7 +570,7 @@ Reverso compensatorio          INTEGRADO / TESTED
 Idempotencia de consumo        INTEGRADO / TESTED
 Estados nuevos en cliente      INTEGRADO / TESTED
 Reserva de stock               NO PLANIFICADO (deliberado)
-Control de calidad             PENDIENTE (M11)
+Control de calidad             INTEGRADO / TESTED (M11)
 Listo para recoger · entrega   PENDIENTE
 Pago del servicio · garantía   PENDIENTE
 Devolución tras finalizar      PENDIENTE (necesita inspección física)
@@ -607,3 +607,44 @@ caché de Inventario del mismo tenant sin que Servicio lea un solo tipo suyo.
 
 **`repaired` no es «listo para recoger».** El técnico terminó. La reparación
 sigue ABIERTA en la Home del cliente porque el equipo sigue en el taller.
+
+## Control de calidad (M11 / BR-005D)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master e26e77d)
+Apertura del control           INTEGRADO / TESTED
+Lista como snapshot            INTEGRADO / TESTED
+Registro de puntos             INTEGRADO / TESTED
+Aprobar (PASS)                 INTEGRADO / TESTED
+Devolver a reparación (FAIL)   INTEGRADO / TESTED
+Historial de controles         INTEGRADO / TESTED
+Estados nuevos en cliente      INTEGRADO / TESTED
+Paridad de permisos Web/Mobile MISMA FUENTE (backend)
+UI de servicio en Web          PENDIENTE — no existe ninguna pantalla
+Editor de roles en Web         PENDIENTE — API lista, pantalla no
+Entrega · pago · garantía      PENDIENTE
+Evidencias fotográficas        API_PENDING (DEC-016, sin proveedor)
+Seguimiento público (BR-008)   API_PENDING
+```
+
+**La lista no está en esta app.** Llega como snapshot del servidor y se dibuja
+tal cual. Un test estructural falla si alguien escribe una.
+
+**El veredicto tampoco.** `pass/` y `fail/` mandan una nota interna opcional y
+nada más. El resumen que ve el técnico es una vista previa; el servidor lee las
+respuestas y devuelve 400 si falta un obligatorio o si algo falló.
+
+**Un fallo abre el retrabajo en el mismo acto**, con la ejecución anterior
+finalizada, sus repuestos intactos y **sin mover stock**.
+
+**Inspeccionar es capability aparte de reparar.** Mismo catálogo que Web: no
+existe RBAC propio de Mobile, y un test estructural falla si aparece `role ===`,
+`isAdmin` o `isTechnician` en el módulo de servicio.
+
+**`ready_for_pickup` no dice que se avisó a nadie.** No hay canal de
+notificaciones en esta plataforma.
+
+**Paridad, con honestidad:** misma capability, mismo endpoint, mismas reglas de
+tenant y sucursal, mismas transiciones. Lo que **no** existe es la interfaz Web
+de servicio técnico — el frontend Next no tiene una sola pantalla de órdenes de
+reparación — y eso se declara PENDIENTE, no se disimula.

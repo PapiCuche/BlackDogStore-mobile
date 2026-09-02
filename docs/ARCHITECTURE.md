@@ -1113,6 +1113,58 @@ pida es la app actuando en nombre de alguien.
 - Consumir invalida el caché de **Inventario** además del de Servicio. La
   invalidación cruza el módulo; los datos no.
 
+### DEC-MOBILE-025 — La lista de control la dibuja el servidor, no esta app
+
+**Fecha:** 2026-09-02 (M11) · **Estado:** ACEPTADA
+
+**Decisión.** Mobile no tiene ninguna lista de control escrita. El servidor
+manda un snapshot cuando se abre la inspección y la app dibuja lo que llegó.
+Tampoco calcula el veredicto: el resumen que muestra es una vista previa y los
+botones que habilita son una sugerencia.
+
+**Motivo.** Cada taller prueba cosas distintas, y una lista escrita aquí
+ignoraría lo que cada empresa configuró. Peor: el control de ayer se dibujaría
+con la lista de hoy, que es exactamente lo que el snapshot del backend existe
+para impedir.
+
+Y el veredicto es la misma regla que M9 aplicó al dinero y M10 al stock. Una
+lista cuyo resultado pudiera enviarlo quien la rellenó es una lista que no
+prueba nada.
+
+**Consecuencias.**
+- El payload trae `template_name` pero no el id de la plantilla. Un cliente con
+  ese id está a un refactor de reconstruir el pasado mal.
+- `pass/` y `fail/` mandan una nota interna opcional y nada más.
+- Un test estructural falla si aparece una lista o un `items.every(...)`
+  alimentando una petición.
+
+### DEC-MOBILE-026 — Un botón se oculta por capability, jamás por nombre de rol
+
+**Fecha:** 2026-09-02 (M11) · **Estado:** ACEPTADA
+
+**Decisión.** Web y Mobile usan **el mismo catálogo de capacidades** del
+backend. No existe RBAC propio de Mobile, no se inventan nombres de permiso, y
+ninguna decisión de interfaz mira `role === 'technician'` ni equivalentes.
+Inspeccionar es `service.quality.manage`, separada de `service.repair.manage`.
+
+**Motivo.** Es la regla que fijó el owner y coincide con lo que la plataforma ya
+hacía: el rol es un preset y una etiqueta, la capability es la autoridad. Dos
+sistemas de permisos —uno por cliente— es la forma más rápida de que Web y
+Mobile discrepen sobre quién puede hacer qué, y el que discrepa a favor gana.
+
+La separación entre reparar e inspeccionar no la exige la plataforma: un taller
+de una persona quedaría fuera. Pero un taller que quiere un segundo par de ojos
+tiene que poder expresarlo, y plegar las dos capacidades en una lo haría
+imposible.
+
+**Consecuencias.**
+- La misma pantalla la ven administrador, master y técnico si tienen la
+  capability. No hay tres pantallas por rol.
+- Ocultar un botón es cortesía; el servidor vuelve a decidir en cada petición, y
+  un 403 tras revocar es un resultado normal.
+- Un test estructural falla si aparece `role ===`, `isAdmin`, `isTechnician` o
+  `isMaster` en cualquier archivo de servicio interno.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -1225,4 +1277,10 @@ un error 500.
 | 409 se distingue por `code`, no por el mensaje | Existen tres plantillas del mismo error de stock y ninguna es contrato. |
 | Un consumo fallido no mueve el ciclo de vida | Un taller no debe descubrir su propio estado leyendo logs de error. |
 | Invalidar cruza el módulo; los datos no | Servicio marca sucio el caché de Inventario y no lee ni un tipo suyo. |
+| La lista de control la manda el servidor | DEC-MOBILE-025: una lista escrita en la app ignora lo que cada taller configuró. |
+| El veredicto no se calcula en el cliente | Una lista cuyo resultado lo envía quien la rellenó no prueba nada. |
+| Nunca se recibe el id de la plantilla | Con él, el control de ayer se redibuja con la lista de hoy. |
+| Un botón se oculta por capability | DEC-MOBILE-026: el rol es preset y etiqueta; la capability es la autoridad. |
+| Inspeccionar es capability aparte de reparar | Un taller que quiere un segundo par de ojos debe poder expresarlo. |
+| `ready_for_pickup` no dice «avisado» | No hay canal de notificaciones; lo contrario haría venir a gente para nada. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |
