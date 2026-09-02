@@ -571,7 +571,7 @@ Idempotencia de consumo        INTEGRADO / TESTED
 Estados nuevos en cliente      INTEGRADO / TESTED
 Reserva de stock               NO PLANIFICADO (deliberado)
 Control de calidad             INTEGRADO / TESTED (M11)
-Listo para recoger · entrega   PENDIENTE
+Entrega del equipo             INTEGRADO / TESTED (M12)
 Pago del servicio · garantía   PENDIENTE
 Devolución tras finalizar      PENDIENTE (necesita inspección física)
 Evidencias fotográficas        API_PENDING (DEC-016, sin proveedor)
@@ -648,3 +648,55 @@ notificaciones en esta plataforma.
 tenant y sucursal, mismas transiciones. Lo que **no** existe es la interfaz Web
 de servicio técnico — el frontend Next no tiene una sola pantalla de órdenes de
 reparación — y eso se declara PENDIENTE, no se disimula.
+
+## Entrega (M12 / BR-005E)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master 3095167)
+Lectura de la entrega          INTEGRADO / TESTED
+Registro de la entrega         INTEGRADO / TESTED
+Idempotencia (misma clave)     INTEGRADO / TESTED
+Conflicto 409 diferenciado     INTEGRADO / TESTED
+`delivered` como estado conocido  INTEGRADO / TESTED
+Cierre de la reparación        INTEGRADO / TESTED
+Capability propia de entrega   INTEGRADO / TESTED
+UI de servicio en Web          INTEGRADO (H2 + M12)
+COBRO DEL SERVICIO             **PENDIENTE — no existe en el backend**
+Garantía / reingreso           PENDIENTE
+Evidencias (firma / foto)      API_PENDING (DEC-016, sin proveedor)
+Editor de roles en Web         PENDIENTE — API lista, pantalla no
+Seguimiento público (BR-008)   API_PENDING
+Portal Web de cliente          PENDIENTE
+```
+
+**El cobro NO existe, y es un hallazgo verificado leyendo el modelo.**
+`PaymentTransaction.order` es una FK **no nula** a la `Order` de e-commerce, sin
+columna de empresa y sin relación genérica: una `RepairOrder` no puede pagarse
+por ahí. Por eso `delivered` significa que el equipo salió con alguien y nada
+más. No se escribió ningún booleano de pago ni aquí ni en el servidor, la
+pantalla dice en voz alta que no registra cobro, y dos guards estructurales lo
+vigilan: uno prohíbe campos e identificadores de pago en los archivos de M12
+—con las cadenas eliminadas antes de mirar, para no leer el descargo como la
+infracción— y otro comprueba que el texto visible nunca afirme un pago.
+
+**`delivered` es event-only.** El endpoint genérico lo rechaza; registrar la
+entrega es el único camino, y registra a quién se le dio el equipo.
+
+**Entregar es capability propia**, no un añadido de `service.orders.manage`.
+Mismo catálogo que Web. Un mostrador puede liberar equipos sin poder cancelar
+una orden, y un técnico puede reparar e inspeccionar sin poder entregar.
+
+**No hay editar ni borrar**, porque el servidor no los tiene: la fila rechaza
+ambas en su propio `save`. La app no exporta `patch`/`delete` para esta ruta y
+un test lo comprueba.
+
+**Un doble toque no entrega dos veces.** Clave acuñada una vez por intención,
+guardada en un `ref`, reenviada idéntica. Nada reintenta solo.
+
+**`isRepairOpen` fue el único sitio que aprendió del final** — la promesa que M9
+dejó escrita y que M12 paga. `ready_for_pickup` sigue abierta a propósito: el
+equipo está listo y sigue en el taller.
+
+**Un código desconocido sigue contando como ABIERTO.** Nunca haber oído hablar
+de un estado no es prueba de que algo terminó, y adivinar «cerrado» escondería
+una reparación viva.

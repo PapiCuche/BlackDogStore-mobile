@@ -73,9 +73,9 @@ describe('MockRepairRepository', () => {
 
 describe('the lifecycle is the one the server actually has', () => {
   it('carries only the states M8 can support', () => {
-    // Was seven stages, as a proposal. `in_repair`, `quality_check`,
-    // `ready_for_pickup` and `delivered` each need a module the backend did not
-    // build, and a state no server code can act on is a state that lies.
+    // Was seven stages, as a proposal. Every one of them now exists BECAUSE a
+    // phase built the module that gives it meaning — M12 was the last, and
+    // `delivered` is the end of the ladder. `warranty` still is not here.
     expect(repairStageIndex('received')).toBe(0);
     expect(repairStageIndex('waiting_approval')).toBeGreaterThan(
       repairStageIndex('diagnosing'),
@@ -105,8 +105,8 @@ describe('the lifecycle is the one the server actually has', () => {
     // other direction. M10 keeps the code and denies it a position instead.
     expect(toRepairStatus('teletransportado')).toBe('teletransportado');
     expect(repairStageIndex('teletransportado')).toBe(-1);
-    expect(toRepairStatus('delivered')).toBe('delivered');
-    expect(repairStageIndex('delivered')).toBe(-1);
+    expect(toRepairStatus('warranty')).toBe('warranty');
+    expect(repairStageIndex('warranty')).toBe(-1);
     expect(toRepairStatus('waiting_approval')).toBe('waiting_approval');
     // Only an ABSENT status falls back: nothing arrived, and a repair starts
     // somewhere.
@@ -140,12 +140,20 @@ describe('findActiveRepair', () => {
     expect(findActiveRepair([])).toBeNull();
   });
 
-  it('treats every state M8 can reach except cancelled as open', () => {
-    // Delivery does not exist yet. When it does, `isRepairOpen` is the one
-    // place that learns about it — not every screen.
-    for (const status of ['received', 'diagnosing', 'waiting_approval'] as const) {
+  it('treats every state before the handover as open', () => {
+    // M12 SPENT THE PROMISE THIS TEST MADE. `isRepairOpen` is the one place
+    // that learned about delivery — not every screen — and `ready_for_pickup`
+    // is deliberately still open: the device is ready and still in the shop.
+    for (const status of [
+      'received', 'diagnosing', 'waiting_approval', 'ready_for_pickup',
+    ] as const) {
       expect(isRepairOpen(makeRepair({ id: 1, status }))).toBe(true);
     }
-    expect(isRepairOpen(makeRepair({ id: 1, status: 'cancelled' }))).toBe(false);
+    for (const status of ['cancelled', 'delivered'] as const) {
+      expect(isRepairOpen(makeRepair({ id: 1, status }))).toBe(false);
+    }
+    // And an UNKNOWN code stays open: never heard of is not evidence of
+    // finished, and guessing "closed" would hide a live repair.
+    expect(isRepairOpen(makeRepair({ id: 1, status: 'warranty' }))).toBe(true);
   });
 });

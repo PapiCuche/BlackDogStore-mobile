@@ -562,3 +562,50 @@ export type ServiceQualityResultInput = {
 };
 
 export const CAP_SERVICE_QUALITY_MANAGE = 'service.quality.manage';
+
+// ---------------------------------------------------------------------------
+// M12 / BR-005E — the handover. INTERNAL ONLY.
+// ---------------------------------------------------------------------------
+//
+// A customer sees the STAGE — "entregado" — through the ordinary status and
+// their tenant's own label. They do not see who collected the device, what the
+// counter wrote about it, or who handed it over. There is no customer route for
+// any of that, and this app asks for none.
+//
+// THIS RECORDS NO PAYMENT. The platform cannot charge for a repair:
+// `PaymentTransaction` is bound to an e-commerce `Order` by a non-null FK, so
+// there is nothing to pay through. A field here implying otherwise would be a
+// lie the shop believes. Service payment is its own phase.
+
+/**
+ * A handover, as the internal surface reads it.
+ *
+ * APPEND-ONLY ON THE SERVER: the row refuses updates and deletes in its own
+ * `save`, so this app offers no way to edit one. `idempotencyKey` is absent
+ * because the server never echoes it — it is the caller's own bookkeeping.
+ */
+export type ServiceDelivery = {
+  id: number;
+  /** Free text. Whoever collected it — often a relative, often a courier. */
+  recipientName: string;
+  notes: string;
+  deliveredByName: string;
+  deliveredAt: string;
+  createdAt: string;
+};
+
+/**
+ * Handing the device over: WHO TOOK IT, and optionally what the counter noted.
+ *
+ * No clock and no deliverer — both are the server's, and sending them changes
+ * nothing. `idempotencyKey` is here for the same reason it is on a part usage:
+ * only the client can mint one that survives the client's own double-tap, and a
+ * device handed over twice is a record saying two different people took it.
+ */
+export type ServiceDeliveryInput = {
+  recipientName: string;
+  notes?: string;
+  idempotencyKey: string;
+};
+
+export const CAP_SERVICE_DELIVERY_MANAGE = 'service.delivery.manage';

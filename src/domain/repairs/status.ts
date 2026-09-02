@@ -36,6 +36,11 @@ export const repairStatusMeta: Record<KnownRepairStatus, StatusMeta> = {
   // label says what it means and nothing more.
   quality_control: { label: 'En control de calidad', tone: 'info' },
   ready_for_pickup: { label: 'Listo para recoger', tone: 'success' },
+  // M12. 'success' because the device came back working and went home. The
+  // label says it was handed over and NOTHING about money — this platform
+  // cannot charge for a repair, and "Entregado y pagado" would be the one word
+  // that starts an argument at the counter.
+  delivered: { label: 'Entregado', tone: 'success' },
   rejected: { label: 'Rechazado', tone: 'danger' },
   cancelled: { label: 'Cancelado', tone: 'danger' },
 };

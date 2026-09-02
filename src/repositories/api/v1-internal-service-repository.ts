@@ -1,4 +1,6 @@
 import {
+  fetchServiceDelivery,
+  postServiceDelivery,
   fetchServiceQualityCheck,
   fetchServiceQualityHistory,
   patchServiceQualityItem,
@@ -39,6 +41,7 @@ import {
 } from '@/api/endpoints/internal-service-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type {
+  ServiceDeliveryInput,
   ServiceQualityResultInput,
   ServiceCompleteInput,
   ServiceExecutionInput,
@@ -352,5 +355,29 @@ export class V1InternalServiceRepository {
 
   async failQualityCheck(orderId: number, notes: string, signal?: AbortSignal) {
     return postServiceQualityFail(orderId, notes, this.deps, signal);
+  }
+
+  // ---------------------------------------------------------------------
+  // M12 / BR-005E — the handover
+  // ---------------------------------------------------------------------
+
+  async getDelivery(orderId: number, signal?: AbortSignal) {
+    return fetchServiceDelivery(orderId, this.deps, signal);
+  }
+
+  /**
+   * Deliberately NOT called `setDelivered`. The order closing is a CONSEQUENCE
+   * of somebody collecting the device, not the thing being asked for — the same
+   * naming rule `publishQuote`, `startRepair` and `startQualityCheck` follow.
+   *
+   * And there is no `updateDelivery` or `deleteDelivery`, because the server has
+   * neither: the row refuses both in its own `save`.
+   */
+  async recordDelivery(
+    orderId: number,
+    input: ServiceDeliveryInput,
+    signal?: AbortSignal,
+  ) {
+    return postServiceDelivery(orderId, input, this.deps, signal);
   }
 }

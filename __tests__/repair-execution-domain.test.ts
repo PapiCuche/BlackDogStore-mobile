@@ -86,30 +86,33 @@ describe('an UNKNOWN code — the M9 bug, fixed', () => {
     // M9 shipped `approved` before this app knew it, and `toRepairStatus`
     // turned it into `received`: a repair the customer had just approved
     // rendered as "Recibido". There is no safe guess, so there is no guess.
-    // M11 built `quality_control` and `ready_for_pickup`, so the examples move
-    // again — which is exactly what this test is FOR. Two codes still have no
-    // module, and the guarantee is about them and about whatever comes next.
-    for (const future of ['delivered', 'warranty']) {
+    // M11 built `quality_control` and `ready_for_pickup`, then M12 built the
+    // handover and earned `delivered`, so the examples move AGAIN — which is
+    // exactly what this test is for. The guarantee is about whatever the next
+    // phase ships, and the examples are only ever the codes that have no module
+    // TODAY. `warranty` is the honest one: it is deliberately absent, and when
+    // it comes it will be a re-entry rather than a status.
+    for (const future of ['warranty', 'teletransportado']) {
       expect(toRepairStatus(future)).toBe(future);
       expect(isKnownRepairStatus(future)).toBe(false);
     }
   });
 
   it('gets NO position on the ladder', () => {
-    expect(repairStageIndex('delivered')).toBe(-1);
-    expect(isStageComplete('received', 'delivered')).toBe(false);
+    expect(repairStageIndex('warranty')).toBe(-1);
+    expect(isStageComplete('received', 'warranty')).toBe(false);
   });
 
   it('renders with the SERVER label and a neutral tone', () => {
-    const meta = describeRepairStatus('delivered', 'Entregado al cliente');
-    expect(meta.label).toBe('Entregado al cliente');
+    const meta = describeRepairStatus('warranty', 'En garantía');
+    expect(meta.label).toBe('En garantía');
     expect(meta.tone).toBe('neutral');
   });
 
   it('falls back to the raw code when the server sent no label', () => {
     // Ugly on purpose. An unlabelled unknown state is a contract gap somebody
     // should see, not something to paper over with an invented word.
-    expect(describeRepairStatus('delivered').label).toBe('delivered');
+    expect(describeRepairStatus('warranty').label).toBe('warranty');
   });
 
   it('counts as OPEN, because nothing says it finished', () => {

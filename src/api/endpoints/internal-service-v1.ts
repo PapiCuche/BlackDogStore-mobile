@@ -2,6 +2,8 @@ import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import { companySlug } from '@/config/env';
 import type {
   ServiceAssignment,
+  ServiceDelivery,
+  ServiceDeliveryInput,
   ServiceQualityCheck,
   ServiceQualityItem,
   ServiceQualityResultInput,
@@ -1450,6 +1452,93 @@ export async function postServiceQualityFail(
     return toServiceQualityCheck(
       await authenticatedRequest<unknown>(
         `${orderPath(orderId)}/quality/fail/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// M12 / BR-005E — the handover
+// ---------------------------------------------------------------------------
+//
+// Verified against `PapiCuche/BlackDogStore-web` @ `origin/master` `3095167`
+// (PR #16) with a live smoke over both routes. Every field name below came back
+// from a real response.
+//
+// TWO ROUTES AND NOTHING ELSE. There is no PATCH and no DELETE, because the
+// server has none: the row refuses updates and deletes in its own `save`. An
+// app that offered an "edit" affordance would be promising something the
+// platform deliberately does not do.
+
+function toServiceDelivery(raw: unknown): ServiceDelivery {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: num(row.id),
+    recipientName: str(row.recipient_name),
+    notes: str(row.notes),
+    deliveredByName: str(row.delivered_by_name),
+    deliveredAt: str(row.delivered_at),
+    createdAt: str(row.created_at),
+  };
+}
+
+/**
+ * The handover on this order, or null.
+ *
+ * `null` is ordinary — most orders have not been collected — and treating it as
+ * missing would put an error card on a healthy screen.
+ */
+export async function fetchServiceDelivery(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceDelivery | null> {
+  try {
+    const payload = await authenticatedRequest<{ delivery?: unknown }>(
+      `${orderPath(orderId)}/delivery/`,
+      { method: 'GET', scope: 'authenticated-v1', signal },
+      deps,
+    );
+    const raw = payload?.delivery;
+    return raw == null ? null : toServiceDelivery(raw);
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Hand the device over. `ready_for_pickup` → `delivered`.
+ *
+ * THE ONLY WAY AN ORDER REACHES `delivered`. The generic transition endpoint
+ * refuses the code outright, because moving the order without recording who
+ * took the device would be a handover with nobody on the other side of it.
+ *
+ * NO RETRY, and the caller must not add one. A replay is safe only because the
+ * key makes it safe, and a key the transport re-minted would be no key at all.
+ * A 409 `idempotency_conflict` arrives as `ServiceIdempotencyConflictError`,
+ * which means the key was spent on a DIFFERENT recipient — not that the
+ * handover failed.
+ */
+export async function postServiceDelivery(
+  orderId: number,
+  input: ServiceDeliveryInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceDelivery> {
+  const body: Record<string, unknown> = {
+    recipient_name: input.recipientName.trim(),
+    idempotency_key: input.idempotencyKey,
+  };
+  if (input.notes?.trim()) body.notes = input.notes.trim();
+
+  try {
+    return toServiceDelivery(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/delivery/`,
         { method: 'POST', body, scope: 'authenticated-v1', signal },
         deps,
       ),
