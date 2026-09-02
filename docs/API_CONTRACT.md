@@ -834,9 +834,113 @@ cliente es lo que la mueve de ahí. El endpoint genérico de transición devuelv
 **400** para esos saltos — verificado con smoke sobre `approved`. La app no
 notó nada porque nunca tuvo la tabla.
 
+## Ejecución y repuestos — **INTEGRADO** (M10 / BR-005C)
+
+```
+VERIFIED_STABLE_MASTER · VERSIONED · INTEGRADO POR MOBILE (M10)
+```
+
+Verificado en `origin/master` **`82695d3`** (PR #9) con smoke real sobre las diez
+rutas. Cada campo salió de una respuesta.
+
+### Interna — `/api/v1/internal/<slug>/service/orders/<id>/`
+
+| Endpoint | Requiere |
+|---|---|
+| `GET execution/` | `service.orders.view` |
+| `PATCH execution/` | `service.repair.manage` |
+| `POST execution/start/` | `service.repair.manage` |
+| `POST execution/complete/` | `service.repair.manage` |
+| `POST execution/pause/` | `service.repair.manage` |
+| `POST execution/resume/` | `service.repair.manage` |
+| `GET parts/` · `GET parts/candidates/` | `service.orders.view` |
+| `POST parts/` | `service.repair.manage` |
+| `POST parts/<id>/reverse/` | `service.repair.manage` |
+
+`GET execution/` responde `{"execution": null}` mientras nadie haya empezado.
+Es la respuesta normal durante casi toda la vida de una orden, no un error.
+
+### Tres estados nuevos, y ninguno es un desplegable
+
+`in_repair`, `waiting_parts` y `repaired` son **event-only**: el endpoint
+genérico de transición los rechaza con 400. Empezar, pausar y terminar son
+hechos sobre un banco de trabajo, y cada uno tiene su operación, que escribe la
+fila que le da sentido al estado.
+
+`repaired` **no es terminal** y no marca `closed_at`. Significa que el técnico
+terminó: ni revisado, ni listo para recoger, ni avisado, ni pagado, ni
+entregado. Su etiqueta por defecto es «Reparado» y nada más.
+
+### El cuerpo de un consumo tiene tres campos
+
+`quote_item_id`, `quantity`, `idempotency_key`. No hay sucursal — es la de la
+orden, y como no existe transferencia en este flujo, nombrar otra tienda serían
+unidades moviéndose en papel que nadie cargó. No hay producto — es el de la
+línea cotizada. No hay precio — la cotización lo cerró una vez. No hay tipo de
+movimiento ni cifras de stock — los calcula inventario.
+
+Comprobado con smoke: inyectar `branch_id`, `product_id`, `unit_price`,
+`stock_after`, `movement_type` y `company_id` no cambió ni un campo.
+
+### Toda pieza traza a una línea aprobada
+
+`quote_item` es obligatorio y tiene que ser una línea `part` de la cotización
+**aprobada** de esa orden. No un id de producto: una pieza que alguien cotizó y
+que el cliente aceptó. Consumir más de lo aprobado devuelve 400.
+
+Las cantidades son **enteras**. `BranchStock.quantity` es un entero con check
+constraint no negativo, y una línea cotizada con cantidad fraccionaria se
+rechaza en vez de redondearse hacia el inventario de alguien.
+
+### Dos conflictos distintos bajo un mismo 409
+
+| `code` | Qué pasó | Qué hace la app |
+|---|---|---|
+| `insufficient_stock` | La sucursal de la orden no tiene la pieza | Lo dice y no cambia nada |
+| `idempotency_conflict` | Esa clave ya se usó para otra petición | Lo dice; no reintenta |
+
+La app **ramifica por el `code`, nunca por el castellano**: existen tres
+plantillas distintas del mismo mensaje de stock en el backend y ninguna es
+contrato. `ApiError` ganó un campo `code` para esto.
+
+Un consumo fallido **no mueve el ciclo de vida**. Pausar por repuestos es una
+acción explícita: un taller no debe descubrir su propio estado leyendo logs.
+
+### Idempotencia
+
+Clave acuñada por el cliente + huella de la petición, en columnas con
+`UniqueConstraint` parcial — la misma forma que ya usan la venta POS y el
+checkout nativo. Misma clave + misma petición devuelve la fila original; misma
+clave + otra petición devuelve 409.
+
+Mobile la acuña **una vez por intención** y la guarda en un `ref` a través de
+los reintentos. Cambia cuando cambia la petición: otra línea u otra cantidad es
+otra intención.
+
+### Deshacer es compensar
+
+`POST parts/<id>/reverse/`, nunca `DELETE`. Un movimiento contrario devuelve las
+unidades y la fila queda marcada; el registro original y su movimiento siguen
+donde estaban. Es idempotente. Después de finalizar el trabajo la pieza queda
+congelada: una batería instalada no vuelve a la estantería porque alguien pulse
+deshacer.
+
+### Al cliente no le llega nada de esto
+
+El serializer de cliente no ganó un solo campo. Ve el estado nuevo y la
+etiqueta de su empresa; no ve el trabajo realizado, las notas internas, las
+piezas, el stock, el coste, la identidad del técnico ni la sucursal. Un smoke
+comprueba que el payload son exactamente diez campos.
+
+### Un 500 preexistente corregido
+
+`GET` sobre `/api/v1/customer/<slug>/repairs/<pk>/quotes/<id>/decision/` heredaba
+un `get()` cuya firma no acepta `quote_id`: TypeError sin convertir, 500 en vez
+de 405. Ahora `http_method_names = ['post']`.
+
 ### Pendiente
 
-Ejecución de la reparación, repuestos y consumo de stock, control de calidad,
-entrega, garantía, pagos de reparación. Evidencias fotográficas siguen
-`API_PENDING` (DEC-016: no hay proveedor de almacenamiento y no existe un solo
-`FileField` en el backend). BR-008 sigue `API_PENDING`.
+Control de calidad, listo para recoger, entrega, pago del servicio, garantía.
+Reserva de stock al cotizar **no existe y es deliberado**. Devolución de piezas
+después de finalizar: pendiente, necesita inspección física. Evidencias
+fotográficas siguen `API_PENDING` (DEC-016). BR-008 sigue `API_PENDING`.

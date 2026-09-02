@@ -4,6 +4,9 @@ import { InternalCapabilityMissingError } from '@/api/endpoints/internal-v1';
 import type { ServiceOrderQuery } from '@/api/endpoints/internal-service-v1';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import type {
+  ServiceCompleteInput,
+  ServiceExecutionInput,
+  ServicePartUsageInput,
   ServiceDeviceInput,
   ServiceDiagnosticInput,
   ServiceOrderInput,
@@ -264,5 +267,126 @@ export function usePublishQuote(orderId: number) {
 export function useCancelQuote(orderId: number) {
   return useServiceMutation<{ quoteId: number }, unknown>(({ quoteId }) =>
     repository().cancelQuote(orderId, quoteId),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// M10 / BR-005C — the bench and its parts
+// ---------------------------------------------------------------------------
+
+export function useServiceExecution(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceExecution(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().getExecution(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+export function useServicePartUsages(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceParts(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().listPartUsages(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+export function useServicePartCandidates(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServicePartCandidates(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().listPartCandidates(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+/**
+ * A service write that also moved STOCK.
+ *
+ * `useServiceMutation` invalidates the service subtree, which is right and not
+ * enough: a part coming off a shelf changes what the Inventory module would
+ * show for that branch, and somebody who holds both modules must not open
+ * Inventory to a number that is one battery stale.
+ *
+ * INVALIDATION CROSSES THE MODULE BOUNDARY; DATA DOES NOT. Nothing here reads
+ * an inventory repository, imports an inventory type, or renders a stock
+ * figure it did not get from the service surface. It marks the other module's
+ * cache dirty and lets that module refetch its own numbers when somebody opens
+ * it. Nothing is loaded eagerly — a technician who never opens Inventory pays
+ * for nothing.
+ */
+function useStockTouchingMutation<TInput, TResult>(
+  run: (input: TInput) => Promise<TResult>,
+) {
+  const client = useQueryClient();
+  const scope = useQueryScope();
+
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.internalServiceRoot(scope) });
+      void client.invalidateQueries({ queryKey: queryKeys.internalInventoryRoot(scope) });
+    },
+    onError: (error) => {
+      if (error instanceof InternalCapabilityMissingError) {
+        client.removeQueries({ queryKey: queryKeys.internalServiceRoot(scope) });
+        client.removeQueries({ queryKey: queryKeys.internalContext(scope) });
+      }
+    },
+    // Consuming a part is a physical fact. A replay the user did not ask for is
+    // a second battery off the shelf — and the server's idempotency key protects
+    // the server, not the user's intention.
+    retry: false,
+  });
+}
+
+export function useStartRepair(orderId: number) {
+  return useServiceMutation<void, unknown>(() => repository().startRepair(orderId));
+}
+
+export function useUpdateExecution(orderId: number) {
+  return useServiceMutation<ServiceExecutionInput, unknown>((input) =>
+    repository().updateExecution(orderId, input),
+  );
+}
+
+export function useCompleteRepair(orderId: number) {
+  return useServiceMutation<ServiceCompleteInput, unknown>((input) =>
+    repository().completeRepair(orderId, input),
+  );
+}
+
+export function usePauseForParts(orderId: number) {
+  return useServiceMutation<{ comment?: string }, unknown>(({ comment }) =>
+    repository().pauseForParts(orderId, comment ?? ''),
+  );
+}
+
+export function useResumeRepair(orderId: number) {
+  return useServiceMutation<void, unknown>(() => repository().resumeRepair(orderId));
+}
+
+export function useRecordPartUsage(orderId: number) {
+  return useStockTouchingMutation<ServicePartUsageInput, unknown>((input) =>
+    repository().recordPartUsage(orderId, input),
+  );
+}
+
+export function useReversePartUsage(orderId: number) {
+  return useStockTouchingMutation<{ usageId: number; reason?: string }, unknown>(
+    ({ usageId, reason }) => repository().reversePartUsage(orderId, usageId, reason ?? ''),
   );
 }

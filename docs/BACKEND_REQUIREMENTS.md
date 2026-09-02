@@ -496,9 +496,22 @@ está — que es más limpio que un flag.
 > revisiones, líneas, caducidad y una decisión con su fecha; aplanarla a un
 > decimal en la orden habría hecho imposible contar qué se ofreció antes.
 >
-> Sigue **PENDIENTE**: ejecución de la reparación, repuestos y consumo de stock,
-> control de calidad, entrega, garantía, pagos de servicio y evidencias
-> fotográficas.
+> **M10 entregó la ejecución** (`origin/master` `82695d3`): `RepairExecution`,
+> `PartUsage`, los tres estados `in_repair` / `waiting_parts` / `repaired`, el
+> consumo transaccional contra `inventory_services` y el reverso compensatorio.
+>
+> El backend volvió a no aceptar la propuesta tal cual, y otra vez con razón.
+> Esta sección proponía `quoted_total` como campo de `RepairOrder` y un
+> `serial_or_imei` enmascarado; ninguno sobrevivió como se propuso. Y la
+> propuesta no contemplaba lo que resultó ser el riesgo real de la fase: el
+> ORDEN DE BLOQUEO entre `RepairOrder` y `BranchStock`. Ambos módulos ya tenían
+> disciplina propia y coincidían — documento primero, `BranchStock` al final,
+> `Product` nunca — así que M10 concatenó en vez de inventar.
+>
+> Sigue **PENDIENTE**: control de calidad, listo para recoger, entrega,
+> garantía, pagos de servicio, evidencias fotográficas y la devolución de piezas
+> posterior a la finalización. **No hay reserva de stock al cotizar y es
+> deliberado**: el stock cambia cuando la pieza se usa y nunca antes.
 
 
 **Estado:** PROPUESTA · **Prioridad:** ALTA · **Bloquea:** reparaciones

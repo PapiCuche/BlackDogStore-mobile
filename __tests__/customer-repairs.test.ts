@@ -1,7 +1,9 @@
 import { assertBearerAllowed, BearerScopeViolationError } from '@/api/api-scope';
 import {
   findActiveRepair,
+  isKnownRepairStatus,
   isRepairOpen,
+  repairStageIndex,
   toRepairStatus,
 } from '@/domain/repairs/types';
 import { describeRepairStatus } from '@/domain/repairs/status';
@@ -244,10 +246,27 @@ describe('mapping — every field verified against a real response', () => {
     expect(JSON.stringify(mapped)).not.toContain('no decírselo');
   });
 
-  it('never guesses an unknown status into a later one', () => {
+  it('carries an unknown status through instead of guessing at it', () => {
+    // M10 REVERSED THIS TEST, and the reversal is the fix for a real bug.
+    // Coercing anything unrecognised to `received` looked conservative and was
+    // not: when M9 shipped `approved` before this app knew the code, a repair
+    // the customer had just approved rendered as "Recibido" — telling somebody
+    // their device had gone backwards.
+    //
+    // The lesson survives intact and is asserted below: an unknown code is
+    // never rendered as FURTHER ALONG. It simply gets no position at all.
     const { module } = load();
 
-    expect(module.toRepair({ id: 1, status: 'delivered' }).status).toBe('received');
+    expect(module.toRepair({ id: 1, status: 'delivered' }).status).toBe('delivered');
+    expect(repairStageIndex('delivered')).toBe(-1);
+    expect(describeRepairStatus('delivered').tone).toBe('neutral');
+  });
+
+  it('still falls back to received when NOTHING arrived', () => {
+    const { module } = load();
+
+    expect(module.toRepair({ id: 1 }).status).toBe('received');
+    expect(module.toRepair({ id: 1, status: '' }).status).toBe('received');
   });
 });
 
@@ -266,9 +285,13 @@ describe('the tenant owns the wording', () => {
 });
 
 describe('domain rules', () => {
-  it('narrows a wire status without inventing one', () => {
+  it('carries a wire status without inventing one', () => {
     expect(toRepairStatus('waiting_approval')).toBe('waiting_approval');
-    expect(toRepairStatus('quality_check')).toBe('received');
+    // A state a later backend phase will ship. It arrives intact, gets no
+    // ladder position and no tone — see the M10 note above.
+    expect(toRepairStatus('quality_check')).toBe('quality_check');
+    expect(isKnownRepairStatus('quality_check')).toBe(false);
+    expect(repairStageIndex('quality_check')).toBe(-1);
   });
 
   it('treats cancelled as finished and everything else as open', () => {

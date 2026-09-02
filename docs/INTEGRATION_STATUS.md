@@ -527,8 +527,8 @@ Líneas de cotización           INTEGRADO / TESTED
 Publicar · cancelar            INTEGRADO / TESTED
 Cotización del cliente         INTEGRADO / TESTED
 Aprobación · rechazo           INTEGRADO / TESTED
-Ejecución de la reparación     PENDIENTE
-Repuestos · stock              PENDIENTE
+Ejecución de la reparación     INTEGRADO / TESTED (M10)
+Repuestos · stock              INTEGRADO / TESTED (M10)
 Control de calidad · entrega   PENDIENTE
 Garantía · pagos de servicio   PENDIENTE
 Evidencias fotográficas        API_PENDING (DEC-016, sin proveedor)
@@ -558,3 +558,52 @@ servidor no rompiera nada.
 
 **El motivo que escribe el cliente vive solo en el lado interno.** Lo lee el
 taller, que es quien lo necesita. La superficie de cliente no tiene ese campo.
+
+## Ejecución y repuestos (M10 / BR-005C)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master 82695d3)
+Ejecución de la reparación     INTEGRADO / TESTED
+Pausa por repuestos            INTEGRADO / TESTED
+Consumo de repuestos           INTEGRADO / TESTED
+Reverso compensatorio          INTEGRADO / TESTED
+Idempotencia de consumo        INTEGRADO / TESTED
+Estados nuevos en cliente      INTEGRADO / TESTED
+Reserva de stock               NO PLANIFICADO (deliberado)
+Control de calidad             PENDIENTE (M11)
+Listo para recoger · entrega   PENDIENTE
+Pago del servicio · garantía   PENDIENTE
+Devolución tras finalizar      PENDIENTE (necesita inspección física)
+Evidencias fotográficas        API_PENDING (DEC-016, sin proveedor)
+Seguimiento público (BR-008)   API_PENDING
+```
+
+**El bug de M9 está corregido, y era el nuestro.** `toRepairStatus` coaccionaba
+cualquier código desconocido a `received`. Cuando el backend desplegó `approved`
+antes de que esta app lo conociera, una reparación recién aprobada se dibujaba
+como «Recibido». Ahora un código desconocido llega intacto, se dibuja con la
+etiqueta del servidor y un tono neutral, y no recibe posición en la escalera.
+Solo un estado ausente cae a `received`.
+
+**Empezar, pausar y terminar son hechos.** Los tres estados nuevos son
+event-only en el servidor; el endpoint genérico los rechaza. La app no tiene
+tabla de transiciones y un test estructural falla si aparece.
+
+**Una pieza sale de la sucursal de SU reparación.** No hay campo de sucursal en
+ninguna petición. Toda pieza traza a una línea `part` de la cotización aprobada.
+
+**El servidor mueve el inventario.** La app manda línea, cantidad y clave. No
+resta stock en pantalla: sería afirmar un número sobre una estantería que otra
+caja puede estar cambiando.
+
+**La clave de idempotencia vive en un `ref`.** Se acuña una vez por intención y
+se reenvía idéntica en cada reintento manual. Nada reintenta solo.
+
+**409 tiene dos significados** y se distinguen por el `code` del servidor, nunca
+por el castellano.
+
+**Invalidar cruza el módulo; los datos no.** Consumir una pieza marca sucio el
+caché de Inventario del mismo tenant sin que Servicio lea un solo tipo suyo.
+
+**`repaired` no es «listo para recoger».** El técnico terminó. La reparación
+sigue ABIERTA en la Home del cliente porque el equipo sigue en el taller.

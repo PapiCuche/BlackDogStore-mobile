@@ -1044,6 +1044,75 @@ abierta.
 - Un test estructural falla si aparece aritmética sobre un importe en cualquier
   archivo de M9.
 
+### DEC-MOBILE-023 — Un estado que esta app no conoce se muestra igual
+
+**Fecha:** 2026-09-02 (M10) · **Estado:** ACEPTADA
+
+**Decisión.** `toRepairStatus` deja de coaccionar. Un código desconocido llega
+intacto, se dibuja con la **etiqueta del servidor** y un tono neutral, y no
+recibe posición en la escalera de progreso. Solo un estado **ausente** cae a
+`received`.
+
+**Motivo.** La versión anterior convertía cualquier código no reconocido en
+`received`, con un comentario que lo llamaba la dirección segura del error. No
+lo era, y se demostró: cuando M9 desplegó `approved` antes de que esta app lo
+conociera, una reparación recién aprobada se dibujaba como «Recibido». A alguien
+le dijimos que su equipo había retrocedido.
+
+La lección real no era «no adivines hacia adelante» sino **no adivines**. El
+servidor manda la etiqueta por empresa desde M8, así que para un estado
+desconocido ya existe la respuesta honesta: la palabra del taller, sin opinión
+nuestra encima.
+
+**Consecuencias.**
+- `RepairStatus` es `KnownRepairStatus | (string & {})`: autocompletado para lo
+  conocido, sin cerrar la puerta a lo que viene.
+- `repairStageIndex` devuelve -1 para lo desconocido, así que ninguna barra de
+  progreso lo coloca en ninguna parte.
+- `isRepairOpen` lo cuenta como ABIERTO: un estado que esta app nunca ha oído no
+  es evidencia de que algo terminó.
+- Sin etiqueta del servidor se muestra el código crudo. Es feo a propósito: una
+  laguna de contrato debería verse, no taparse con una palabra inventada.
+- El backend puede desplegar un estado sin que esta app lo contradiga hasta la
+  siguiente release.
+- Cuatro tests que fijaban el comportamiento viejo se actualizaron conservando
+  la lección; ninguno se borró.
+
+### DEC-MOBILE-024 — Una pieza sale de una estantería una sola vez
+
+**Fecha:** 2026-09-02 (M10) · **Estado:** ACEPTADA
+
+**Decisión.** Consumir un repuesto manda `{quote_item_id, quantity,
+idempotency_key}` y nada más. La clave se acuña **una vez por intención**, se
+guarda en un `ref` y se reenvía idéntica en cada reintento manual. Ninguna
+mutación de M10 reintenta sola y no hay cola offline.
+
+**Motivo.** Es la primera escritura de esta app que cambia un objeto físico. Un
+timeout seguido de un toque no puede producir dos baterías fuera del almacén, y
+la clave es lo único que separa esos dos mundos — pero solo si es la MISMA
+clave. Una guardada en `useState` se regenera en un re-render, que es
+exactamente el momento en que hace falta que no cambie.
+
+El reintento automático se descarta por separado: la idempotencia del servidor
+protege al servidor, no la intención de la persona. Repetir sin que nadie lo
+pida es la app actuando en nombre de alguien.
+
+**Consecuencias.**
+- El generador salió de `use-checkout` a `@/domain/idempotency`. Un mecanismo
+  cuyo trabajo es impedir una doble escritura es lo último que debería existir
+  dos veces en dos versiones sutilmente distintas; un test estructural
+  comprueba que solo hay una definición.
+- La app **no resta stock en pantalla**. Mostrar `disponible - cantidad` sería
+  afirmar un número sobre una estantería que otra caja puede estar cambiando.
+  Después de escribir se vuelve a preguntar.
+- 409 tiene dos significados y se distinguen por el `code` que manda el
+  servidor, no por el castellano: ya existen tres plantillas del mismo mensaje
+  de stock. `ApiError` ganó un campo `code`.
+- Un consumo fallido no cambia el estado de la orden. Pausar por repuestos es
+  una acción que alguien toma habiendo visto el error.
+- Consumir invalida el caché de **Inventario** además del de Servicio. La
+  invalidación cruza el módulo; los datos no.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -1147,4 +1216,13 @@ un error 500.
 | Los importes son strings hasta el punto de dibujo | DEC-MOBILE-022: el céntimo que pierde un float lo ve un cliente y un contable. |
 | `service.diagnostic.manage` aparte de `.manage` | Mover una orden y ponerle precio son dos autoridades distintas. |
 | La caducidad la decide el servidor | El reloj de un teléfono no dice si una oferta sigue abierta. |
+| Un estado desconocido se muestra tal cual | DEC-MOBILE-023: coaccionarlo dibujó «Recibido» sobre una reparación aprobada. |
+| Solo un estado AUSENTE cae a `received` | Nada llegó, y una reparación empieza en algún sitio. |
+| `repaired` sigue abierto | El técnico terminó; control de calidad y entrega no existen todavía. |
+| La clave de idempotencia vive en un `ref` | DEC-MOBILE-024: en `useState` se regenera en el re-render en que hace falta que no cambie. |
+| Un generador de claves, no dos | Un mecanismo contra la doble escritura no debe existir en dos versiones. |
+| La app no resta stock en pantalla | Sería afirmar un número sobre una estantería que otra caja está cambiando. |
+| 409 se distingue por `code`, no por el mensaje | Existen tres plantillas del mismo error de stock y ninguna es contrato. |
+| Un consumo fallido no mueve el ciclo de vida | Un taller no debe descubrir su propio estado leyendo logs de error. |
+| Invalidar cruza el módulo; los datos no | Servicio marca sucio el caché de Inventario y no lee ni un tipo suyo. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |

@@ -2,6 +2,12 @@ import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import { companySlug } from '@/config/env';
 import type {
   ServiceAssignment,
+  ServiceCompleteInput,
+  ServiceExecution,
+  ServiceExecutionInput,
+  ServicePartCandidate,
+  ServicePartUsage,
+  ServicePartUsageInput,
   ServiceDiagnostic,
   ServiceDiagnosticInput,
   ServiceDiagnosticList,
@@ -53,6 +59,34 @@ import {
  */
 
 /** The selected branch or order is not one this member may reach. */
+/**
+ * The order's own branch does not hold enough of the part.
+ *
+ * Its own class because it is the one failure here that is nobody's mistake:
+ * the shop simply does not have the piece today. The next move is to order it
+ * and pause the repair, not to correct a bad request — and the screen has to be
+ * able to say so without parsing Spanish.
+ */
+export class ServiceStockUnavailableError extends Error {
+  constructor(message = 'No hay stock suficiente en la sucursal de esta reparación.') {
+    super(message);
+    this.name = 'ServiceStockUnavailableError';
+  }
+}
+
+/**
+ * The idempotency key was spent on a different request.
+ *
+ * Not an error about parts: an error about a key being reused for something
+ * else. Replaying the SAME request returns the original row and raises nothing.
+ */
+export class ServiceIdempotencyConflictError extends Error {
+  constructor(message = 'Esa operación ya se registró con otros datos.') {
+    super(message);
+    this.name = 'ServiceIdempotencyConflictError';
+  }
+}
+
 export class ServiceOutOfScopeError extends Error {
   constructor() {
     super('Eso no está disponible para tu cuenta en esta empresa.');
@@ -81,6 +115,19 @@ type Row = Record<string, unknown>;
 
 function str(value: unknown, fallback = ''): string {
   return value === null || value === undefined ? fallback : String(value);
+}
+
+/**
+ * A wire value as a whole number, or zero.
+ *
+ * M10 counts things — units on a shelf, units approved, units used — and every
+ * one of them is an integer on the server, where `BranchStock.quantity` is a
+ * PositiveIntegerField with a non-negative check constraint. `NaN` leaking into
+ * a quantity would render as "NaN unidades" next to a confirm button.
+ */
+function num(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 export function toServiceDevice(raw: unknown): ServiceDevice {
@@ -207,11 +254,26 @@ function translate(error: unknown, scoped: boolean): never {
   if (error instanceof ApiError && error.status === 403) {
     throw new InternalCapabilityMissingError();
   }
+  // M10 — 409 is the two conditions that are nobody's mistake, and the server
+  // marks which with a machine-readable `code`. Branching on the code and not
+  // on the Spanish is deliberate: three different message templates already
+  // exist for the stock condition alone, and none of them is API surface.
+  if (error instanceof ApiError && error.status === 409) {
+    const code = error.code;
+    if (code === 'insufficient_stock') {
+      throw new ServiceStockUnavailableError(rejectionMessage(error));
+    }
+    if (code === 'idempotency_conflict') {
+      throw new ServiceIdempotencyConflictError(rejectionMessage(error));
+    }
+    throw new ServiceRejectedError(rejectionMessage(error));
+  }
   if (error instanceof ApiError && error.status === 400) {
     throw new ServiceRejectedError(rejectionMessage(error));
   }
   throw error;
 }
+
 
 /**
  * The server's own words, when it has any.
@@ -859,6 +921,339 @@ export async function postServiceQuoteCancel(
       await authenticatedRequest<unknown>(
         `${orderPath(orderId)}/quotes/${encodeURIComponent(String(quoteId))}/cancel/`,
         { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// M10 / BR-005C — the bench and its parts
+// ---------------------------------------------------------------------------
+//
+// Verified against `PapiCuche/BlackDogStore-web` @ `origin/master` `82695d3`
+// (PR #9) with a live smoke over all ten routes. Every field name below came
+// back from a real response.
+
+function toServicePartUsage(raw: unknown): ServicePartUsage {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: num(row.id),
+    quoteItemId: num(row.quote_item_id),
+    productId: num(row.product_id),
+    description: str(row.description),
+    quantity: num(row.quantity),
+    stockMovementId: num(row.stock_movement_id),
+    actorName: str(row.actor_name),
+    createdAt: str(row.created_at),
+    // Strictly true. A server-computed flag arriving as a truthy string must
+    // not become a UI that offers to undo something already undone.
+    isReversed: row.is_reversed === true,
+    reversedAt: row.reversed_at == null ? null : str(row.reversed_at),
+    reversedByName: str(row.reversed_by_name),
+    reversalReason: str(row.reversal_reason),
+  };
+}
+
+function toServiceExecution(raw: unknown): ServiceExecution {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: num(row.id),
+    startedAt: str(row.started_at),
+    completedAt: row.completed_at == null ? null : str(row.completed_at),
+    isCompleted: row.is_completed === true,
+    workPerformed: str(row.work_performed),
+    result: str(row.result),
+    resultLabel: str(row.result_label),
+    internalNotes: str(row.internal_notes),
+    startedByName: str(row.started_by_name),
+    completedByName: str(row.completed_by_name),
+    parts: Array.isArray(row.parts) ? row.parts.map(toServicePartUsage) : [],
+    createdAt: str(row.created_at),
+    updatedAt: str(row.updated_at),
+  };
+}
+
+function toServicePartCandidate(raw: unknown): ServicePartCandidate {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    quoteItemId: num(row.quote_item_id),
+    productId: num(row.product_id),
+    description: str(row.description),
+    approvedQuantity: num(row.approved_quantity),
+    usedQuantity: num(row.used_quantity),
+    outstandingQuantity: num(row.outstanding_quantity),
+    availableInBranch: num(row.available_in_branch),
+  };
+}
+
+/**
+ * The bench record on this order, or null.
+ *
+ * `null` is the ordinary answer for most of a repair's life, not an error:
+ * treating "nobody has started yet" as missing would put a red card on a
+ * perfectly healthy screen.
+ */
+export async function fetchServiceExecution(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceExecution | null> {
+  try {
+    const payload = await authenticatedRequest<{ execution?: unknown }>(
+      `${orderPath(orderId)}/execution/`,
+      { method: 'GET', scope: 'authenticated-v1', signal },
+      deps,
+    );
+    const raw = payload?.execution;
+    return raw == null ? null : toServiceExecution(raw);
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Begin the work.
+ *
+ * THE ONLY WAY AN ORDER REACHES `in_repair`. The generic transition endpoint
+ * refuses that state outright, so there is no second path and no button that
+ * could move the order without opening the record that gives the state meaning.
+ */
+export async function postServiceExecutionStart(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceExecution> {
+  try {
+    return toServiceExecution(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/execution/start/`,
+        { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/** Amend the bench notes while the work is open. Three fields, no more. */
+export async function patchServiceExecution(
+  orderId: number,
+  input: ServiceExecutionInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceExecution> {
+  const body: Record<string, unknown> = {};
+  if (input.workPerformed !== undefined) body.work_performed = input.workPerformed;
+  if (input.result !== undefined) body.result = input.result;
+  if (input.internalNotes !== undefined) body.internal_notes = input.internalNotes;
+
+  try {
+    return toServiceExecution(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/execution/`,
+        { method: 'PATCH', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * The technician finished.
+ *
+ * Moves the order to `repaired`, which means EXACTLY that: not checked, not
+ * ready to collect, not paid, not handed over.
+ */
+export async function postServiceExecutionComplete(
+  orderId: number,
+  input: ServiceCompleteInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceExecution> {
+  const body: Record<string, unknown> = {
+    work_performed: input.workPerformed,
+    result: input.result,
+  };
+  if (input.internalNotes) body.internal_notes = input.internalNotes;
+
+  try {
+    return toServiceExecution(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/execution/complete/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Pause because a part has not arrived.
+ *
+ * An explicit act. A consumption that fails for want of stock answers 409 and
+ * changes nothing — the shop decides whether that means pausing.
+ */
+export async function postServiceExecutionPause(
+  orderId: number,
+  comment: string,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceOrderDetail> {
+  const body: Record<string, unknown> = {};
+  if (comment.trim()) body.comment = comment.trim();
+
+  try {
+    return toServiceOrderDetail(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/execution/pause/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/** The part arrived; back to the bench. */
+export async function postServiceExecutionResume(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceOrderDetail> {
+  try {
+    return toServiceOrderDetail(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/execution/resume/`,
+        { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * The approved parts this repair may still consume.
+ *
+ * A SERVICE endpoint, not an inventory one. The technician needs
+ * `service.repair.manage`, never `inventory.view`, and this answer carries no
+ * cost, no other branch and no Kardex — only the lines the customer already saw
+ * priced and what this shop happens to hold.
+ */
+export async function fetchServicePartCandidates(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<{ count: number; results: ServicePartCandidate[] }> {
+  try {
+    const payload = await authenticatedRequest<{ count?: unknown; results?: unknown }>(
+      `${orderPath(orderId)}/parts/candidates/`,
+      { method: 'GET', scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return {
+      count: num(payload?.count),
+      results: Array.isArray(payload?.results)
+        ? payload.results.map(toServicePartCandidate)
+        : [],
+    };
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/** Everything this repair has consumed, reversals included. */
+export async function fetchServicePartUsages(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<{ count: number; results: ServicePartUsage[] }> {
+  try {
+    const payload = await authenticatedRequest<{ count?: unknown; results?: unknown }>(
+      `${orderPath(orderId)}/parts/`,
+      { method: 'GET', scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return {
+      count: num(payload?.count),
+      results: Array.isArray(payload?.results)
+        ? payload.results.map(toServicePartUsage)
+        : [],
+    };
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Book one approved part out of the order's own branch.
+ *
+ * THREE FIELDS GO OVER THE WIRE and no more. No branch — it is the order's, and
+ * there is no transfer in this flow, so naming another shop would be units
+ * moving on paper nobody carried. No product — it is the quoted line's. No
+ * price — the quote settled that, once. No stock figures or movement type — the
+ * inventory module computes those, and a client that could state them could
+ * state a shelf that does not exist.
+ *
+ * `idempotencyKey` IS sent, because only the caller can mint one that survives
+ * the caller's own retry.
+ */
+export async function postServicePartUsage(
+  orderId: number,
+  input: ServicePartUsageInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServicePartUsage> {
+  const body: Record<string, unknown> = {
+    quote_item_id: input.quoteItemId,
+    quantity: input.quantity,
+  };
+  if (input.idempotencyKey) body.idempotency_key = input.idempotencyKey;
+
+  try {
+    return toServicePartUsage(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/parts/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Put a wrongly-recorded part back.
+ *
+ * A POST, deliberately not a DELETE: nothing is removed. A compensating
+ * movement returns the units and the original row stays exactly as written.
+ */
+export async function postServicePartUsageReverse(
+  orderId: number,
+  usageId: number,
+  reason: string,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServicePartUsage> {
+  const body: Record<string, unknown> = {};
+  if (reason.trim()) body.reason = reason.trim();
+
+  try {
+    return toServicePartUsage(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/parts/${encodeURIComponent(String(usageId))}/reverse/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
         deps,
       ),
     );

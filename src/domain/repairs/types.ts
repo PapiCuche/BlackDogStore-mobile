@@ -41,23 +41,58 @@
  */
 export const REPAIR_STAGES = [
   'received', 'diagnosing', 'waiting_approval', 'approved',
+  // M10 — the bench. `waiting_parts` is deliberately NOT here: it is a pause at
+  // the `in_repair` position, not a step past it, and a progress bar that
+  // advanced when a shop ran out of a battery would be lying in the flattering
+  // direction.
+  'in_repair', 'repaired',
 ] as const;
 
 export type RepairStage = (typeof REPAIR_STAGES)[number];
-export type RepairStatus = RepairStage | 'rejected' | 'cancelled';
 
-const KNOWN_STATUSES: readonly string[] = [...REPAIR_STAGES, 'rejected', 'cancelled'];
+/** Codes the platform defines today, in no particular order. */
+export const KNOWN_REPAIR_STATUSES = [
+  ...REPAIR_STAGES, 'waiting_parts', 'rejected', 'cancelled',
+] as const;
+
+export type KnownRepairStatus = (typeof KNOWN_REPAIR_STATUSES)[number];
 
 /**
- * Narrow a wire value, or fall back to where every repair starts.
+ * A lifecycle code. Known ones are typed; unknown ones are still carried.
  *
- * Never guessed into a later state: telling somebody their device is further
- * along than the server said is the one direction of error that costs a wasted
- * trip to the shop.
+ * `string & {}` keeps autocomplete for the codes this release knows while
+ * accepting the ones the next backend phase adds. That is not laziness — it is
+ * the fix for a real bug, described below.
+ */
+export type RepairStatus = KnownRepairStatus | (string & {});
+
+const KNOWN: readonly string[] = KNOWN_REPAIR_STATUSES;
+
+export function isKnownRepairStatus(status: RepairStatus): status is KnownRepairStatus {
+  return KNOWN.includes(status);
+}
+
+/**
+ * Carry a wire value through. Only a MISSING one falls back.
+ *
+ * THIS USED TO COERCE ANYTHING UNKNOWN TO `received`, AND IT SHIPPED A BUG.
+ * When M9 added `approved` and `rejected` before this app knew them, a repair
+ * the customer had just approved rendered as "Recibido" — silently, and in the
+ * direction the code called safe. It was not safe: it told people their device
+ * had gone backwards.
+ *
+ * The lesson is that there is no safe guess. A code this build does not
+ * recognise is now kept exactly as it arrived and rendered with the server's
+ * own label and a neutral tone — see `describeRepairStatus`. The app says what
+ * the shop says and invents no stage, which means the next backend phase can
+ * ship a state without this app lying about it until the next release.
+ *
+ * An EMPTY value still becomes `received`: nothing arrived, and every repair
+ * starts somewhere.
  */
 export function toRepairStatus(raw: unknown): RepairStatus {
-  const value = String(raw ?? '');
-  return (KNOWN_STATUSES.includes(value) ? value : 'received') as RepairStatus;
+  const value = String(raw ?? '').trim();
+  return value || 'received';
 }
 
 /**
@@ -108,8 +143,13 @@ export type Repair = {
  * may compare as "further along" than a stage the device really passed.
  */
 export function repairStageIndex(status: RepairStatus): number {
-  if (status === 'cancelled' || status === 'rejected') return -1;
-  return REPAIR_STAGES.indexOf(status);
+  // `waiting_parts` sits AT `in_repair`, not after it: the device is on the
+  // bench and the work is paused, so the ladder must not move.
+  if (status === 'waiting_parts') return REPAIR_STAGES.indexOf('in_repair');
+  const index = REPAIR_STAGES.indexOf(status as RepairStage);
+  // -1 covers cancelled, rejected AND anything this build has never heard of.
+  // An unknown code gets no position rather than an invented one.
+  return index;
 }
 
 export function isStageComplete(stage: RepairStage, status: RepairStatus): boolean {
@@ -134,6 +174,11 @@ export function isStageCurrent(stage: RepairStage, status: RepairStatus): boolea
  * not every screen.
  */
 export function isRepairOpen(repair: Repair): boolean {
+  // `repaired` is NOT closed. The technician finished; quality control and
+  // handover have not shipped, so the device is still with the shop and the
+  // customer still has a reason to look. `rejected` and `cancelled` remain the
+  // only two endings, and an UNKNOWN code counts as open — a state this build
+  // has never heard of is not evidence that anything finished.
   return repair.status !== 'cancelled' && repair.status !== 'rejected';
 }
 

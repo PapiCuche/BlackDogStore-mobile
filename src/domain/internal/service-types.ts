@@ -384,3 +384,117 @@ export const SERVICE_QUOTE_ITEM_TYPES = [
   { value: 'part', label: 'Repuesto' },
   { value: 'service', label: 'Servicio' },
 ] as const;
+
+// ---------------------------------------------------------------------------
+// M10 / BR-005C — the bench and its parts. INTERNAL ONLY.
+// ---------------------------------------------------------------------------
+//
+// There is no customer counterpart to anything below, and that is structural
+// rather than an omission. A customer learns their device is `in_repair` from
+// the status and its tenant label. They do not learn which battery went in,
+// what the shop paid for it, which shelf it came off, or who fitted it. The
+// approved quote is what they were told and agreed to, and M9 already shows
+// them that.
+
+/**
+ * How a piece of work ENDED. Mirrors Django's `RepairResultCode`.
+ *
+ * Three members, and the platform means to keep it that way. Anything finer —
+ * "replaced screen", "cleaned board" — is `workPerformed`, which is prose,
+ * because a taxonomy of repairs is a taxonomy of every device ever made.
+ */
+export const SERVICE_RESULT_CODES = [
+  { value: 'success', label: 'Resuelto' },
+  { value: 'partial', label: 'Resuelto parcialmente' },
+  { value: 'unresolved', label: 'No resuelto' },
+] as const;
+
+export type ServiceResultCode = (typeof SERVICE_RESULT_CODES)[number]['value'];
+
+/** One part booked against a repair, and its reversal if it has one. */
+export type ServicePartUsage = {
+  id: number;
+  quoteItemId: number;
+  productId: number;
+  /** Snapshotted at the moment of use, so an edited product name cannot rewrite history. */
+  description: string;
+  quantity: number;
+  stockMovementId: number;
+  actorName: string;
+  createdAt: string;
+  isReversed: boolean;
+  reversedAt: string | null;
+  reversedByName: string;
+  reversalReason: string;
+};
+
+/**
+ * The bench record.
+ *
+ * NOT the repair order. The order is the ticket — who brought what in and where
+ * it is in its life. This is when somebody started, what they actually did and
+ * when they stopped.
+ */
+export type ServiceExecution = {
+  id: number;
+  startedAt: string;
+  completedAt: string | null;
+  isCompleted: boolean;
+  workPerformed: string;
+  result: string;
+  resultLabel: string;
+  internalNotes: string;
+  startedByName: string;
+  completedByName: string;
+  parts: readonly ServicePartUsage[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * A part this repair MAY still consume.
+ *
+ * A service-shaped answer, not an inventory one: the approved line, how much of
+ * it is outstanding, and what the order's own branch holds. No cost, no other
+ * branches, no Kardex — which is why this surface needs `service.repair.manage`
+ * and never `inventory.view`.
+ */
+export type ServicePartCandidate = {
+  quoteItemId: number;
+  productId: number;
+  description: string;
+  approvedQuantity: number;
+  usedQuantity: number;
+  outstandingQuantity: number;
+  availableInBranch: number;
+};
+
+/** What a technician may change on an OPEN execution. Three fields. */
+export type ServiceExecutionInput = {
+  workPerformed?: string;
+  result?: string;
+  internalNotes?: string;
+};
+
+/** Finishing. The result is required; a repair that ended has an outcome. */
+export type ServiceCompleteInput = {
+  workPerformed: string;
+  result: ServiceResultCode;
+  internalNotes?: string;
+};
+
+/**
+ * Consuming a part: WHICH APPROVED LINE, and HOW MANY.
+ *
+ * No branch (it is the order's), no product (it is the line's), no price (the
+ * quote settled that), no movement type or stock figures (inventory computes
+ * those). `idempotencyKey` is here because only the client can mint one that
+ * survives the client's own retry.
+ */
+export type ServicePartUsageInput = {
+  quoteItemId: number;
+  quantity: number;
+  idempotencyKey: string;
+};
+
+export const CAP_SERVICE_REPAIR_MANAGE = 'service.repair.manage';

@@ -1,6 +1,6 @@
 import { apiBaseUrl, apiTimeoutMs, isApiConfigured } from '@/config/env';
 
-import { ApiError, kindFromStatus, parseFieldErrors } from './errors';
+import { ApiError, kindFromStatus, parseErrorCode, parseFieldErrors } from './errors';
 
 /**
  * The single HTTP entry point.
@@ -196,6 +196,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new ApiError(kind, detailFrom(payload, `HTTP ${response.status}`), {
       status: response.status,
       fieldErrors: kind === 'validation' ? parseFieldErrors(payload) : null,
+      code: parseErrorCode(payload),
     });
   }
 

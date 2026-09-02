@@ -98,13 +98,19 @@ describe('the lifecycle is the one the server actually has', () => {
     expect(isStageComplete('received', 'cancelled')).toBe(false);
   });
 
-  it('never guesses an unknown wire status into a later state', () => {
+  it('never renders an unknown wire status as a later state', () => {
     // Telling somebody their device is further along than the server said is
-    // the one direction of error that costs a wasted trip to the shop.
-    expect(toRepairStatus('teletransportado')).toBe('received');
-    expect(toRepairStatus(undefined)).toBe('received');
-    expect(toRepairStatus('delivered')).toBe('received');
+    // the one direction of error that costs a wasted trip to the shop — and
+    // M9 proved that COERCING the unknown code causes exactly that, in the
+    // other direction. M10 keeps the code and denies it a position instead.
+    expect(toRepairStatus('teletransportado')).toBe('teletransportado');
+    expect(repairStageIndex('teletransportado')).toBe(-1);
+    expect(toRepairStatus('delivered')).toBe('delivered');
+    expect(repairStageIndex('delivered')).toBe(-1);
     expect(toRepairStatus('waiting_approval')).toBe('waiting_approval');
+    // Only an ABSENT status falls back: nothing arrived, and a repair starts
+    // somewhere.
+    expect(toRepairStatus(undefined)).toBe('received');
   });
 });
 
