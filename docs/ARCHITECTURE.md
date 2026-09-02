@@ -986,6 +986,64 @@ recepción necesite hacer nunca: el endpoint está construido para devolver los
 - Un test estructural comprueba que el payload de equipo no declara ningún campo
   de credencial — ni PIN, ni patrón, ni Apple ID.
 
+### DEC-MOBILE-021 — Aprobar no es pagar, y la app no finge que sí
+
+**Fecha:** 2026-09-01 (M9) · **Estado:** ACEPTADA
+
+**Decisión.** Responder una cotización manda `{decision, reason?}` y nada más. No
+hay importe, ni identidad, ni fecha, ni canal en el cuerpo. La pantalla no
+muestra ningún paso de pago, y la tarjeta no reutiliza un solo componente del
+checkout.
+
+**Motivo.** Una cotización aprobada autoriza un trabajo; no cobra nada, no
+reserva stock y no crea un pedido. Un `Order` de e-commerce y un `RepairOrder`
+son objetos distintos con vidas distintas, y la manera de acabar mezclándolos es
+empezar por un botón que se parece.
+
+Y tener un campo es poder rellenarlo — la regla de DEC-MOBILE-020, aplicada al
+único write que hace un cliente en toda esta app. La garantía de que nadie
+aprueba a un precio que no era es que no existe dónde escribir un precio.
+
+**Consecuencias.**
+- El error `409` es de primera clase: `QuoteAlreadyDecidedError`, con su propio
+  mensaje. Es el caso real, no el raro — el mostrador contesta por teléfono.
+- La invalidación va en `onSettled`, no en `onSuccess`. Quien pierde la carrera
+  tiene que acabar mirando el estado verdadero, y eso solo pasa si el fallo
+  también refresca.
+- Nada reintenta. Un reintento es la app contestando por segunda vez en nombre de
+  alguien que contestó una.
+- El `reason` que escribe el cliente no vuelve nunca en la respuesta que él lee.
+
+### DEC-MOBILE-022 — El taller pone precios; el servidor hace las cuentas
+
+**Fecha:** 2026-09-01 (M9) · **Estado:** ACEPTADA
+
+**Decisión.** Una línea de cotización se manda con tipo, descripción, cantidad y
+precio unitario. `line_total`, `subtotal`, `tax_amount` y `total` son respuesta.
+Los importes viajan como string decimal y se parsean en el punto de dibujo.
+
+**Motivo.** Es DEC-MOBILE-012 otra vez: un total calculado en el teléfono es una
+afirmación sobre un número que otro está cambiando. Con dinero además hay una
+segunda razón — la aritmética en coma flotante sobre `'4899.00'` acaba en un
+céntimo de diferencia, y ese céntimo lo ve un cliente en una pantalla y un
+contable en un informe.
+
+`is_expired` y `can_be_decided` siguen la misma regla, y por eso la app exige que
+sean estrictamente `true`. El reloj de un teléfono no decide si una oferta sigue
+abierta.
+
+**Consecuencias.**
+- `service.diagnostic.manage` es una capability nueva, separada de
+  `service.orders.manage`: mover una orden y ponerle precio a un trabajo son dos
+  autoridades, y un taller puede querer dar una sin la otra.
+- Una cotización enviada no se edita: se cancela y se hace otra con revisión
+  nueva. La app dibuja `is_editable`, no lo deduce.
+- `waiting_approval` desapareció de `available_transitions`, y la app no se
+  enteró — precisamente porque DEC-MOBILE-019 le quitó la tabla. Publicar es
+  ahora el camino hacia adelante en esa pantalla.
+- Un test estructural falla si aparece aritmética sobre un importe en cualquier
+  archivo de M9.
+
 ## Estados de pantalla
 
 Cada pantalla con datos contempla los cinco: **LOADING · SUCCESS · EMPTY ·
@@ -1082,4 +1140,11 @@ un error 500.
 | La recepción no tiene campo para el número ni el estado | DEC-MOBILE-020: tener un campo es poder rellenarlo. |
 | Los candidatos a técnico los da el servidor | La app no puede saber quién es personal de una empresa, ni debe sostener una lista de usuarios. |
 | Ninguna mutación de servicio reintenta | Una transición repetida es una segunda fila de historial para un solo hecho. |
+| Aprobar no es pagar | DEC-MOBILE-021: un `Order` y un `RepairOrder` se mezclan empezando por un botón que se parece. |
+| El cuerpo de una decisión tiene dos campos | Tener un campo para el importe es poder aprobar a un precio que no era. |
+| Refrescar en `onSettled`, no en `onSuccess` | El mostrador contesta por teléfono; quien pierde esa carrera tiene que ver el estado verdadero. |
+| El motivo del cliente no vuelve al cliente | Lo escribió; no tenerlo impide que un cambio futuro le enseñe a uno las palabras de otro. |
+| Los importes son strings hasta el punto de dibujo | DEC-MOBILE-022: el céntimo que pierde un float lo ve un cliente y un contable. |
+| `service.diagnostic.manage` aparte de `.manage` | Mover una orden y ponerle precio son dos autoridades distintas. |
+| La caducidad la decide el servidor | El reloj de un teléfono no dice si una oferta sigue abierta. |
 | Sin Redux/MobX/Zustand | Nada lo justificaba todavía. |

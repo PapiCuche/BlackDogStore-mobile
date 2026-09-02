@@ -623,6 +623,37 @@ rellenarlo. Y no se piden contraseñas ni códigos de desbloqueo del equipo.
 repetida es una segunda orden; una transición repetida, una segunda fila de
 historial para un solo hecho.
 
+### Diagnóstico, cotización y aprobación (M9)
+
+**El taller diagnostica y cotiza; el servidor hace las cuentas.** Una línea se
+manda con tipo, descripción, cantidad y precio unitario. El total de la línea, el
+subtotal y el total los calcula el servidor, y los importes viajan como string
+decimal hasta el punto de dibujo — el céntimo que pierde un float lo ve un
+cliente en una pantalla y un contable en un informe.
+
+**Poner precio es un permiso aparte de mover una orden.**
+`service.diagnostic.manage` es una capability propia: un taller puede querer que
+el mostrador cambie estados sin poder cotizar.
+
+**Una cotización enviada no se edita.** Se cancela y se hace otra, con revisión
+nueva. Es la misma razón por la que un pedido no se edita después de pagarse.
+
+**Aprobar no es pagar.** El cliente responde con una decisión y, si quiere, un
+motivo. Nada más: ni importe, ni identidad, ni fecha. Tener un campo es poder
+rellenarlo, y la garantía de que nadie aprueba a un precio que no era es que no
+existe dónde escribir un precio.
+
+**El mostrador contesta por teléfono.** Si alguien responde la cotización desde
+el taller un segundo antes, el servidor devuelve 409 y la app **refresca igual**
+— la invalidación va en `onSettled`, no en `onSuccess`, para que quien pierde esa
+carrera acabe mirando el estado verdadero en vez de una pantalla obsoleta.
+
+**La caducidad la decide el servidor.** El reloj de un teléfono no dice si una
+oferta sigue abierta.
+
+**El motivo que escribe el cliente no vuelve a su pantalla.** Lo lee el taller,
+que es quien lo necesita.
+
 ### Inventario: una tercera puerta
 
 El stock solo existe en un lugar, así que el módulo de inventario pregunta

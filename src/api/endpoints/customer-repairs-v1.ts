@@ -1,13 +1,19 @@
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import { companySlug } from '@/config/env';
 import {
+  toQuoteStatus,
+  type QuoteDecision,
+  type RepairQuote,
+  type RepairQuoteItem,
+} from '@/domain/repairs/quote';
+import {
   toRepairStatus,
   type Repair,
   type RepairTimelineEntry,
 } from '@/domain/repairs/types';
 
 import { authenticatedRequest } from '../authenticated-request';
-import { ApiError } from '../errors';
+import { ApiError, userFacingMessage } from '../errors';
 
 /**
  * A customer's own repairs — `/api/v1/customer/<company_slug>/repairs/`.
@@ -43,6 +49,28 @@ export class RepairNotAvailableError extends Error {
   constructor() {
     super('No encontramos esa reparación en tu cuenta.');
     this.name = 'RepairNotAvailableError';
+  }
+}
+
+/**
+ * Somebody already answered this quote, and differently.
+ *
+ * Its own outcome because the app must NOT show "error inesperado" for it: the
+ * quote is settled, the right move is to refetch and render what it actually
+ * says. Usually this is the same person on a second device.
+ */
+export class QuoteAlreadyDecidedError extends Error {
+  constructor(message = 'Esta cotización ya tiene una respuesta registrada.') {
+    super(message);
+    this.name = 'QuoteAlreadyDecidedError';
+  }
+}
+
+/** The server refused the decision itself — expired, withdrawn, not sent. */
+export class QuoteDecisionRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'QuoteDecisionRejectedError';
   }
 }
 
@@ -133,4 +161,142 @@ export async function fetchCustomerRepair(
   } catch (error) {
     return translate(error);
   }
+}
+
+// ---------------------------------------------------------------------------
+// BR-005B — the quote on my repair, and my answer to it
+// ---------------------------------------------------------------------------
+
+function toQuoteItem(raw: unknown): RepairQuoteItem {
+  const row = raw as Record<string, unknown>;
+  return {
+    id: Number(row.id),
+    itemType: String(row.item_type ?? ''),
+    itemTypeLabel: String(row.item_type_label ?? ''),
+    description: String(row.description ?? ''),
+    // Decimal STRINGS, carried verbatim. `format.ts` parses money at the point
+    // of display and never earlier — arithmetic on a float that came from
+    // '4899.00' is how a price ends up one cent short.
+    quantity: String(row.quantity ?? '0'),
+    unitPrice: String(row.unit_price ?? '0'),
+    lineTotal: String(row.line_total ?? '0'),
+  };
+}
+
+export function toQuote(raw: unknown): RepairQuote {
+  const row = raw as Record<string, unknown>;
+  const decision = row.decision as Record<string, unknown> | null | undefined;
+  return {
+    id: Number(row.id),
+    revision: Number(row.revision ?? 1),
+    status: toQuoteStatus(row.status),
+    statusLabel: String(row.status_label ?? ''),
+    currency: String(row.currency ?? ''),
+    subtotal: String(row.subtotal ?? '0'),
+    discountAmount: String(row.discount_amount ?? '0'),
+    taxAmount: String(row.tax_amount ?? '0'),
+    total: String(row.total ?? '0'),
+    validUntil: row.valid_until ? String(row.valid_until) : null,
+    // Strictly `=== true`: an absent flag is not a grant, and this one decides
+    // whether an Approve button is drawn at all.
+    isExpired: row.is_expired === true,
+    canBeDecided: row.can_be_decided === true,
+    customerNotes: String(row.customer_notes ?? ''),
+    items: Array.isArray(row.items) ? row.items.map(toQuoteItem) : [],
+    decision: decision
+      ? {
+          decision: String(decision.decision) === 'reject' ? 'reject' : 'approve',
+          decidedAt: String(decision.decided_at ?? ''),
+        }
+      : null,
+    sentAt: String(row.sent_at ?? ''),
+  };
+}
+
+/**
+ * The quote on my repair, or null.
+ *
+ * `null` is a normal answer, not an error: most of a repair's life has no quote
+ * on it, and the server says so with `{quote: null}`.
+ */
+export async function fetchCustomerRepairQuote(
+  repairId: number,
+  deps: { refreshCoordinator: RefreshCoordinator },
+  signal?: AbortSignal,
+): Promise<RepairQuote | null> {
+  try {
+    const raw = await authenticatedRequest<Record<string, unknown>>(
+      `${customerPath(requireTenant())}/${encodeURIComponent(String(repairId))}/quote/`,
+      { scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return raw.quote ? toQuote(raw.quote) : null;
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+/**
+ * Answer the quote.
+ *
+ * TWO FIELDS, and one is optional. Who decided, for which customer, in which
+ * company, through which channel, at what total and from which address are all
+ * the server's — a client that could state any of them could state a
+ * better-looking version of what happened.
+ *
+ * A 409 means somebody already answered, and it becomes its own error so the
+ * screen can refetch and show the real state instead of "error inesperado".
+ */
+export async function postQuoteDecision(
+  input: { repairId: number; quoteId: number; decision: QuoteDecision; reason?: string },
+  deps: { refreshCoordinator: RefreshCoordinator },
+  signal?: AbortSignal,
+): Promise<RepairQuote> {
+  const body: Record<string, unknown> = { decision: input.decision };
+  if (input.reason) body.reason = input.reason;
+
+  try {
+    const raw = await authenticatedRequest<Record<string, unknown>>(
+      `${customerPath(requireTenant())}/${encodeURIComponent(String(input.repairId))}`
+        + `/quotes/${encodeURIComponent(String(input.quoteId))}/decision/`,
+      { method: 'POST', body, scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return toQuote(raw.quote);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      throw new QuoteAlreadyDecidedError(
+        error.message && !error.message.startsWith('HTTP ')
+          ? error.message
+          : undefined,
+      );
+    }
+    if (error instanceof ApiError && error.status === 400) {
+      // A domain refusal — expired, withdrawn, not awaiting an answer. The
+      // server's own words are the most useful thing to show.
+      throw new QuoteDecisionRejectedError(
+        error.message && !error.message.startsWith('HTTP ')
+          ? error.message
+          : 'El servidor rechazó la respuesta.',
+      );
+    }
+    return translate(error);
+  }
+}
+
+/**
+ * The message to put in front of the person who pressed the button.
+ *
+ * `userFacingMessage` deliberately swallows `error.message` for API failures,
+ * but these three are written BY the domain FOR the customer.
+ */
+export function quoteErrorMessage(error: unknown): string {
+  if (
+    error instanceof QuoteAlreadyDecidedError ||
+    error instanceof QuoteDecisionRejectedError ||
+    error instanceof RepairNotAvailableError
+  ) {
+    return error.message;
+  }
+  return userFacingMessage(error);
 }

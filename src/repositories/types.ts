@@ -1,6 +1,7 @@
 import type { CompanyBrand } from '@/domain/company/types';
 import type { Order } from '@/domain/orders/types';
 import type { Category, Product } from '@/domain/products/types';
+import type { QuoteDecision, RepairQuote } from '@/domain/repairs/quote';
 import type { Repair } from '@/domain/repairs/types';
 
 /**
@@ -31,6 +32,12 @@ export type RepairRepository = {
   // `number` since M8: Django hands out integer primary keys, and the id was a
   // string only while the data was a fixture that could pick its own.
   getRepairById(id: number, signal?: AbortSignal): Promise<Repair | null>;
+  // BR-005B. `null` is a normal answer: most of a repair's life has no quote.
+  getRepairQuote(repairId: number, signal?: AbortSignal): Promise<RepairQuote | null>;
+  decideQuote(
+    input: { repairId: number; quoteId: number; decision: QuoteDecision; reason?: string },
+    signal?: AbortSignal,
+  ): Promise<RepairQuote>;
 };
 
 export type OrderRepository = {

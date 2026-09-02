@@ -734,9 +734,109 @@ ve en la app sin que la app sepa nada.
 ningún payload de Mobile. Comprobado con smoke: enviar `status:
 'waiting_approval'` y `number: 'HACKEADO-1'` devolvió `received` y `SRV-000001`.
 
+## Diagnóstico, cotización y aprobación — **INTEGRADO** (M9 / BR-005B)
+
+```
+VERIFIED_STABLE_MASTER · VERSIONED · INTEGRADO POR MOBILE (M9)
+```
+
+Verificado en `origin/master` **`36b8a8c`** (PR #8) con smoke real sobre las diez
+rutas nuevas. Cada campo de más abajo salió de una respuesta.
+
+### Interna — `/api/v1/internal/<slug>/service/orders/<id>/`
+
+| Endpoint | Requiere |
+|---|---|
+| `GET · POST diagnostics/` | `service.orders.view` · `service.diagnostic.manage` |
+| `PATCH diagnostics/<id>/` | `service.diagnostic.manage` |
+| `GET · POST quotes/` | `service.orders.view` · `service.diagnostic.manage` |
+| `PATCH quotes/<id>/` | `service.diagnostic.manage` |
+| `POST quotes/<id>/items/` | `service.diagnostic.manage` |
+| `DELETE quotes/<id>/items/<item>/` | `service.diagnostic.manage` |
+| `POST quotes/<id>/publish/` | `service.diagnostic.manage` |
+| `POST quotes/<id>/cancel/` | `service.diagnostic.manage` |
+
+Las dos colecciones devuelven `{count, results}` — **no** el envoltorio de cuatro
+campos de órdenes y equipos. Ninguna de las dos pagina: una orden tiene tres
+diagnósticos y dos cotizaciones, no trescientas.
+
+`service.diagnostic.manage` es una capability **nueva y separada** de
+`service.orders.manage`. Mover una orden de estado y poner precio a un trabajo
+son dos autoridades distintas, y el taller que quiera darle la primera a un
+mostrador sin darle la segunda ya puede.
+
+### Cliente — `/api/v1/customer/<slug>/repairs/<id>/`
+
+| Endpoint | Qué |
+|---|---|
+| `GET quote/` | La cotización **vigente**, o `{"quote": null}` |
+| `POST quotes/<id>/decision/` | `{decision: "approve"\|"reject", reason?}` |
+
+`{"quote": null}` es la respuesta normal durante casi toda la vida de una
+reparación, no un error: tratarla como fallo pondría una tarjeta roja en una
+pantalla sana.
+
+### El cuerpo de una decisión tiene dos campos, y uno es opcional
+
+Nada más. No hay `customer_id`, ni `amount`, ni `decided_at`, ni `channel`: el
+servidor ya sabe quién llama, cuánto costaba y cuándo es ahora. Un cliente capaz
+de decir cualquiera de esas cosas es un cliente capaz de decir una versión mejor
+de lo que pasó.
+
+Comprobado con smoke sobre `master`: inyectar `revision: 99`, `currency: 'USD'`,
+`total: '1.00'`, `status: 'sent'` y `line_total: '1.00'` no cambió ni un campo.
+
+### Tres respuestas distintas a una decisión
+
+| Código | Qué pasó | Qué hace la app |
+|---|---|---|
+| `200` | Se registró, o ya estaba registrada **igual** | Refresca y muestra el resultado |
+| `409` | Ya estaba registrada **al revés** | `QuoteAlreadyDecidedError` → refresca |
+| `400` | Venció, no está enviada, no se puede | Muestra las palabras del servidor |
+
+El `409` es el caso real: el mostrador contestó por teléfono un segundo antes.
+La app **refresca en `onSettled`, no en `onSuccess`**, para que quien perdió esa
+carrera acabe mirando el estado verdadero en vez de una pantalla obsoleta.
+
+Repetir la **misma** respuesta devuelve el mismo `decided_at` — verificado con
+smoke. No hay reintento en ninguna de las dos superficies: reintentar es la app
+contestando una segunda vez en nombre de alguien.
+
+### El servidor calcula el dinero, la app lo enseña
+
+`subtotal`, `tax_amount`, `total` y `line_total` son **respuesta**, nunca
+petición. Una línea se manda con `item_type`, `description`, `quantity` y
+`unit_price`; la multiplicación es del servidor. Todos los importes viajan y se
+guardan como **string decimal** y se parsean en el punto de dibujo, nunca antes.
+
+`is_expired` y `can_be_decided` también los calcula el servidor, y la app exige
+que sean estrictamente `true`. El reloj de un teléfono no es la autoridad sobre
+si una oferta sigue abierta.
+
+### Qué NO viaja al cliente, otra vez
+
+`internal_notes` de la cotización y del diagnóstico, `created_by_name`,
+`is_editable`, `revision` de los borradores, el `product` de cada línea, el
+`channel` de la decisión — y **el `reason` que escribió el propio cliente**. Lo
+escribió, no necesita que se lo lean de vuelta, y no tenerlo significa que ningún
+cambio futuro puede empezar a enseñarle a uno las palabras de otro.
+
+### La cotización publicada se congela
+
+Una cotización enviada no se edita: se **cancela** y se hace otra, con `revision`
+nueva. El modelo lo impide a nivel de `save()`, no solo la vista. Es la misma
+razón por la que un pedido no se edita después de pagarse.
+
+### `waiting_approval` salió de `available_transitions`
+
+Publicar una cotización es lo que mueve la orden ahí, y la respuesta de un
+cliente es lo que la mueve de ahí. El endpoint genérico de transición devuelve
+**400** para esos saltos — verificado con smoke sobre `approved`. La app no
+notó nada porque nunca tuvo la tabla.
+
 ### Pendiente
 
-Diagnóstico, cotización, aprobación, ejecución, repuestos, control de calidad,
-garantía. Evidencias fotográficas siguen `API_PENDING` (DEC-016: no hay
-proveedor de almacenamiento y no existe un solo `FileField` en el backend).
-BR-008 sigue `API_PENDING`, ahora con un modelo real contra el que diseñarse.
+Ejecución de la reparación, repuestos y consumo de stock, control de calidad,
+entrega, garantía, pagos de reparación. Evidencias fotográficas siguen
+`API_PENDING` (DEC-016: no hay proveedor de almacenamiento y no existe un solo
+`FileField` en el backend). BR-008 sigue `API_PENDING`.
