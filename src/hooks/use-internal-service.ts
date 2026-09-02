@@ -4,6 +4,7 @@ import { InternalCapabilityMissingError } from '@/api/endpoints/internal-v1';
 import type { ServiceOrderQuery } from '@/api/endpoints/internal-service-v1';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import type {
+  ServiceDeliveryInput,
   ServiceQualityResultInput,
   ServiceCompleteInput,
   ServiceExecutionInput,
@@ -441,5 +442,41 @@ export function usePassQualityCheck(orderId: number) {
 export function useFailQualityCheck(orderId: number) {
   return useServiceMutation<{ notes?: string }, unknown>(({ notes }) =>
     repository().failQualityCheck(orderId, notes ?? ''),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// M12 / BR-005E — the handover
+// ---------------------------------------------------------------------------
+
+export function useServiceDelivery(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceDelivery(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().getDelivery(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+/**
+ * Record the handover.
+ *
+ * `useServiceMutation` and not `useStockTouchingMutation`: handing a device back
+ * moves no stock. The parts left inventory when the technician fitted them, and
+ * invalidating the warehouse here would make a counter's screen refetch shelves
+ * for no reason.
+ *
+ * `retry: false` comes from the shared helper and matters more here than
+ * anywhere: a retried POST the user did not ask for is a second handover
+ * record, and the idempotency key protects the SERVER from a duplicate — not the
+ * user from an intention they never had.
+ */
+export function useRecordDelivery(orderId: number) {
+  return useServiceMutation<ServiceDeliveryInput, unknown>((input) =>
+    repository().recordDelivery(orderId, input),
   );
 }

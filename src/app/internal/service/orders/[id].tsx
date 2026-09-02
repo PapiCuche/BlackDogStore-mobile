@@ -18,6 +18,7 @@ import {
   Text,
 } from '@/design-system';
 import {
+  CAP_SERVICE_DELIVERY_MANAGE,
   CAP_SERVICE_DIAGNOSTIC_MANAGE,
   CAP_SERVICE_QUALITY_MANAGE,
   CAP_SERVICE_REPAIR_MANAGE,
@@ -25,6 +26,7 @@ import {
   CAP_SERVICE_ORDERS_VIEW,
 } from '@/domain/internal/service-types';
 import { hasUxCapability } from '@/domain/internal/types';
+import { ServiceDeliverySection } from '@/features/internal/service-delivery-section';
 import { ServiceDiagnosticSection } from '@/features/internal/service-diagnostic-section';
 import { ServiceExecutionSection } from '@/features/internal/service-execution-section';
 import { ServicePartsSection } from '@/features/internal/service-parts-section';
@@ -51,6 +53,8 @@ import {
   useRecordQualityResult,
   usePassQualityCheck,
   useFailQualityCheck,
+  useServiceDelivery,
+  useRecordDelivery,
   useStartRepair,
   useUpdateExecution,
   useCompleteRepair,
@@ -144,6 +148,14 @@ export default function ServiceOrderDetailScreen() {
   const recordQuality = useRecordQualityResult(orderId);
   const passQuality = usePassQualityCheck(orderId);
   const failQuality = useFailQualityCheck(orderId);
+
+  // M12 / BR-005E. Its OWN capability, not an add-on to `service.orders.manage`
+  // — a shop that wants reception to release devices should not have to hand the
+  // front desk the machine that cancels orders. `hasUxCapability` draws the
+  // button; the server is what authorises the write.
+  const mayDeliver = hasUxCapability(context ?? null, CAP_SERVICE_DELIVERY_MANAGE);
+  const delivery = useServiceDelivery(safeId, { enabled: mayView });
+  const recordDelivery = useRecordDelivery(orderId);
 
   const { data: order, isPending, isError, error } = query;
   const title = order?.number ?? 'Orden de servicio';
@@ -374,6 +386,27 @@ export default function ServiceOrderDetailScreen() {
             }
             onPass={(notes) => passQuality.mutate({ notes })}
             onFail={(notes) => failQuality.mutate({ notes })}
+          />
+
+          {/* M12 / BR-005E. `delivered` is event-only on the server too, so the
+              status buttons below cannot reach it: handing the device over is
+              the only road in, and it records WHO took it. It records no
+              payment — the platform cannot charge for a repair. */}
+          <ServiceDeliverySection
+            delivery={delivery.data ?? null}
+            status={order.status}
+            canManage={mayDeliver}
+            isBusy={recordDelivery.isPending}
+            error={recordDelivery.error}
+            onDeliver={(input) =>
+              recordDelivery.mutate(input, {
+                onSuccess: () =>
+                  Alert.alert(
+                    'Entrega registrada',
+                    `${order.number} quedó entregada a ${input.recipientName}.`,
+                  ),
+              })
+            }
           />
 
           {/* Only with `service.orders.manage`. The server re-checks anyway, so

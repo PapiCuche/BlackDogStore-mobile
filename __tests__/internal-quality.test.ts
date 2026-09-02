@@ -126,8 +126,12 @@ describe('the two states M11 built', () => {
     expect(describeRepairStatus('ready_for_pickup', 'Puede pasar').label).toBe('Puede pasar');
   });
 
-  it('leaves delivered and warranty unknown, because they have no module', () => {
-    for (const future of ['delivered', 'warranty']) {
+  it('leaves warranty unknown, because it has no module', () => {
+    // `delivered` left this list in M12, which built the handover that gives it
+    // meaning. The RULE is what the test is for and it has not moved: a state
+    // arrives with its module, and shipping the word without the module lets an
+    // order enter a state no code can act on.
+    for (const future of ['warranty', 'teletransportado']) {
       expect(isKnownRepairStatus(future)).toBe(false);
       expect(repairStageIndex(future)).toBe(-1);
       expect(REPAIR_STAGES).not.toContain(future as never);

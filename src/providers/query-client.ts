@@ -196,6 +196,11 @@ export const queryKeys = {
     [...internalPrefix(scope), 'service', 'order', orderId, 'quality'] as const,
   internalServiceQualityHistory: (scope: QueryScope, orderId: number) =>
     [...internalPrefix(scope), 'service', 'order', orderId, 'quality-history'] as const,
+  // M12. The handover. One per order, and once it exists it never changes —
+  // the server refuses updates — so this key is only ever refetched because a
+  // write elsewhere invalidated the whole service root.
+  internalServiceDelivery: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'delivery'] as const,
   /** The whole module, for invalidation after a write. */
   internalServiceRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'service'] as const,

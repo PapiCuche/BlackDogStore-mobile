@@ -13,12 +13,14 @@
  * amended it, and the shape here now follows what shipped rather than what was
  * proposed:
  *
- *   · SEVEN stages became FOUR codes, and M9 made them six by building the
- *     quote and the decision that give `approved` and `rejected` meaning.
- *     `in_repair`, `quality_check`, `ready_for_pickup` and `delivered` are real
- *     states of a real workshop and none of them exists yet: each needs a
- *     module — parts, a checklist, a pickup flow — that nobody has built. A
- *     state no server code can act on is a state that lies.
+ *   · SEVEN stages became FOUR codes, and every phase since has earned the
+ *     ones it built: M9 the quote and the decision behind `approved` and
+ *     `rejected`, M10 the bench behind `in_repair`/`waiting_parts`/`repaired`,
+ *     M11 the checklist behind `quality_control`/`ready_for_pickup`, M12 the
+ *     handover behind `delivered`. `warranty` is still absent, because a state
+ *     no server code can act on is a state that lies — and when it arrives it
+ *     will be a RE-ENTRY, a new order citing this one, never a status bolted
+ *     onto a closed one.
  *   · `id` became a NUMBER. Django hands out integer primary keys.
  *   · `code` became `number`, which is what the shop prints on the ticket.
  *   · The LABEL comes from the server, per tenant. A company that renamed
@@ -51,6 +53,11 @@ export const REPAIR_STAGES = [
   // was called: this platform has no notification channel, and a stage that
   // implied one would have customers turning up for nothing.
   'quality_control', 'ready_for_pickup',
+  // M12 — the end of the line. `delivered` means the device left with somebody.
+  // It does NOT mean anything was paid: this platform cannot charge for a repair
+  // yet, and a stage a customer read as "settled" would be the one lie that
+  // costs an argument at the counter.
+  'delivered',
 ] as const;
 
 export type RepairStage = (typeof REPAIR_STAGES)[number];
@@ -167,24 +174,27 @@ export function isStageCurrent(stage: RepairStage, status: RepairStatus): boolea
   return stage === status;
 }
 
+/** The codes that END a repair. Nothing follows any of them. */
+const CLOSED_STATUSES: readonly RepairStatus[] = ['cancelled', 'rejected', 'delivered'];
+
 /**
  * Whether the repair is still going somewhere.
  *
- * `rejected` joined `cancelled` in M9: the customer declined the work, the shop
- * stops, and a declined repair must not sit on the Home screen as the active
- * one. `approved` is deliberately NOT here — approval authorises work rather
- * than finishing it, and the backend stamps no completion of any kind.
+ * ONE PLACE LEARNS ABOUT AN ENDING, not every screen — which is what this
+ * comment promised in M9 and what M12 now spends. `delivered` joins `cancelled`
+ * and `rejected`: the customer collected the device, so the repair must not sit
+ * on the Home screen as the active one forever.
  *
- * When delivery exists, this is the function that learns about it — one place,
- * not every screen.
+ * `ready_for_pickup` is deliberately NOT here. The device is ready and still in
+ * the shop, and treating that as finished would drop the one card a customer
+ * most wants to see.
+ *
+ * An UNKNOWN code counts as OPEN. A state this build has never heard of is not
+ * evidence that anything finished, and guessing "closed" would hide a live
+ * repair — the expensive direction of the two.
  */
 export function isRepairOpen(repair: Repair): boolean {
-  // `repaired` is NOT closed. The technician finished; quality control and
-  // handover have not shipped, so the device is still with the shop and the
-  // customer still has a reason to look. `rejected` and `cancelled` remain the
-  // only two endings, and an UNKNOWN code counts as open — a state this build
-  // has never heard of is not evidence that anything finished.
-  return repair.status !== 'cancelled' && repair.status !== 'rejected';
+  return !CLOSED_STATUSES.includes(repair.status);
 }
 
 /**

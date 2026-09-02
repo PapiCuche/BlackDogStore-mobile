@@ -257,9 +257,11 @@ describe('mapping — every field verified against a real response', () => {
     // never rendered as FURTHER ALONG. It simply gets no position at all.
     const { module } = load();
 
-    expect(module.toRepair({ id: 1, status: 'delivered' }).status).toBe('delivered');
-    expect(repairStageIndex('delivered')).toBe(-1);
-    expect(describeRepairStatus('delivered').tone).toBe('neutral');
+    // The example moves every time a phase earns a code — M12 earned
+    // `delivered` — and the lesson stays exactly where it was.
+    expect(module.toRepair({ id: 1, status: 'warranty' }).status).toBe('warranty');
+    expect(repairStageIndex('warranty')).toBe(-1);
+    expect(describeRepairStatus('warranty').tone).toBe('neutral');
   });
 
   it('still falls back to received when NOTHING arrived', () => {

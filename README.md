@@ -715,6 +715,50 @@ reparó.
 **«Listo para recoger» no significa que se avisó a nadie.** El equipo pasó sus
 pruebas. Esta plataforma no tiene canal de notificaciones.
 
+### Entrega (M12)
+
+**Se registra quién se llevó el equipo y cuándo. Nada más.** `delivered` es el
+duodécimo estado y el segundo terminal — llega con su módulo, como todos desde
+M8. `warranty` sigue sin existir, y cuando llegue será un **reingreso** que cita
+a la orden anterior, nunca un estado pegado a una orden cerrada.
+
+**No registra cobro, y la pantalla lo dice en voz alta.** Esta plataforma no
+puede cobrar una reparación: `PaymentTransaction` cuelga de una `Order` de
+e-commerce por una FK no nula. Un interruptor de «cobrado» aquí sería una
+mentira que el taller se cree. Un guard estructural prohíbe cualquier campo o
+identificador de pago en los archivos de M12, y otro comprueba que el texto
+visible nunca afirme un pago.
+
+**Solo se entrega un equipo que aprobó control de calidad.** `delivered` es
+event-only en el servidor: el endpoint genérico lo rechaza, porque mover la
+orden sin registrar a quién se le dio el equipo sería una entrega sin nadie del
+otro lado.
+
+**Quien recibe es texto libre.** Suele ser un familiar o un mensajero. Exigir un
+`Customer` obligaría al mostrador a inventar clientes para poder entregar.
+
+**Entregar es un permiso distinto de gestionar la orden.**
+`service.orders.manage` es mucho más ancho y **puede cancelar la orden**; un
+taller que quiere que el mostrador libere equipos no tiene por qué entregarle
+también la máquina técnica. Y al revés: se puede pedir que quien reparó no sea
+quien entrega.
+
+**No hay editar ni borrar, porque el servidor no los tiene.** La fila rechaza
+actualizaciones y borrados en su propio `save`. Una entrega es un hecho con
+fecha.
+
+**Sin firma y sin foto** (DEC-016): el proveedor de almacenamiento sigue sin
+decidirse, y un campo de evidencia que no guarda nada es peor que un hueco
+honesto.
+
+**Un doble toque no entrega dos veces.** La clave de idempotencia se acuña una
+vez por intención, vive en un `ref` y se reenvía idéntica. La misma clave con
+otro destinatario responde 409 y llega como su propio error: no es «falló la
+entrega», es una clave gastada en otra cosa.
+
+**Para el cliente, `delivered` cierra la reparación** y sale de la Home. No ve
+quién la recogió, ni las notas del mostrador, ni quién se la dio.
+
 ### Inventario: una tercera puerta
 
 El stock solo existe en un lugar, así que el módulo de inventario pregunta
