@@ -151,6 +151,20 @@ export const queryKeys = {
   internalInventoryRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'inventory'] as const,
 
+  // Transfers live UNDER the inventory prefix deliberately (IP1B). Dispatching
+  // takes units off one shelf and receiving puts them on another, so a transfer
+  // that advances invalidates the summary, the stock list and the Kardex — and
+  // a movement recorded elsewhere invalidates the transfer list, because the
+  // shelf it was drawn against has changed. One root, one invalidation, no
+  // screen left showing a total that no longer matches the rows beneath it.
+  internalTransfers: (
+    scope: QueryScope,
+    params: Record<string, unknown> = {},
+  ) =>
+    [...internalPrefix(scope), 'inventory', 'transfers', JSON.stringify(params)] as const,
+  internalTransfer: (scope: QueryScope, transferId: number) =>
+    [...internalPrefix(scope), 'inventory', 'transfers', 'detail', transferId] as const,
+
   // ── INTERNAL service (M8) ────────────────────────────────────────────────
   //
   // A separate namespace from `repairs`, which is the CUSTOMER's view of the
