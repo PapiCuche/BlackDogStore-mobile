@@ -774,3 +774,63 @@ Lo que la regla **siempre** quiso decir es lo que dice ahora — *la entrega no
 registra dinero* — así que se comprueba sobre la sección de entrega, y dos
 afirmaciones nuevas fijan que la llamada de entrega no manda ningún campo de
 pago y que la pantalla reacciona al 409 en lugar de reportar un fallo genérico.
+
+
+## Punto de venta (IP1A)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master d484e3e)
+Contexto de caja               INTEGRADO / TESTED
+Búsqueda de producto           INTEGRADO / TESTED
+Lectura de código de barras    INTEGRADO / TESTED (endpoint; sin cámara)
+Registrar venta                INTEGRADO / TESTED
+Idempotencia (misma clave)     INTEGRADO / TESTED
+409 insufficient_stock         INTEGRADO / TESTED
+409 idempotency_conflict       INTEGRADO / TESTED
+Selección de sucursal          INTEGRADO / TESTED
+Previsualizar total            PARCIAL — el endpoint está integrado; la pantalla
+                               todavía no lo llama antes de cobrar
+Asignar vendedor               PENDIENTE — capability y backend existen
+Descuento manual               PENDIENTE — capability y backend existen
+Cupón                          PENDIENTE
+Comisión (verla)               PENDIENTE
+Combos sugeridos               PENDIENTE — sin ruta v1
+Cámara / escáner               PENDIENTE — el endpoint por código existe; la
+                               cámara es otra decisión
+Anulación / devolución         **NO EXISTE en el backend** — prohibido en Mobile
+Arqueo de caja                 **NO EXISTE en el backend** — prohibido en Mobile
+```
+
+**Mobile no crea funcionalidad aquí.** Las cinco rutas llaman a
+`pos_services.create_pos_sale` y `build_pos_sale` — las mismas funciones que
+usa la caja Web — y un test de paridad en el backend comprueba que las dos
+superficies devuelven payloads **byte a byte idénticos**.
+
+**Esta app no calcula ningún total.** Ni para mostrar un subtotal corriendo. Un
+número sumado en un teléfono puede discrepar del de la caja, y el que discrepa
+es el que se le está pidiendo pagar a un cliente. Un guard estructural falla si
+aparece `Number(...)`, `parseFloat`, `toFixed` o una operación entre
+identificadores de dinero — con `?.` y `[` en la clase de caracteres, que es la
+lección de M12B.
+
+**El body no lleva precio, total, subtotal ni descuento.** Un test comprueba que
+un `price` puesto en una línea se **descarta** antes de enviar.
+
+**No elige sucursal.** `defaultBranch` puede llegar `null` —el servidor se niega
+a escoger cuando hay varias y ninguna autorizada por defecto— y entonces la
+pantalla pregunta. Un guard prohíbe `branches[0]`.
+
+**No comparte nada con el carrito del cliente.** Un guard falla si aparece
+`use-cart`, `CartProvider`, `useCheckout` o `/api/v1/customer/`.
+
+**Lo que la pantalla todavía no ofrece, y lo dice en voz alta:** si tu cuenta
+puede aplicar descuentos o asignar vendedor, la caja muestra un aviso diciendo
+que eso se hace desde la consola Web. Ocultar un permiso que existe sería peor
+que nombrarlo.
+
+**Dos pistas del servidor que esta app NO lleva**, y es deliberado:
+`available_elsewhere` (en qué otra sucursal hay stock) y `existing_order` (qué
+venta ocupó ya la clave). `ApiError` expone `kind`, `status`, `fieldErrors` y
+`code`, no el cuerpo de la respuesta, y ensanchar un tipo de error compartido
+por toda la app no es algo que se cuele dentro de una fase de POS. Registrado
+como deuda.

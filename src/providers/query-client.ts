@@ -213,6 +213,16 @@ export const queryKeys = {
     [...internalPrefix(scope), 'service', 'order', orderId, 'payments'] as const,
   internalServicePaymentSummary: (scope: QueryScope, orderId: number) =>
     [...internalPrefix(scope), 'service', 'order', orderId, 'payment-summary'] as const,
+  // IP1A — the till. `context` and a product SEARCH are two different lifetimes:
+  // the context changes when somebody's access does, a search changes with every
+  // keystroke. Selling invalidates the POS root AND the inventory root, because
+  // a sale moves a shelf that the inventory module is showing.
+  internalPosContext: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'pos', 'context'] as const,
+  internalPosSearch: (scope: QueryScope, branchId: number, term: string) =>
+    [...internalPrefix(scope), 'pos', 'search', branchId, term] as const,
+  internalPosRoot: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'pos'] as const,
   /** The whole module, for invalidation after a write. */
   internalServiceRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'service'] as const,
