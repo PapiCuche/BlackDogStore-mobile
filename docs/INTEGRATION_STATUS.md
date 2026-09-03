@@ -5,8 +5,16 @@ Estado real, no aspiracional. La fuente de verdad ejecutable es
 decidir si muestra el aviso de "datos de ejemplo". Si este documento y ese
 archivo discrepan, **el archivo tiene razón**.
 
-> **Ninguna API privada está integrada.** En la configuración por defecto
-> (development), toda pantalla con datos corre sobre fixtures.
+> **Estado real, septiembre 2026.** Las superficies privadas de cliente
+> (pedidos, reparaciones, checkout) y toda la superficie interna (POS,
+> inventario, transferencias, servicio técnico) están integradas contra
+> `/api/v1/`. En development los mocks siguen disponibles como modo explícito,
+> no como estado por defecto de la integración.
+>
+> La frase que ocupaba este lugar —«ninguna API privada está integrada»— era de
+> M0.1 y contradecía la tabla que está tres líneas más abajo. Se corrigió en
+> IP2B-G0 junto con `src/config/integration-status.ts`, que decía lo mismo y
+> además se lo mostraba al usuario en Profile.
 
 ## Resumen
 
@@ -435,8 +443,12 @@ Kardex                         INTEGRADO / TESTED
 Ajuste manual                  INTEGRADO / TESTED
 Alcance por sucursal           IMPLEMENTADO / TESTED
 Cache con sucursal en la clave IMPLEMENTADO / TESTED
-Transferencias y recuentos     NO EXPUESTOS (a propósito, backend y app)
+Transferencias y recuentos     NO EXPUESTOS (estado EN M7A)
 ```
+
+> **Lo anterior es la foto de M7A.** Las transferencias se expusieron después,
+> en IP1B, como seis rutas —una por transición— y Mobile las integró. Los
+> recuentos siguen sin superficie v1. Ver el estado vigente abajo.
 
 **La sucursal es la tercera puerta.** Membresía → 404. Capability → 403.
 Sucursal ajena → **404 otra vez**, y la app lo traduce a `BranchOutOfScopeError`
@@ -452,9 +464,44 @@ la sucursal cero.
 `StockAdjustmentInput` ni en el cuerpo del POST, y un test estructural falla si
 alguien lo añade.
 
-**Lo que sigue PENDIENTE**: transferencias, recuentos, reportes de inventario
-(`inventory.reports` no tiene superficie v1), clientes internos y servicio
-técnico.
+**Lo que seguía PENDIENTE al cerrar M7A**: transferencias, recuentos, reportes
+de inventario, clientes internos y servicio técnico.
+
+**Estado vigente (IP2B-G0).** De esa lista:
+
+| | |
+|---|---|
+| Transferencias entre sucursales | **INTEGRADO / TESTED** — IP1B, seis rutas, una por transición |
+| Servicio técnico | **INTEGRADO / TESTED** — M8 a M12B, la cadena completa |
+| Recuentos físicos | **PENDIENTE** — el dominio existe y la Web lo usa, pero no hay `/api/v1/`. Bloqueo formalizado como **BR-009** |
+| Reportes de inventario (`inventory.reports`) | **PENDIENTE** — sin superficie v1 |
+| Clientes internos | **PENDIENTE** — sin superficie v1 |
+
+## Recuentos físicos (IP2B) — BLOQUEADO
+
+```
+Dominio backend                EXISTE (inventory_services)
+Consola Web                    LO USA (/api/admin/inventory/counts/)
+Superficie /api/v1/            NO EXISTE  ← el bloqueo
+Mobile                         PROHIBIDO hasta que exista
+```
+
+No se implementa nada en Mobile: no hay endpoint que llamar y **una operación
+que no existe no recibe un mock**, recibe la palabra PENDIENTE. El contrato que
+Backend necesita entregar está detallado en `docs/BACKEND_REQUIREMENTS.md`
+como **BR-009**, auditado contra `origin/master` `2dca0a3`.
+
+Dos hechos del dominio que el adapter debe heredar sin reinterpretar:
+
+- **La corrección se mide al aprobar, no al empezar.** `physical −
+  theoretical_at_approval`, releyendo el estante bajo lock. Contra el snapshot
+  inicial, cada venta ocurrida durante el recuento se des-vendería.
+- **No contado no es cero.** Una línea sin cantidad se omite al aprobar; darla
+  por cero daría de baja inventario que nadie miró.
+
+Y una limitación declarada, no maquillada: un cliente v1 solo descubre productos
+que **ya tienen fila de stock** en esa sucursal. No existe búsqueda de catálogo
+interno para `inventory.view`.
 
 ## Design system tenant-aware (UI7)
 

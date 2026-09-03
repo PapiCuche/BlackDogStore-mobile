@@ -358,10 +358,13 @@ Dos cosas que conviene tener presentes al leer esa documentación:
   con cambios sin commitear. M0.1 re-verificó todo contra `origin/master` y
   etiquetó cada afirmación como `VERIFIED_STABLE_MASTER`,
   `OBSERVED_IN_PROGRESS` o `PROPOSED`.
-- **`/api/v1/` ya existe, pero solo el slice de catálogo.** Que el prefijo
-  versionado aparezca no significa que exista el contrato entero: no hay
-  `/api/v1/auth/*` ni superficie privada v1, y el backend tiene tests que lo
-  fijan. BR-001 sigue `API_PENDING` y BR-007 sigue `PARCIAL`.
+- **Que el prefijo versionado exista no es que exista el contrato.** *(Lección
+  de M0.1, cuando `/api/v1/` era solo el slice de catálogo y el backend tenía
+  tests fijando un 404 en `/api/v1/auth/*` y en toda superficie privada.)* La
+  lección se mantiene; el hecho ya no: auth, cliente e interno están integrados.
+  Lo que sigue pendiente está en `docs/BACKEND_REQUIREMENTS.md`, y esta viñeta
+  se quedó en presente durante varias fases después de dejar de ser cierta —
+  que es exactamente el modo en que un documento envejece sin que nadie mienta.
 
 ## Seguridad
 
