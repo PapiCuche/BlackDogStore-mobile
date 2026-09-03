@@ -33,10 +33,11 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | BR-002 | Selección de tenant validada server-side | **RESUELTO** — público, cliente e interno |
 | BR-003 | Exponer `fulfillment_status` | **IMPLEMENTADO para v1** |
 | BR-004 | Paginación opt-in | MEDIA |
-| BR-005 | Dominio de reparaciones | ALTA — **NÚCLEO ENTREGADO en M8**, resto pendiente |
+| BR-005 | Dominio de reparaciones | **RESUELTO** — cadena completa M8 a M12B: recepción, diagnóstico, cotización, aprobación, ejecución, repuestos, calidad, entrega y cobro |
 | BR-006 | Endpoint público de marca | **IMPLEMENTADO** |
-| BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — catálogo, auth, cliente, checkout e interno de ventas; inventario y servicio pendientes |
+| BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — público, auth, cliente, checkout, interno de ventas, inventario y servicio técnico están; faltan recuentos (BR-009), reportes de inventario y clientes internos |
 | BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
+| BR-009 | Superficie v1 para **recuentos físicos de inventario** | **ALTA** — dominio y Web existen; sin adapter v1 Mobile no puede integrarlo |
 
 ---
 
@@ -50,10 +51,17 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | Slice de catálogo público | **IMPLEMENTADO** — integrado por Mobile en M2 |
 | `/api/v1/auth/*` (núcleo de sesión) | **IMPLEMENTADO** (BR-001A) |
 | `/api/v1/auth/*` (ciclo de cuenta) | **PENDIENTE** (BR-001B) |
-| Superficie privada v1 (pedidos, reparaciones) | **PENDIENTE** |
+| Superficie privada v1 de cliente (pedidos, reparaciones, checkout) | **IMPLEMENTADO** |
+| Superficie interna v1 (ventas, POS, inventario, servicio) | **IMPLEMENTADO** |
+| Superficie interna v1 — recuentos físicos | **PENDIENTE** (BR-009) |
+| Superficie interna v1 — reportes de inventario, clientes | **PENDIENTE** |
 
-Existir el prefijo no es existir el contrato. El backend tiene tests que fijan
-que hoy **no hay** `/api/v1/auth/*` ni superficie privada v1: un 404 en cada uno.
+Existir el prefijo no es existir el contrato. **Esa lección viene de M0.1**,
+cuando el backend tenía tests que fijaban un 404 en `/api/v1/auth/*` y en toda
+superficie privada, y esta sección lo decía en presente mucho después de que
+dejara de ser cierto. Hoy ambas existen; lo que queda pendiente está en las
+filas de arriba, y lo que las hace verdaderas es que cada una se verificó
+contra `origin/master` con un smoke real, no leyendo un plan.
 
 
 **Motivo**
@@ -775,3 +783,306 @@ token. `INTEGRATION_STATUS.md` lo mantiene en `API_PENDING`.
   hace falta añadir la IP LAN. **Mobile no lo modifica**, lo pide.
 - **CORS**: una app nativa no envía `Origin`, así que `CORS_ALLOWED_ORIGINS`
   normalmente no interviene. No pedimos ningún cambio ahí.
+
+
+---
+
+# BR-009 — Superficie `/api/v1/` para recuentos físicos de inventario
+
+**Estado:** **PENDIENTE** · **Prioridad:** ALTA · **Bloquea:** IP2B Mobile
+
+Contrato auditado en `PapiCuche/BlackDogStore-web` @ `origin/master`
+**`2dca0a3ac89a957e3eecd832e2776c468e63c53a`**, leyendo el código, no un plan.
+Cada afirmación de abajo lleva su símbolo.
+
+> **Backend decide la forma final.** Lo que sigue es el adapter mínimo que
+> Mobile necesita, expresado en la convención que ya existe. No es un diseño de
+> dominio: el dominio ya está hecho y no debe cambiar para acomodar a un cliente.
+
+## Operación bloqueada
+
+Recuentos físicos de inventario (*inventory counts / recounts*).
+
+## Estado actual
+
+| Capa | Estado |
+|---|---|
+| Dominio | **EXISTE** — `inventory_services`: `create_inventory_count`, `set_count_item`, `approve_inventory_count`, `cancel_inventory_count` |
+| Modelos | **EXISTEN** — `InventoryCount`, `InventoryCountItem` |
+| Web | **LO USA** — `/api/admin/inventory/counts/…`, cinco vistas en `inventory_views` |
+| Tests backend | **EXISTEN** — incluida la concurrencia (`Phase2dConcurrencyTest`) |
+| `/api/v1/` | **NO EXISTE** ← el bloqueo |
+| Mobile | **PROHIBIDO** hasta que exista. No se inventan endpoints. |
+
+## Estados reales del recuento
+
+```
+draft ──(primera línea)──▶ counting ──approve──▶ approved
+  │                           │
+  └──────────cancel───────────┘
+```
+
+`InventoryCount.STATUS_CHOICES` = `draft` · `counting` · `review` · `approved` ·
+`cancelled`.
+
+- `EDITABLE_STATUSES` = {`draft`, `counting`, `review`}
+- `APPROVABLE_STATUSES` = {`counting`, `review`}
+
+**`review` es real y ninguna transición lo produce.** Ni el dominio ni la consola
+Web tienen una ruta que lo fije; se alcanza editando la fila. El adapter **no
+debe inventar** una transición que el negocio no construyó.
+
+**Nada fija un estado directamente.** `counting` es consecuencia de anotar un
+hallazgo (`set_count_item` lo cambia al guardar la primera línea) y `approved` es
+consecuencia de corregir estantes reales. Por eso el adapter no debe exponer
+`PATCH status` ni `…/status/`: permitiría afirmar que un recuento se aprobó sin
+que se moviera nada.
+
+## Campos de una línea, y por qué son tres números
+
+`InventoryCountItem`:
+
+| Campo | Quién lo pone | Qué significa |
+|---|---|---|
+| `theoretical_at_start` | servidor, la **primera** vez que el producto entra | lo que el sistema decía cuando esa persona empezó a contar. Evidencia, no aritmética |
+| `physical_quantity` | **cliente** | lo que se encontró. `null` = **no contado**, que no es cero |
+| `theoretical_at_approval` | servidor, al aprobar, **bajo lock** | lo que el sistema dice en el instante de aplicar |
+| `difference` | servidor, al aprobar | `physical − theoretical_at_approval` |
+| `note` | cliente | texto libre, ≤250 |
+
+## Cómo se calcula y aplica la corrección
+
+**CONFIRMADO** leyendo `approve_inventory_count`:
+
+```python
+with transaction.atomic():
+    locked = InventoryCount.objects.select_for_update().get(pk=count.pk)
+    ...
+    stocks = _locked_branch_stocks(locked.branch, [i.product for i in items])
+    for item in items:
+        theoretical = stocks[item.product_id].quantity     # releído BAJO LOCK
+        difference  = item.physical_quantity - theoretical
+```
+
+La observación previa **queda confirmada, no refutada**: la corrección es
+`physical − theoretical_at_approval`, releyendo bajo lock, **no** contra el
+snapshot inicial. `_locked_branch_stocks` bloquea las filas `BranchStock` en
+orden `(branch_id, product_id)` — el único orden que usa el módulo — para evitar
+deadlocks.
+
+Y está fijado por un test que ya existe, `Phase2dConcurrencyTest`: cuenta 10,
+se venden 4 durante la revisión, y el resultado es `+3` contra el 7 del momento.
+Usar el 11 inicial habría aplicado `−1` y **destruido una unidad real**.
+
+Otras reglas del apply:
+- `difference == 0` → **no** genera movimiento.
+- Signo → `StockMovement.CORRECTION_POSITIVE` / `CORRECTION_NEGATIVE`, cantidad `abs(difference)`.
+- Líneas con `physical_quantity IS NULL` se **omiten**. Tratar «nadie lo contó» como «no hay» daría de baja inventario que nadie miró.
+- Sin ninguna línea contada → `InventoryCountError` (400).
+- `metadata` del movimiento lleva los tres números y el id del recuento.
+
+## Política de concurrencia — comportamiento requerido
+
+El adapter **hereda** esta política y no la reinterpreta:
+
+1. El recuento se bloquea con `select_for_update()`.
+2. Las filas de stock se bloquean en orden determinista.
+3. La corrección se mide contra el valor releído, nunca contra el snapshot.
+4. Todo ocurre en una transacción: o se aplican todas las líneas o ninguna.
+
+## Idempotencia
+
+| Operación | Comportamiento real |
+|---|---|
+| `approve` sobre un recuento ya aprobado | **IDEMPOTENTE** — devuelve los movimientos existentes, no crea otros |
+| `cancel` sobre uno ya anulado | **IDEMPOTENTE** — devuelve el recuento |
+| `approve` fuera de `APPROVABLE_STATUSES` | `InventoryCountError` |
+| `cancel` sobre un **aprobado** | **RECHAZADO** — «ya generó movimientos y no puede anularse» |
+| `set_count_item` fuera de `EDITABLE_STATUSES` | rechazado — «ya no admite cambios» |
+
+Ninguna necesita clave de idempotencia de cliente: el dominio ya es seguro ante
+repetición. **Mobile no debe reintentar igualmente** — `retry: false`.
+
+## Rechazos que son parte normal del dominio
+
+No son fallos; el cliente debe mostrarlos tal cual:
+
+- recuento no editable;
+- producto de otra empresa;
+- cantidad física negativa o no entera;
+- aprobar sin nada contado;
+- anular un aprobado;
+- sucursal inactiva o de otra empresa.
+
+## Endpoints v1 requeridos — propuesta mínima
+
+Convención existente: `/api/v1/internal/<slug>/inventory/…`
+
+| Método | Ruta | Acto |
+|---|---|---|
+| `GET` | `internal/<slug>/inventory/counts/` | listar los de mis sucursales |
+| `POST` | `internal/<slug>/inventory/counts/` | abrir un borrador en **una** sucursal |
+| `GET` | `internal/<slug>/inventory/counts/<id>/` | el documento con sus líneas |
+| `PUT` | `internal/<slug>/inventory/counts/<id>/items/` | anotar hallazgos |
+| `POST` | `internal/<slug>/inventory/counts/<id>/approve/` | aplicar las diferencias |
+| `POST` | `internal/<slug>/inventory/counts/<id>/cancel/` | cerrar sin mover stock |
+
+**Una ruta por ACTO real, ninguna que fije un estado.** Es la misma forma que ya
+tienen las transferencias en v1, y el motivo es idéntico.
+
+**`PUT items/` debe ser ADITIVO**, como el de Web: enviar un subconjunto
+actualiza esos productos y deja el resto en paz. Un recuento se llena a lo largo
+de horas por personas que recorren pasillos distintos, y un PUT de lista completa
+dejaría que el último guardado borrara el trabajo de los demás.
+
+## Capabilities
+
+Medidas sobre las vistas Web, no supuestas:
+
+| Operación | Capability |
+|---|---|
+| `GET` lista | `inventory.view` |
+| `GET` detalle | `inventory.view` |
+| `POST` abrir | `inventory.adjust` |
+| `PUT` líneas | `inventory.adjust` |
+| `POST` approve | `inventory.adjust` |
+| `POST` cancel | `inventory.adjust` |
+
+No hace falta capability nueva. **El nombre de un rol nunca es autoridad**: la
+única fuente es `resolve_capabilities()` / `has_capability()`.
+
+## Autoridad de tenant
+
+La empresa se deriva **del slug de la ruta más la membresía del llamante**,
+server-side. Nunca de un campo del cuerpo ni de una cabecera. Empresa
+desconocida, inactiva o sin membresía → **404 idéntico**, para que no se pueda
+enumerar qué empresas existen.
+
+## Autoridad de sucursal
+
+Un recuento vive en **una** sucursal, así que la visibilidad de sucursal es toda
+la regla — a diferencia de una transferencia, que tiene dos extremos.
+
+| Situación | Código |
+|---|---|
+| Recuento en una sucursal fuera de mi alcance | **404**, no 403 |
+| Abrir un recuento en una sucursal que no alcanzo | **404** |
+| Sucursal de otra empresa | **404** |
+| Con capability, sin acceso a ninguna sucursal | 403 (`NoBranchError`) |
+
+El 404 es deliberado: un 403 confirmaría que el documento existe y permitiría
+barrer ids hasta dibujar la cadena de tiendas.
+
+## Contrato mínimo
+
+**Request — solo intención.**
+
+```jsonc
+// POST counts/
+{ "branch": 4, "reason": "Recuento mensual" }
+
+// PUT counts/<id>/items/   ← LISTA, aditiva
+[ { "product_slug": "cable-usb-c", "physical_quantity": 8, "note": "" } ]
+
+// POST approve/ · cancel/
+{}
+```
+
+Mobile **NO** debe enviar, y el servidor **no** debe aceptar como autoridad:
+stock final · corrección calculada · `theoretical_at_start` ·
+`theoretical_at_approval` · `difference` · `status` · empresa · actor · fechas.
+
+**Response — lo que Mobile necesita para dibujar el estado real:**
+`id`, `branch`, `branch_name`, `status`, `status_label`, `reason`,
+`counted_items`, `created_by_username`, `created_at`, `approved_at`,
+`cancelled_at`, y por línea `product_slug`, `product_name`,
+`theoretical_at_start`, `physical_quantity`, `theoretical_at_approval`,
+`difference`, `is_counted`, `note`.
+
+`approve` debería devolver además los movimientos generados, para que el cliente
+muestre **lo que se movió** en vez de dar a entender que se movió todo.
+
+## Traversabilidad de producto — el punto que hundió a PR #23
+
+`GET /api/v1/internal/<slug>/inventory/stock/` devuelve **`product_slug` y ningún
+pk**. `POST …/inventory/adjustments/` ya recibe `product_slug`. Un cliente nativo
+que ha recorrido un estante tiene un slug y nada más.
+
+**Por eso `PUT items/` debe aceptar `product_slug`.** Exigir un pk numérico
+volvería la ruta inalcanzable desde la única lista con la que se usa, y
+alcanzable solo por un cliente que hubiera pasado por `/api/admin/` — que es
+justo lo que Mobile no puede hacer. Es literalmente el defecto que PR #23 tuvo
+que corregir en transferencias **después** de mergear.
+
+Aceptar además el pk está bien: la consola Web lo habla.
+
+> **Test de navegabilidad obligatorio antes del merge:** recorrer
+> `GET stock` → tomar el identificador → `POST counts/` → `PUT items/` →
+> `POST approve/` usando **solo** lo que la propia superficie v1 devuelve, sin
+> tocar `/api/admin/`.
+
+### Limitación real, sin maquillar
+
+Un cliente v1 **solo descubre productos que ya tienen fila `BranchStock` en esa
+sucursal**. Verificado en `branch_stock_queryset`:
+
+- fila con cantidad **0** → **sí** aparece;
+- producto **nunca** almacenado en esa sucursal (sin fila) → **no** aparece;
+- producto inactivo → **no** aparece (`active_products_only=True`).
+
+No existe búsqueda de catálogo interno: la única ruta de producto en v1 es
+`sales/pos/products/search/`, gateada por **`sales.pos.use`**, que un miembro de
+inventario no tiene. El catálogo `storefront` es de audiencia cliente y mezclarlo
+sería romper la separación de audiencias.
+
+**Consecuencia operativa:** un artículo que está físicamente en el estante pero
+nunca tuvo fila en esa sucursal **no se puede contar desde Mobile**. El dominio
+sí lo admite si se le nombra (`branch_quantity` devuelve 0 y
+`_locked_branch_stocks` crea la fila); lo que falta es la forma de encontrarlo.
+
+Esto es un **bloqueo declarado**, no un detalle. Backend decide si lo resuelve
+(por ejemplo permitiendo `?include_unstocked=true` en el stock interno, o una
+búsqueda de catálogo gateada por `inventory.view`) o si se acepta la limitación
+en la primera versión. Mobile **no** la va a tapar inventando una fuente.
+
+## Tests backend requeridos antes del merge
+
+1. aislamiento de tenant — empresa ajena → 404, y desconocida → el mismo 404;
+2. capability — `inventory.view` lee y **no** escribe; `inventory.adjust` escribe;
+3. alcance de sucursal — recuento fuera de alcance → **404**, no 403;
+4. ciclo válido — abrir → anotar → aprobar, con el stock corregido;
+5. ciclo inválido — aprobar un anulado, anular un aprobado, editar un aprobado;
+6. **concurrencia real** — stock que cambia entre el snapshot y la aprobación;
+7. corrección calculada **server-side** — un cliente que envía `difference` no la impone;
+8. atomicidad — una línea mala revierte la petición entera;
+9. producto cross-tenant → 404, y **sin** dejar línea creada;
+10. producto fuera de sucursal / sin fila — comportamiento explícito y documentado;
+11. **traversabilidad** — el flujo completo desde `GET stock`, sin `/api/admin/`;
+12. ningún campo server-owned aceptado como autoridad (`status`, `company`, `theoretical_*`, `difference`);
+13. ninguna referencia a `/api/admin/` en el adapter;
+14. paridad Web/dominio — la misma intención por ambas puertas deja el mismo `InventoryCount`, el mismo `BranchStock`, el mismo `StockMovement` y la misma auditoría;
+15. no contado ≠ cero — una línea sin cantidad no baja el stock a cero;
+16. contar **cero** sí es un recuento y sí corrige;
+17. entrada hostil — `physical_quantity: true` no debe registrarse como 1, y una `note` estructurada no debe producir un 500.
+
+## Smoke requerido antes de tocar Mobile
+
+Una vez mergeado el adapter, contra `origin/master` ya mergeado y con login real:
+
+1. `GET /inventory/stock/?branch_id=N` → confirmar `product_slug` y **ausencia** de pk;
+2. abrir un recuento con ese `branch_id` → 201, estado `draft`;
+3. anotar por `product_slug` → 200, estado pasa a `counting`, `theoretical_at_start` correcto;
+4. comprobar que **antes** de aprobar el stock no se movió;
+5. mover stock por fuera (`/inventory/adjustments/`) y **luego** aprobar →
+   el estante debe quedar en lo contado, no en `snapshot − diferencia`;
+6. `theoretical_at_approval` y `difference` con los valores del momento;
+7. aprobar dos veces → una sola corrección, mismos movimientos;
+8. una línea no contada → su estante intacto;
+9. contar cero → estante a cero;
+10. cancelar un borrador → nada se mueve; cancelar un aprobado → rechazo;
+11. autoridad: ventas 403, otra empresa 404, otra sucursal 404, anónimo 401;
+12. el cuerpo no manda: `status`, `company`, `theoretical_*`, `difference` ignorados;
+13. forma: objeto suelto en vez de lista → 400; producto inexistente → 404;
+14. **todo el recorrido sin una sola llamada a `/api/admin/`**.
+
+Sólo cuando esto pase en vivo, y con el SHA revalidado, empieza IP2B Mobile.
