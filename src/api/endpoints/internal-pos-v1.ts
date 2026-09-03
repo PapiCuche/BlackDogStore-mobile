@@ -58,11 +58,30 @@ const num = (v: unknown): number => Number(v ?? 0);
  * `PosInsufficientStockError` for why this app does not carry it yet.
  */
 export class PosIdempotencyConflictError extends Error {
-  constructor(message: string) {
+  /**
+   * The order that already spent this key, or null if the server did not say.
+   *
+   * Carried since IP2A. It is the difference between "something went wrong" and
+   * "that basket is already sold, as order 41" — and the operator standing at
+   * the counter is about to decide whether to charge somebody twice.
+   */
+  readonly existingOrder: number | null;
+
+  constructor(message: string, existingOrder: number | null = null) {
     super(message);
     this.name = 'PosIdempotencyConflictError';
+    this.existingOrder = existingOrder;
   }
 }
+
+/** One shop that still holds an article this branch ran out of. */
+export type PosStockElsewhere = {
+  branch: number;
+  branchName: string;
+  product: number;
+  productName: string;
+  available: number;
+};
 
 /**
  * The shelf does not hold enough.
@@ -71,17 +90,21 @@ export class PosIdempotencyConflictError extends Error {
  * back — nothing was charged and nothing moved — and the next move is to sell
  * what there is or fetch more, not to correct a bad request.
  *
- * THE SERVER ALSO SENDS `available_elsewhere` — which other shops hold the
- * article — and this app does NOT carry it, deliberately. `ApiError` exposes
- * `kind`, `status`, `fieldErrors` and `code`, not the response body, and
- * widening a shared error type used by every endpoint in the app is not
- * something to smuggle into a POS phase. Recorded as debt: the hint is real,
- * it is useful, and picking it up is its own small change.
+ * THE SERVER ALSO SAYS WHERE THERE IS SOME, and since IP2A this carries it.
+ * IP1A left it behind because the only way to reach the response body was to
+ * widen `ApiError` — a type every endpoint in the app shares — and that is a
+ * much bigger door than this one hint needs. The door is now per-request
+ * (`onErrorBody`), so this module reads its own endpoint's body and narrows it
+ * here, exactly as the Web console does in `internal-api.ts`.
  */
 export class PosInsufficientStockError extends Error {
-  constructor(message: string) {
+  /** Other shops with the article. Empty when the server sent none. */
+  readonly availableElsewhere: readonly PosStockElsewhere[];
+
+  constructor(message: string, elsewhere: readonly PosStockElsewhere[] = []) {
     super(message);
     this.name = 'PosInsufficientStockError';
+    this.availableElsewhere = elsewhere;
   }
 }
 
@@ -122,7 +145,35 @@ function rejectionMessage(error: ApiError): string {
  * deliberate: the stock message is composed from branch and product names and
  * is not API surface.
  */
-function translate(error: unknown): never {
+/**
+ * The structured detail the server attached to a refusal.
+ *
+ * NARROWED HERE, at the boundary, and nowhere else. The body arrives as
+ * `unknown` and leaves as a shape this module declared; a field the server
+ * stops sending becomes an empty list rather than an `undefined` that surfaces
+ * three components deep.
+ */
+function elsewhereFrom(body: unknown): PosStockElsewhere[] {
+  const rows = (body as { available_elsewhere?: unknown } | null)?.available_elsewhere;
+  if (!Array.isArray(rows)) return [];
+  return rows.map((raw) => {
+    const row = (raw ?? {}) as Record<string, unknown>;
+    return {
+      branch: num(row.branch),
+      branchName: str(row.branch_name),
+      product: num(row.product),
+      productName: str(row.product_name),
+      available: num(row.available),
+    };
+  });
+}
+
+function existingOrderFrom(body: unknown): number | null {
+  const id = (body as { existing_order?: unknown } | null)?.existing_order;
+  return typeof id === 'number' ? id : null;
+}
+
+function translate(error: unknown, body: unknown = null): never {
   if (error instanceof ApiError && error.status === 404) {
     throw new InternalAccessDeniedError();
   }
@@ -131,10 +182,14 @@ function translate(error: unknown): never {
   }
   if (error instanceof ApiError && error.status === 409) {
     if (error.code === 'insufficient_stock') {
-      throw new PosInsufficientStockError(rejectionMessage(error));
+      throw new PosInsufficientStockError(
+        rejectionMessage(error), elsewhereFrom(body),
+      );
     }
     if (error.code === 'idempotency_conflict') {
-      throw new PosIdempotencyConflictError(rejectionMessage(error));
+      throw new PosIdempotencyConflictError(
+        rejectionMessage(error), existingOrderFrom(body),
+      );
     }
     throw new PosRejectedError(rejectionMessage(error));
   }
@@ -447,16 +502,26 @@ export async function createPosSale(
   }
   if (input.saleNotes?.trim()) body.sale_notes = input.saleNotes.trim();
 
+  // The ONLY call in this module that asks for the error body, because it is
+  // the only one whose refusals carry structured detail an operator acts on.
+  let refusal: unknown = null;
+
   try {
     return toSale(
       await authenticatedRequest<unknown>(
         `${posPath(requireTenant())}/sales/`,
-        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        {
+          method: 'POST',
+          body,
+          scope: 'authenticated-v1',
+          signal,
+          onErrorBody: (payload) => { refusal = payload; },
+        },
         deps,
       ),
     );
   } catch (error) {
-    return translate(error);
+    return translate(error, refusal);
   }
 }
 

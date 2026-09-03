@@ -33,6 +33,24 @@ export type RequestOptions = {
   headers?: Record<string, string>;
   /** Overrides `apiTimeoutMs`. Mainly so tests need not wait 15 seconds. */
   timeoutMs?: number;
+  /**
+   * Hands the caller the PARSED ERROR BODY, once, just before `ApiError` is
+   * thrown. Opt-in, and almost nothing opts in.
+   *
+   * WHY THIS EXISTS RATHER THAN A FIELD ON `ApiError`. Two 409s on the till
+   * carry structured detail the operator needs — which order already spent this
+   * idempotency key, and which other shops still have the article — and the Web
+   * console shows both. `ApiError` deliberately exposes `kind`, `status`,
+   * `fieldErrors` and `code` and nothing else: widening it to carry an
+   * arbitrary body would put every server response within reach of every screen
+   * in the app, which is a much bigger door than the one problem needs.
+   *
+   * So the door is per-request. A module that has a contract with a specific
+   * endpoint asks for that endpoint's body and narrows it itself, exactly as
+   * `internal-api.ts` does on the Web side. Nothing else changes, and a caller
+   * that does not ask sees no difference at all.
+   */
+  onErrorBody?: (body: unknown) => void;
 };
 
 function buildUrl(path: string, query: RequestOptions['query']): string {
@@ -193,6 +211,9 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   if (!response.ok) {
     const kind = kindFromStatus(response.status);
+    // Before the body is discarded. Never on success: a caller that wants the
+    // response has it returned.
+    options.onErrorBody?.(payload);
     throw new ApiError(kind, detailFrom(payload, `HTTP ${response.status}`), {
       status: response.status,
       fieldErrors: kind === 'validation' ? parseFieldErrors(payload) : null,

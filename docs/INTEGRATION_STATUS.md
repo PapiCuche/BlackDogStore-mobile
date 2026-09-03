@@ -815,12 +815,21 @@ Idempotencia (misma clave)     INTEGRADO / TESTED
 409 insufficient_stock         INTEGRADO / TESTED
 409 idempotency_conflict       INTEGRADO / TESTED
 Selección de sucursal          INTEGRADO / TESTED
-Previsualizar total            PARCIAL — el endpoint está integrado; la pantalla
-                               todavía no lo llama antes de cobrar
-Asignar vendedor               PENDIENTE — capability y backend existen
-Descuento manual               PENDIENTE — capability y backend existen
-Cupón                          PENDIENTE
-Comisión (verla)               PENDIENTE
+Previsualizar total            INTEGRADO / TESTED (IP2A) — la caja no cobra
+                               nada que no haya cotizado primero
+Asignar vendedor               INTEGRADO / TESTED (IP2A)
+Descuento manual               INTEGRADO / TESTED (IP2A) — percent y amount,
+                               con motivo obligatorio
+Cupón                          INTEGRADO / TESTED (IP2A) — sin capability, por
+                               diseño del servidor
+Promoción automática           INTEGRADO / TESTED (IP2A) — se muestra con su
+                               nombre; el cliente no la elige ni la calcula
+Comisión (verla)               INTEGRADO / TESTED (IP2A) — solo si el payload
+                               la trae
+No apilar descuentos           INTEGRADO / TESTED (IP2A) — el servidor se niega
+                               y la pantalla repite sus palabras
+available_elsewhere            INTEGRADO / TESTED (IP2A) — deuda de IP1 pagada
+existing_order en el 409       INTEGRADO / TESTED (IP2A) — ídem
 Combos sugeridos               PENDIENTE — sin ruta v1
 Cámara / escáner               PENDIENTE — el endpoint por código existe; la
                                cámara es otra decisión
