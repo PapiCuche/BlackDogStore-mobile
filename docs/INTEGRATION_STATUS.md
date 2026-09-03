@@ -776,6 +776,33 @@ afirmaciones nuevas fijan que la llamada de entrega no manda ningún campo de
 pago y que la pantalla reacciona al 409 en lugar de reportar un fallo genérico.
 
 
+## Transferencias entre sucursales (IP1B)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master 8a1e581)
+Listar transferencias          INTEGRADO / TESTED
+Ver una transferencia          INTEGRADO / TESTED
+Abrir un borrador              INTEGRADO / TESTED
+Poner / quitar líneas          INTEGRADO / TESTED (por product_slug)
+Despachar                      INTEGRADO / TESTED
+Recibir                        INTEGRADO / TESTED
+Anular                         INTEGRADO / TESTED
+Regla de tenant                INTEGRADO / TESTED (404 para empresa ajena)
+Regla de capability            INTEGRADO / TESTED (view lee, adjust escribe)
+Regla de sucursal              INTEGRADO / TESTED (ver: un extremo · operar: dos)
+409 insufficient_stock         INTEGRADO / TESTED
+Filtro por estado / sucursal   INTEGRADO — la API lo acepta; la pantalla
+                               todavía no ofrece los controles
+Recepción parcial              **NO EXISTE en el backend** — prohibido en Mobile
+Reversar una transferencia     **NO EXISTE en el backend** — anular es solo para
+                               un borrador; lo que ya salió se recibe y se vuelve
+                               a mover, y ambos movimientos quedan en el Kardex
+Transferencia entre empresas   **NO EXISTE** — y no debe existir
+```
+
+La máquina de estados es del servidor. Mobile no la copia: un test estructural
+falla si aparece una tabla de transiciones en el cliente.
+
 ## Punto de venta (IP1A)
 
 ```

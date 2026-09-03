@@ -8,6 +8,9 @@ import type {
   InternalStockMovement,
   InternalStockPage,
   StockAdjustmentInput,
+  StockTransfer,
+  TransferCreateInput,
+  TransferItem,
 } from '@/domain/internal/inventory-types';
 
 import { authenticatedRequest } from '../authenticated-request';
@@ -336,3 +339,192 @@ export function inventoryErrorMessage(error: unknown): string {
 }
 
 export { InternalAccessDeniedError, InternalCapabilityMissingError, MissingTenantError };
+
+// ---------------------------------------------------------------------------
+// IP1B — inter-branch transfers
+// ---------------------------------------------------------------------------
+//
+// Verified on `origin/master` `b38ec26` (PR #22) with a live smoke over all six
+// routes: the whole document, the stock at each transition, and every refusal.
+//
+// ONE FUNCTION PER TRANSITION, mirroring the server. There is no
+// `setTransferStatus` here because there is no such endpoint: dispatching takes
+// units off a shelf, receiving puts them on another, cancelling closes a
+// document that moved nothing. A single "set the status" call would let this
+// app assert `received` for stock that never left.
+
+function toTransferItem(raw: unknown): TransferItem {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: Number(row.id ?? 0),
+    product: Number(row.product ?? 0),
+    productName: String(row.product_name ?? ''),
+    productSlug: String(row.product_slug ?? ''),
+    quantity: Number(row.quantity ?? 0),
+  };
+}
+
+function toTransfer(raw: unknown): StockTransfer {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: Number(row.id ?? 0),
+    sourceBranch: Number(row.source_branch ?? 0),
+    sourceBranchName: String(row.source_branch_name ?? ''),
+    destinationBranch: Number(row.destination_branch ?? 0),
+    destinationBranchName: String(row.destination_branch_name ?? ''),
+    // Carried through as it arrived. This app compares it to draw a button and
+    // never to decide what is legal — the server owns the machine.
+    status: String(row.status ?? ''),
+    statusLabel: String(row.status_label ?? row.status ?? ''),
+    reason: String(row.reason ?? ''),
+    reference: String(row.reference ?? ''),
+    items: Array.isArray(row.items) ? row.items.map(toTransferItem) : [],
+    totalUnits: Number(row.total_units ?? 0),
+    createdByUsername:
+      row.created_by_username == null ? null : String(row.created_by_username),
+    createdAt: String(row.created_at ?? ''),
+    dispatchedAt: row.dispatched_at == null ? null : String(row.dispatched_at),
+    receivedAt: row.received_at == null ? null : String(row.received_at),
+    cancelledAt: row.cancelled_at == null ? null : String(row.cancelled_at),
+  };
+}
+
+export async function fetchTransfers(
+  params: { status?: string; branchId?: number } = {},
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<{ count: number; results: StockTransfer[] }> {
+  const query: Record<string, string | number> = {};
+  if (params.status) query.status = params.status;
+  if (params.branchId !== undefined) query.branch = params.branchId;
+  try {
+    const payload = await authenticatedRequest<{ count?: unknown; results?: unknown }>(
+      `${inventoryPath(requireTenant())}/transfers/`,
+      { scope: 'authenticated-v1', query, signal },
+      deps,
+    );
+    return {
+      count: Number(payload?.count ?? 0),
+      results: Array.isArray(payload?.results)
+        ? payload.results.map(toTransfer)
+        : [],
+    };
+  } catch (error) {
+    return translate(error, params.branchId !== undefined);
+  }
+}
+
+export async function fetchTransfer(
+  transferId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<StockTransfer> {
+  try {
+    return toTransfer(
+      await authenticatedRequest<unknown>(
+        `${inventoryPath(requireTenant())}/transfers/${encodeURIComponent(String(transferId))}/`,
+        { scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, false);
+  }
+}
+
+/** Open a DRAFT. It moves no stock — that is what dispatching is for. */
+export async function createTransfer(
+  input: TransferCreateInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<StockTransfer> {
+  const body: Record<string, unknown> = {
+    source_branch: input.sourceBranch,
+    destination_branch: input.destinationBranch,
+  };
+  if (input.reason?.trim()) body.reason = input.reason.trim();
+  if (input.reference?.trim()) body.reference = input.reference.trim();
+  try {
+    return toTransfer(
+      await authenticatedRequest<unknown>(
+        `${inventoryPath(requireTenant())}/transfers/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Set the quantity of ONE product on a draft. Zero removes the line.
+ *
+ * There is no separate delete, because "how many of these go" and "these do not
+ * go" are the same question asked twice.
+ *
+ * The article is named by SLUG. That is not a preference: the stock list this
+ * screen reads returns `product_slug` and no id, so a slug is the only name a
+ * native client can honestly come by. Verified on `origin/master` `8a1e581`.
+ */
+export async function setTransferItem(
+  transferId: number,
+  input: { productSlug: string; quantity: number },
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<StockTransfer> {
+  try {
+    return toTransfer(
+      await authenticatedRequest<unknown>(
+        `${inventoryPath(requireTenant())}/transfers/${encodeURIComponent(String(transferId))}/items/`,
+        {
+          method: 'PUT',
+          // By SLUG. `/inventory/stock/` returns no product id, so a slug is
+          // the only name this app can come by without going to `/api/admin/`.
+          body: { product_slug: input.productSlug, quantity: input.quantity },
+          scope: 'authenticated-v1',
+          signal,
+        },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, false);
+  }
+}
+
+/**
+ * One request per TRANSITION.
+ *
+ * `dispatch` and `receive` are IDEMPOTENT on the server: a second call returns
+ * the same state and moves nothing. That is why a dropped response is safe to
+ * retry by hand — and why this app still does not retry on its own, because a
+ * retry nobody asked for is not made safe by the server being careful.
+ */
+async function transferAction(
+  transferId: number,
+  action: 'dispatch' | 'receive' | 'cancel',
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<StockTransfer> {
+  try {
+    return toTransfer(
+      await authenticatedRequest<unknown>(
+        `${inventoryPath(requireTenant())}/transfers/${encodeURIComponent(String(transferId))}/${action}/`,
+        { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, false);
+  }
+}
+
+export const dispatchTransfer = (id: number, deps: Deps, signal?: AbortSignal) =>
+  transferAction(id, 'dispatch', deps, signal);
+
+export const receiveTransfer = (id: number, deps: Deps, signal?: AbortSignal) =>
+  transferAction(id, 'receive', deps, signal);
+
+export const cancelTransfer = (id: number, deps: Deps, signal?: AbortSignal) =>
+  transferAction(id, 'cancel', deps, signal);

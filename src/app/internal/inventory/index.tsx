@@ -218,6 +218,15 @@ export default function InventoryHomeScreen() {
                   )
                 }
               />
+              {/* Transfers read with `inventory.view`, so the entrance is
+                  offered to anybody who reached this screen. What they may DO
+                  once inside is the server's answer, asked again there. */}
+              <Button
+                label="Transferencias entre sucursales"
+                variant="secondary"
+                fullWidth
+                onPress={() => router.push('/internal/inventory/transfers')}
+              />
               <Button
                 label="Ver movimientos"
                 variant="secondary"

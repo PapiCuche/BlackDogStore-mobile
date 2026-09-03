@@ -152,3 +152,86 @@ export function movementDirection(movementType: string): 'in' | 'out' | 'unknown
   if (['sale_exit', 'service_exit', 'transfer_out'].includes(movementType)) return 'out';
   return 'unknown';
 }
+
+// ---------------------------------------------------------------------------
+// IP1B — inter-branch transfers
+// ---------------------------------------------------------------------------
+//
+// Verified against `PapiCuche/BlackDogStore-web` @ `origin/master` `b38ec26`
+// (PR #22) with a live smoke over all six routes plus every refusal.
+//
+// THE STATE MACHINE IS NOT HERE, and it must never be. It lives in
+// `inventory_services`, four states with stock moving at exactly two of the
+// transitions. This app reads a status and asks the server to make a move; if
+// the move is illegal the server says so. A transition table on a phone would
+// be a second lifecycle nobody owns.
+
+/** The four states, as STRINGS the server sent — never a local enum to compare. */
+export type TransferStatus =
+  | 'draft' | 'in_transit' | 'received' | 'cancelled' | (string & {});
+
+export type TransferItem = {
+  id: number;
+  product: number;
+  productName: string;
+  productSlug: string;
+  quantity: number;
+};
+
+/**
+ * One transfer document.
+ *
+ * `statusLabel` is the SERVER's word. A local translation table would quietly
+ * overrule a decision the business made, the same rule the repair lifecycle has
+ * followed since M8.
+ */
+export type StockTransfer = {
+  id: number;
+  sourceBranch: number;
+  sourceBranchName: string;
+  destinationBranch: number;
+  destinationBranchName: string;
+  status: TransferStatus;
+  statusLabel: string;
+  reason: string;
+  reference: string;
+  items: readonly TransferItem[];
+  totalUnits: number;
+  createdByUsername: string | null;
+  createdAt: string;
+  dispatchedAt: string | null;
+  receivedAt: string | null;
+  cancelledAt: string | null;
+};
+
+/**
+ * Setting the quantity of ONE article on a draft.
+ *
+ * The article is named by SLUG, which is the only name this app can honestly
+ * obtain: `/inventory/stock/` returns `product_slug` and no id, exactly as
+ * `/inventory/adjustments/` takes a slug. The route accepts a numeric pk too —
+ * the Web console speaks it — but a client that reads a shelf never sees one,
+ * and reaching for it would mean going to `/api/admin/`.
+ *
+ * Zero removes the line: "how many of these go" and "these do not go" are the
+ * same question asked twice.
+ */
+export type TransferItemInput = {
+  transferId: number;
+  productSlug: string;
+  quantity: number;
+};
+
+/** Opening a draft: WHERE FROM and WHERE TO. Nothing else is the client's. */
+export type TransferCreateInput = {
+  sourceBranch: number;
+  destinationBranch: number;
+  reason?: string;
+  reference?: string;
+};
+
+// The capabilities are the module's existing pair, deliberately NOT aliased:
+// reading a transfer takes `inventory.view` and every write takes
+// `inventory.adjust`, the SAME split this file already declares for stock and
+// the same one the Web surface enforces. A second name for `inventory.adjust`
+// would suggest transfers had a permission of their own. They do not.

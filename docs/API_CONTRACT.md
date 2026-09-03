@@ -330,6 +330,66 @@ Verificado en `origin/master` **`fd6ea01`** (PR #6), leyendo el código en
 | `GET .../inventory/movements/` | `inventory.view` |
 | `POST .../inventory/adjustments/` | `inventory.adjust` |
 
+### Transferencias entre sucursales (IP1B) — **INTEGRADO**
+
+```
+VERIFIED_STABLE_MASTER · VERSIONED · PRIVADO · INTEGRADO POR MOBILE (IP1B)
+```
+
+Verificado en `origin/master` **`8a1e581`** (PR #22 expone las rutas, PR #23
+corrige cómo se nombra el producto) con smoke real sobre las seis rutas, sobre
+el stock en cada transición y sobre cada negativa.
+
+| Endpoint | Requiere |
+|---|---|
+| `GET .../inventory/transfers/` | `inventory.view` |
+| `GET .../inventory/transfers/<id>/` | `inventory.view` |
+| `POST .../inventory/transfers/` | `inventory.adjust` |
+| `PUT .../inventory/transfers/<id>/items/` | `inventory.adjust` |
+| `POST .../inventory/transfers/<id>/dispatch/` | `inventory.adjust` |
+| `POST .../inventory/transfers/<id>/receive/` | `inventory.adjust` |
+| `POST .../inventory/transfers/<id>/cancel/` | `inventory.adjust` |
+
+#### La máquina de estados NO está en Mobile
+
+```
+draft ──dispatch──▶ in_transit ──receive──▶ received
+  │                      │
+  └──────cancel──────────┘
+```
+
+Vive en `inventory_services`, en el servidor. Mobile **no** calcula el estado
+siguiente, **no** decide si un movimiento es legal y **no** fija un estado: pide
+DESPACHAR, RECIBIR o ANULAR, y el dominio acepta o niega. Un test estructural
+falla si aparece una tabla de transiciones en el cliente.
+
+El stock se mueve en **exactamente dos** transiciones. Entre despachar y recibir
+las unidades no las cuenta ninguna de las dos sucursales, y ese hueco es la
+razón de que el documento exista: una tienda que envió algo está corta antes de
+que la otra esté larga.
+
+#### Dos preguntas distintas sobre la sucursal
+
+| Acto | Regla | Código si no |
+|---|---|---|
+| **Ver** una transferencia | acceso a **cualquiera** de los dos extremos | **404** |
+| **Operarla** | acceso a **los dos** extremos | **403** |
+
+Ver no es poder actuar. Quien solo alcanza el destino ve llegar la mercadería y
+no puede afirmar que salió. El 404 del primer caso es deliberado: un 403
+confirmaría que el documento existe.
+
+#### El producto se nombra por `product_slug`
+
+`GET .../inventory/stock/` devuelve `product_slug` y **ningún id de producto**,
+igual que `POST .../inventory/adjustments/` recibe un slug. Un cliente nativo que
+leyó un estante tiene un slug y nada más, así que la línea se nombra por slug.
+La ruta también acepta `product` (el pk) porque la consola Web lo habla, pero
+Mobile nunca lo usa: conseguirlo obligaría a pasar por `/api/admin/`.
+
+Ambos están acotados a la empresa. Un slug es adivinable de una forma en que un
+pk no lo es, y por eso ese alcance es toda la defensa, no una formalidad.
+
 ### TRES puertas, tres códigos
 
 | Situación | Respuesta |
