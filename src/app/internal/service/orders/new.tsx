@@ -17,6 +17,7 @@ import {
   Text,
 } from '@/design-system';
 import {
+  CAP_SERVICE_CUSTOMERS_VIEW,
   CAP_SERVICE_DEVICES_MANAGE,
   CAP_SERVICE_ORDERS_CREATE,
   SERVICE_DEVICE_TYPES,
@@ -61,6 +62,13 @@ export default function ServiceIntakeScreen() {
   const { data: context, isPending: contextPending } = useInternalContext();
   const mayCreate = hasUxCapability(context ?? null, CAP_SERVICE_ORDERS_CREATE);
   const mayRegisterDevice = hasUxCapability(context ?? null, CAP_SERVICE_DEVICES_MANAGE);
+  // SEARCHING FOR A CUSTOMER IS ITS OWN CAPABILITY. The server asks for
+  // `service.customers.view` on that route, and holding `service.orders.create`
+  // says nothing about it — the standard technician preset happens to carry
+  // both, but a company that builds a narrower role would get a search box that
+  // 403s on the first keystroke. Drawing a control the server will refuse is
+  // how a permission boundary starts looking like a broken app.
+  const mayFindCustomers = hasUxCapability(context ?? null, CAP_SERVICE_CUSTOMERS_VIEW);
 
   const service = useServiceContext({ enabled: mayCreate });
   const receive = useReceiveDevice();
@@ -85,7 +93,7 @@ export default function ServiceIntakeScreen() {
   const [imei, setImei] = useState('');
 
   const customers = useServiceCustomerSearch(search.trim(), {
-    enabled: mayCreate && customer === null,
+    enabled: mayCreate && mayFindCustomers && customer === null,
   });
   const devices = useServiceDevices(
     { customerId: customer?.id },
@@ -217,6 +225,15 @@ export default function ServiceIntakeScreen() {
                   />
                 </View>
               </Card>
+            ) : !mayFindCustomers ? (
+              /* Honest rather than a dead search box. Note this does NOT offer
+                 to create one: `service.customers.manage` has no v1 write route
+                 at all, so there is nothing for this screen to call. */
+              <EmptyState
+                icon={icons.info}
+                title="No puedes buscar clientes"
+                message="Tu cuenta puede abrir órdenes, pero no consultar la ficha de los clientes. Pídele a la empresa el permiso de ver clientes."
+              />
             ) : (
               <View style={{ gap: theme.spacing.sm }}>
                 <SearchInput
