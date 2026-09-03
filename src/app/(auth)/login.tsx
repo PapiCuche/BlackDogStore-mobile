@@ -7,6 +7,7 @@ import { useAuth } from '@/auth/auth-provider';
 import { Button, Input, Text } from '@/design-system';
 import { AuthScreenShell } from '@/features/auth/auth-screen-shell';
 import { AuthUnavailableScreen } from '@/features/auth/auth-unavailable';
+import { DevQuickLogin } from '@/features/auth/dev-quick-login';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { useTheme } from '@/theme/theme-provider';
 import { hapticError, hapticSuccess } from '@/utils/haptics';
@@ -32,7 +33,7 @@ export default function LoginScreen() {
   const theme = useTheme();
   const { signIn, isSubmitting } = useAuth();
 
-  const { control, handleSubmit, formState } = useForm<LoginFormValues>({
+  const { control, handleSubmit, formState, setValue } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
     mode: 'onTouched',
@@ -151,6 +152,24 @@ export default function LoginScreen() {
           user their credentials do not matter, which is now false. */}
       {isMock ? (
         <MockDataNotice message="Modo desarrollo: cualquier correo y contraseña válidos abren la app. No es una sesión real." />
+      ) : null}
+
+      {/* Development quick logins, and ONLY over a real backend.
+          `DevQuickLogin` already returns null outside development; the extra
+          condition here is about which login these accounts belong to. They are
+          rows in a Django database, so offering them over the mock login would
+          present them as real sessions when nothing would be verified — the two
+          look alike on screen and are not the same thing at all.
+          `unavailable` never reaches this line: the screen returned earlier. */}
+      {policy.mode === 'backend' ? (
+        <DevQuickLogin
+          onUse={(email, password) => {
+            // FILLS, and stops. No submit, no navigation, no session. The
+            // operator presses «Entrar» and the request goes the ordinary way.
+            setValue('email', email, { shouldValidate: true, shouldDirty: true });
+            setValue('password', password, { shouldValidate: true, shouldDirty: true });
+          }}
+        />
       ) : null}
     </AuthScreenShell>
   );
