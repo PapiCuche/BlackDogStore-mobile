@@ -12,6 +12,7 @@ import {
   type RepairTimelineEntry,
 } from '@/domain/repairs/types';
 
+import type { CustomerPaymentSummary } from '@/domain/internal/service-types';
 import { authenticatedRequest } from '../authenticated-request';
 import { ApiError, userFacingMessage } from '../errors';
 
@@ -299,4 +300,44 @@ export function quoteErrorMessage(error: unknown): string {
     return error.message;
   }
   return userFacingMessage(error);
+}
+
+/**
+ * What I agreed to, what I have paid, what is left. M12B.
+ *
+ * FIVE NUMBERS, and the server decides all of them. This app does no
+ * arithmetic on money: an amount is a decimal string from the wire to the
+ * pixel, because a second answer computed here could disagree with the shop's
+ * — and the one that disagrees is the one the customer is reading.
+ *
+ * `quotedTotal` and `outstanding` are NULLABLE. Null means the shop has not
+ * agreed a price yet; drawing "S/ 0.00" would say the repair is free.
+ *
+ * THERE IS NO PAY BUTTON BEHIND THIS, and there must not be one. Online payment
+ * for a repair does not exist in the platform. A screen that showed a balance
+ * and implied it could be settled here would be the exact lie this phase was
+ * built to avoid.
+ */
+export async function fetchCustomerPaymentSummary(
+  repairId: number,
+  deps: { refreshCoordinator: RefreshCoordinator },
+  signal?: AbortSignal,
+): Promise<CustomerPaymentSummary> {
+  try {
+    const raw = await authenticatedRequest<Record<string, unknown>>(
+      `${customerPath(requireTenant())}/${encodeURIComponent(String(repairId))}`
+      + '/payment-summary/',
+      { scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return {
+      currency: String(raw.currency ?? ''),
+      quotedTotal: raw.quoted_total == null ? null : String(raw.quoted_total),
+      paid: String(raw.paid ?? '0.00'),
+      outstanding: raw.outstanding == null ? null : String(raw.outstanding),
+      status: String(raw.status ?? ''),
+    };
+  } catch (error) {
+    return translate(error);
+  }
 }

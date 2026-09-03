@@ -191,7 +191,7 @@ describe('the client talks to the delivery surface', () => {
 
   it('turns a 403 into a missing capability', async () => {
     const { module } = load({
-      makeError: (ApiError) => new ApiError('forbidden', 'no', { status: 403 }),
+      makeError: (ApiError) => new ApiError('unauthorized', 'no', { status: 403 }),
     });
     await expect(
       module.postServiceDelivery(7, { recipientName: 'A', idempotencyKey: 'k' }, DEPS),
@@ -203,7 +203,7 @@ describe('the client talks to the delivery surface', () => {
     // failed", and a screen has to tell the two apart without parsing Spanish.
     const { module } = load({
       makeError: (ApiError) =>
-        new ApiError('conflict', 'Esa clave ya se usó para una entrega diferente.', {
+        new ApiError('validation', 'Esa clave ya se usó para una entrega diferente.', {
           status: 409, code: 'idempotency_conflict',
         }),
     });
@@ -450,16 +450,51 @@ describe('structural — the handover cannot drift', () => {
     ...sourceFiles('src/app/internal/service'),
   ];
 
-  it('has no payment field, identifier or gateway anywhere', () => {
+  it('has no payment field, identifier or gateway in the HANDOVER itself', () => {
     // The rule this pins, verbatim from the phase: a status is not a receipt.
-    // Strings are stripped first — the visible copy DOES mention `cobro`, to
-    // say the platform cannot take one, and that sentence is the opposite of
-    // the offence.
-    const offenders = M12_FILES.filter((f) =>
+    //
+    // NARROWED IN M12B, and the narrowing is the interesting part. This used to
+    // scan every file under `src/app/internal/service`, which was right while
+    // service payments did not exist and became wrong the moment they did: the
+    // order screen now legitimately mounts a till and reacts to a
+    // `payment_required` refusal, and flagging that would have been the same
+    // shape of false positive as `waiting_parts` matching /part/.
+    //
+    // What the rule ALWAYS meant is what it says now: the handover records no
+    // money. The delivery section is where that could go wrong, so that is
+    // where it is checked — and the two assertions below pin that the screen's
+    // delivery call site sends no payment field either, which is the other half
+    // of the same claim.
+    //
+    // Strings are stripped first: the visible copy DOES mention `cobro`, to say
+    // the platform cannot take one, and that sentence is the opposite of the
+    // offence.
+    expect(
       /(\bpaid\b|payment|izipay|stripe|PaymentTransaction|\bamount\b|\bbalance\b)/i
-        .test(codeOnly(f)),
+        .test(codeOnly('src/features/internal/service-delivery-section.tsx')),
+    ).toBe(false);
+  });
+
+  it('sends no payment field when it records a handover', () => {
+    const screen = codeOnly('src/app/internal/service/orders/[id].tsx');
+    const call = screen.slice(
+      screen.indexOf('recordDelivery.mutate'),
+      screen.indexOf('ServiceDeliverySection') > screen.indexOf('recordDelivery.mutate')
+        ? screen.indexOf('ServiceDeliverySection')
+        : screen.length,
     );
-    expect(offenders).toEqual([]);
+    for (const forbidden of ['amount', 'paid', 'currency', 'method']) {
+      expect(call).not.toContain(forbidden);
+    }
+  });
+
+  it('reacts to a payment refusal instead of reporting a failed handover', () => {
+    // M12B. A 409 `payment_required` is not the handover failing — it is the
+    // shop's own policy. Reporting it generically would send somebody looking
+    // for a problem with the device.
+    const screen = code('src/app/internal/service/orders/[id].tsx');
+    expect(screen).toContain('ServicePaymentRequiredError');
+    expect(screen).toContain('Saldo pendiente');
   });
 
   it('says out loud that it takes no payment, and never claims one', () => {

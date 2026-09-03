@@ -4,6 +4,9 @@ import type {
   ServiceAssignment,
   ServiceDelivery,
   ServiceDeliveryInput,
+  ServicePayment,
+  ServicePaymentInput,
+  ServicePaymentSummary,
   ServiceQualityCheck,
   ServiceQualityItem,
   ServiceQualityResultInput,
@@ -89,6 +92,22 @@ export class ServiceIdempotencyConflictError extends Error {
   constructor(message = 'Esa operación ya se registró con otros datos.') {
     super(message);
     this.name = 'ServiceIdempotencyConflictError';
+  }
+}
+
+/**
+ * The tenant requires a settled balance before a device leaves.
+ *
+ * Its own class because it is neither bad input nor a missing permission: the
+ * request was correct and the shop's own policy says not yet. A counter has to
+ * draw "saldo pendiente" and a refetch, not a generic failure — and it must not
+ * have to parse Spanish to tell this from an idempotency conflict, which
+ * arrives with the same 409.
+ */
+export class ServicePaymentRequiredError extends Error {
+  constructor(message = 'Hay saldo pendiente en esta reparación.') {
+    super(message);
+    this.name = 'ServicePaymentRequiredError';
   }
 }
 
@@ -270,6 +289,12 @@ function translate(error: unknown, scoped: boolean): never {
     }
     if (code === 'idempotency_conflict') {
       throw new ServiceIdempotencyConflictError(rejectionMessage(error));
+    }
+    // M12B. The third meaning of 409, and it is the one a screen must act on
+    // differently: refetch the balance and tell somebody what is owed, rather
+    // than reporting that the handover failed.
+    if (code === 'payment_required') {
+      throw new ServicePaymentRequiredError(rejectionMessage(error));
     }
     throw new ServiceRejectedError(rejectionMessage(error));
   }
@@ -1539,6 +1564,174 @@ export async function postServiceDelivery(
     return toServiceDelivery(
       await authenticatedRequest<unknown>(
         `${orderPath(orderId)}/delivery/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// M12B / BR-005F — the service payment ledger
+// ---------------------------------------------------------------------------
+//
+// Verified against `PapiCuche/BlackDogStore-web` @ `origin/master` `42ea453`
+// (PR #19) with a live smoke over all four routes plus the delivery gate. Every
+// field name below came back from a real response.
+//
+// MONEY STAYS A STRING FROM WIRE TO PIXEL. `num()` is never used on an amount.
+// Parsing one into a JavaScript number would create a second answer to "how
+// much is owed" that can disagree with the server's, and the one that disagrees
+// is always the one somebody is reading across a counter.
+//
+// THERE IS NO PATCH AND NO DELETE, because the server has none: the row refuses
+// both in its own `save`. Correcting is reversing.
+
+function toServicePayment(raw: unknown): ServicePayment {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: num(row.id),
+    amount: str(row.amount),
+    currency: str(row.currency),
+    method: str(row.method),
+    reference: str(row.reference),
+    notes: str(row.notes),
+    receivedByName: str(row.received_by_name),
+    receivedAt: str(row.received_at),
+    createdAt: str(row.created_at),
+    isReversed: row.is_reversed === true,
+    reversedAt: row.reversed_at == null ? null : str(row.reversed_at),
+    reversedByName: str(row.reversed_by_name),
+    reversalReason: str(row.reversal_reason),
+  };
+}
+
+function toPaymentSummary(raw: unknown): ServicePaymentSummary {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    currency: str(row.currency),
+    // NULL IS PRESERVED. It means "no agreed price", and coercing it to '0.00'
+    // would tell somebody their repair is free.
+    quotedTotal: row.quoted_total == null ? null : str(row.quoted_total),
+    confirmedPaid: str(row.confirmed_paid),
+    outstanding: row.outstanding == null ? null : str(row.outstanding),
+    credit: str(row.credit),
+    paymentStatus: str(row.payment_status),
+    requiresPaymentBeforeDelivery: row.requires_payment_before_delivery === true,
+  };
+}
+
+/** Every payment on this order, plus the balance, in one request. */
+export async function fetchServicePayments(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<{ count: number; results: ServicePayment[]; summary: ServicePaymentSummary }> {
+  try {
+    const payload = await authenticatedRequest<{
+      count?: unknown; results?: unknown; summary?: unknown;
+    }>(
+      `${orderPath(orderId)}/payments/`,
+      { method: 'GET', scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return {
+      count: num(payload?.count),
+      results: Array.isArray(payload?.results)
+        ? payload.results.map(toServicePayment)
+        : [],
+      summary: toPaymentSummary(payload?.summary),
+    };
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * The balance alone.
+ *
+ * Its own route because it is what a screen refetches after a write, and after
+ * a 409 `payment_required` from the delivery endpoint. Pulling the whole ledger
+ * to redraw one number would be wasteful on a counter's phone.
+ */
+export async function fetchServicePaymentSummary(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServicePaymentSummary> {
+  try {
+    return toPaymentSummary(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/payment-summary/`,
+        { method: 'GET', scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Record money received at the counter.
+ *
+ * NO RETRY, and the caller must not add one. A replay is safe only because the
+ * key makes it safe, and a key the transport re-minted would be no key at all —
+ * which for this endpoint means charging somebody twice.
+ *
+ * A 409 `idempotency_conflict` means the key was spent on a DIFFERENT amount,
+ * not that the payment failed.
+ */
+export async function postServicePayment(
+  orderId: number,
+  input: ServicePaymentInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServicePayment> {
+  const body: Record<string, unknown> = {
+    amount: input.amount.trim(),
+    method: input.method,
+    idempotency_key: input.idempotencyKey,
+  };
+  if (input.reference?.trim()) body.reference = input.reference.trim();
+  if (input.notes?.trim()) body.notes = input.notes.trim();
+
+  try {
+    return toServicePayment(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/payments/`,
+        { method: 'POST', body, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Undo a payment that should not have been recorded. NOT A REFUND.
+ *
+ * It says the row was written in error. Whether cash went back over the counter
+ * is between the shop and the customer; this platform cannot return money, and
+ * the screen says so before the button is pressed.
+ */
+export async function postServicePaymentReverse(
+  orderId: number,
+  paymentId: number,
+  reason: string,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServicePayment> {
+  const body: Record<string, unknown> = {};
+  if (reason.trim()) body.reason = reason.trim();
+
+  try {
+    return toServicePayment(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/payments/${encodeURIComponent(String(paymentId))}/reverse/`,
         { method: 'POST', body, scope: 'authenticated-v1', signal },
         deps,
       ),

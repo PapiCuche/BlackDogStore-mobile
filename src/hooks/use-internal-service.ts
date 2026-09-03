@@ -5,6 +5,7 @@ import type { ServiceOrderQuery } from '@/api/endpoints/internal-service-v1';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import type {
   ServiceDeliveryInput,
+  ServicePaymentInput,
   ServiceQualityResultInput,
   ServiceCompleteInput,
   ServiceExecutionInput,
@@ -478,5 +479,61 @@ export function useServiceDelivery(
 export function useRecordDelivery(orderId: number) {
   return useServiceMutation<ServiceDeliveryInput, unknown>((input) =>
     repository().recordDelivery(orderId, input),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// M12B / BR-005F — the payment ledger
+// ---------------------------------------------------------------------------
+
+export function useServicePayments(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServicePayments(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().listPayments(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+export function useServicePaymentSummary(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServicePaymentSummary(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().getPaymentSummary(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+/**
+ * Record money received.
+ *
+ * `useServiceMutation`, not `useStockTouchingMutation`: taking payment moves no
+ * stock, and invalidating the warehouse here would make a counter's screen
+ * refetch shelves for no reason.
+ *
+ * `retry: false` comes from the shared helper and matters more here than
+ * anywhere in the app. A retried POST the user did not ask for is a second
+ * charge, and the idempotency key protects the SERVER from a duplicate — not
+ * the user from an intention they never had.
+ */
+export function useRecordServicePayment(orderId: number) {
+  return useServiceMutation<ServicePaymentInput, unknown>((input) =>
+    repository().recordPayment(orderId, input),
+  );
+}
+
+/** Undo a payment recorded in error. NOT a refund; the server returns no money. */
+export function useReverseServicePayment(orderId: number) {
+  return useServiceMutation<{ paymentId: number; reason?: string }, unknown>(
+    ({ paymentId, reason }) =>
+      repository().reversePayment(orderId, paymentId, reason ?? ''),
   );
 }

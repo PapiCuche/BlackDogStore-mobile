@@ -1,11 +1,13 @@
 import {
   fetchCustomerRepair,
+  fetchCustomerPaymentSummary,
   fetchCustomerRepairQuote,
   fetchCustomerRepairs,
   postQuoteDecision,
   RepairNotAvailableError,
 } from '@/api/endpoints/customer-repairs-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
+import type { CustomerPaymentSummary } from '@/domain/internal/service-types';
 import type { QuoteDecision, RepairQuote } from '@/domain/repairs/quote';
 import type { Repair } from '@/domain/repairs/types';
 import type { RepairRepository } from '@/repositories/types';
@@ -44,6 +46,20 @@ export class V1CustomerRepairRepository implements RepairRepository {
     signal?: AbortSignal,
   ): Promise<RepairQuote | null> {
     return fetchCustomerRepairQuote(repairId, this.deps, signal);
+  }
+
+  /**
+   * The balance on one of my repairs.
+   *
+   * Deliberately NOT called `getInvoice` or `getReceipt`. Neither exists: this
+   * platform issues no fiscal document for a repair, and a name that implied
+   * one would be a promise the product has not made.
+   */
+  async getPaymentSummary(
+    repairId: number,
+    signal?: AbortSignal,
+  ): Promise<CustomerPaymentSummary> {
+    return fetchCustomerPaymentSummary(repairId, this.deps, signal);
   }
 
   /**

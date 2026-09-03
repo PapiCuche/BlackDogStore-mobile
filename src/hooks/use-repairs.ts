@@ -67,6 +67,31 @@ export function useRepairQuote(id: number | undefined, options: { enabled?: bool
 }
 
 /**
+ * What I owe on one of my repairs. M12B.
+ *
+ * SECONDARY, like the quote: the detail screen renders it inline and never
+ * gates the page on it. A repair with no agreed price is the normal case, and a
+ * screen that failed to load because a balance failed to load would be worse
+ * than the balance being absent.
+ */
+export function useRepairPaymentSummary(
+  id: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const repository = repositories.repairs;
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.repairPaymentSummary(scope, id ?? -1),
+    queryFn: ({ signal }) =>
+      repository
+        ? repository.getPaymentSummary(id!, signal)
+        : featureUnavailable('repairs', UNAVAILABLE),
+    enabled: (options.enabled ?? true) && id !== undefined && Number.isFinite(id),
+    retry: false,
+  });
+}
+
+/**
  * Answer the quote.
  *
  * NO RETRY AND NO OFFLINE QUEUE. The server is idempotent for a repeat of the

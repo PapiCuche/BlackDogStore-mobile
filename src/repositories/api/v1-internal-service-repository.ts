@@ -1,6 +1,10 @@
 import {
   fetchServiceDelivery,
   postServiceDelivery,
+  fetchServicePayments,
+  fetchServicePaymentSummary,
+  postServicePayment,
+  postServicePaymentReverse,
   fetchServiceQualityCheck,
   fetchServiceQualityHistory,
   patchServiceQualityItem,
@@ -42,6 +46,7 @@ import {
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type {
   ServiceDeliveryInput,
+  ServicePaymentInput,
   ServiceQualityResultInput,
   ServiceCompleteInput,
   ServiceExecutionInput,
@@ -379,5 +384,42 @@ export class V1InternalServiceRepository {
     signal?: AbortSignal,
   ) {
     return postServiceDelivery(orderId, input, this.deps, signal);
+  }
+
+  // ---------------------------------------------------------------------
+  // M12B / BR-005F — the payment ledger
+  // ---------------------------------------------------------------------
+
+  async listPayments(orderId: number, signal?: AbortSignal) {
+    return fetchServicePayments(orderId, this.deps, signal);
+  }
+
+  async getPaymentSummary(orderId: number, signal?: AbortSignal) {
+    return fetchServicePaymentSummary(orderId, this.deps, signal);
+  }
+
+  /**
+   * Deliberately NOT called `setPaid`. The balance moving is a CONSEQUENCE of
+   * money arriving, not the thing being asked for — the same naming rule
+   * `publishQuote`, `startRepair` and `recordDelivery` follow.
+   *
+   * And there is no `updatePayment` or `deletePayment`, because the server has
+   * neither: the row refuses both in its own `save`.
+   */
+  async recordPayment(
+    orderId: number,
+    input: ServicePaymentInput,
+    signal?: AbortSignal,
+  ) {
+    return postServicePayment(orderId, input, this.deps, signal);
+  }
+
+  async reversePayment(
+    orderId: number,
+    paymentId: number,
+    reason: string,
+    signal?: AbortSignal,
+  ) {
+    return postServicePaymentReverse(orderId, paymentId, reason, this.deps, signal);
   }
 }

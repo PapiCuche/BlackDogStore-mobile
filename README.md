@@ -759,6 +759,60 @@ entrega», es una clave gastada en otra cosa.
 **Para el cliente, `delivered` cierra la reparación** y sale de la Home. No ve
 quién la recogió, ni las notas del mostrador, ni quién se la dio.
 
+### Cobro del servicio (M12B)
+
+**Un libro mayor, no una bandera.** `RepairOrder` no tiene `paid` y no lo
+tendrá: un booleano no sabe decir «doscientos de quinientos». Cada pago es una
+fila y el saldo es aritmética sobre las filas — **que hace el servidor**.
+
+**Esta app no hace aritmética con dinero.** Cada importe es una cadena decimal
+desde el cable hasta el píxel. Un número calculado aquí podría discrepar del del
+taller, y el que discrepa siempre es el que alguien está leyendo al otro lado
+del mostrador. Un guard estructural falla si aparece `Number(...)`,
+`parseFloat`, `toFixed` o una suma sobre un identificador de dinero — y se
+verificó plantando la violación exacta.
+
+**`null` no es cero.** Un total sin cotizar se dibuja como «todavía sin
+presupuesto», nunca como «S/ 0.00»: eso último diría que la reparación es
+gratis.
+
+**`online` no se ofrece.** Nombra un flujo de pasarela que nadie construyó. El
+servidor lo rechaza en la capa de servicio **y** en una constraint de base de
+datos, así que mostrarlo solo prometería un 400.
+
+**Cobrar es un permiso distinto de reparar.** `service.payments.manage` es
+propia: `service.orders.manage` no la implica, ni `inventory.adjust`, ni la
+entrega. El preset `Servicio Técnico` **no** la trae por defecto — los técnicos
+autorizados gestionan los estados de una reparación, y de ahí no se sigue que
+todo técnico maneje efectivo.
+
+**Un pago no se edita ni se borra: se reversa.** Y **reversar NO devuelve
+dinero** — la confirmación lo dice antes de que el botón haga nada. Esta
+plataforma no puede reembolsar.
+
+**Un doble toque no cobra dos veces.** Clave acuñada una vez por intención,
+guardada en un `ref`, reenviada idéntica. `retry: false`, sin cola offline.
+
+**Un 409 tiene ahora tres significados**, y se distinguen por el `code` del
+servidor, nunca por el castellano: `insufficient_stock`,
+`idempotency_conflict` y **`payment_required`**. Este último no es «falló la
+entrega»: es la política del taller. La pantalla refresca el saldo y dice cuánto
+falta, en lugar de mandar a alguien a buscar un problema en el equipo.
+
+### El saldo, para el cliente (M12B)
+
+Tres números y una palabra, todos del servidor: total aprobado, pagado, saldo,
+estado.
+
+**No ve** quién cobró, con qué medio, contra qué voucher, ni que un pago fue
+reversado — eso es el taller corrigiendo sus libros, y su saldo ya lo refleja.
+`overpaid` se reporta como `paid`.
+
+**No hay botón de pagar**, y no debe haberlo hasta que exista el pago en línea.
+Enseñar un saldo junto a algo que parezca una forma de liquidarlo sería la
+mentira que toda esta fase evitó. La tarjeta dice dónde se paga de verdad: **en
+el taller**.
+
 ### Inventario: una tercera puerta
 
 El stock solo existe en un lugar, así que el módulo de inventario pregunta
