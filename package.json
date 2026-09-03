@@ -56,7 +56,7 @@
     "test": "jest --watch",
     "test:ci": "jest --ci --coverage=false --passWithNoTests=false",
     "doctor": "npx expo-doctor@latest",
-    "verify": "npm run typecheck && npm run lint && npm run test:ci"
+    "verify": "npm run typecheck && npm run lint && npm run test:ci && git diff --check"
   },
   "private": true,
   "jest": {

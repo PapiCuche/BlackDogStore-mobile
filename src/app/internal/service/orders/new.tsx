@@ -1,5 +1,5 @@
 import { router, Stack } from 'expo-router';
-import { useState } from 'react';
+import { useDeferredValue, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { serviceErrorMessage } from '@/api/endpoints/internal-service-v1';
@@ -92,7 +92,17 @@ export default function ServiceIntakeScreen() {
   const [serialNumber, setSerialNumber] = useState('');
   const [imei, setImei] = useState('');
 
-  const customers = useServiceCustomerSearch(search.trim(), {
+  // ONE REQUEST PER SEARCH, not one per keystroke. Every distinct term is a
+  // distinct query key, so typing «Rodriguez» used to leave nine requests in
+  // flight against a route that is paginated anyway. `useDeferredValue` is the
+  // pattern the catalogue screen already uses: the field stays responsive and
+  // the query lags a frame behind, with no debounce timer to tune.
+  //
+  // A minimum length was the other option and it is the wrong one here: an
+  // empty box legitimately lists the shop's customers, and gating on two
+  // characters would leave that first render disabled and stuck on a skeleton.
+  const deferredSearch = useDeferredValue(search.trim());
+  const customers = useServiceCustomerSearch(deferredSearch, {
     enabled: mayCreate && mayFindCustomers && customer === null,
   });
   const devices = useServiceDevices(

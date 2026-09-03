@@ -56,6 +56,14 @@ jobs:
       - name: Tests
         run: npm run test:ci
 
+      # Catches what the other gates cannot see: trailing whitespace, a space
+      # before a tab, and — the one that matters — a conflict marker committed
+      # by accident. `tsc` and `eslint` both parse happily around `<<<<<<<` in a
+      # markdown file or a workflow, so this is not redundant with them. Pure
+      # git, no network, runs in milliseconds.
+      - name: Whitespace / patch integrity
+        run: git diff --check
+
   doctor:
     name: Expo Doctor
     runs-on: ubuntu-latest
