@@ -107,7 +107,10 @@ const WIRE_ORDER = {
 };
 
 describe('the client talks to the INTERNAL service surface only', () => {
-  it('asks the nine routes of this tenant', async () => {
+  it('hangs every route it asks for off this tenant', async () => {
+    // Named for the GUARANTEE, not for a count. The previous name said «nine»
+    // while the list below held seven, and the module grew to thirty-two — a
+    // number in a test name is a claim nobody re-checks.
     const cases: [string, (m: Loaded) => Promise<unknown>][] = [
       ['/api/v1/internal/blackdog/service/context/', (m) => m.fetchServiceContext(DEPS)],
       ['/api/v1/internal/blackdog/service/customers/', (m) => m.searchServiceCustomers({}, DEPS)],

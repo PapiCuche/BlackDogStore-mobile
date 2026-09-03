@@ -481,17 +481,31 @@ está — que es más limpio que un flag.
 
 ## BR-005 — Dominio de reparaciones (servicio técnico)
 
-> **ESTADO: PARCIAL — el núcleo se entregó en M8** (`origin/master` `43fffb0`).
-> Existen `Device`, `RepairOrder`, el ciclo de vida con códigos estables y
-> etiquetas por empresa, el historial inmutable y la asignación de técnico, más
-> `/api/v1/internal/<slug>/service/` y `/api/v1/customer/<slug>/repairs/`.
+> **ESTADO: RESUELTO.** La cadena completa está entregada e integrada: 34 rutas
+> en `/api/v1/internal/<slug>/service/`, de las cuales Mobile consume 32 — las
+> dos restantes son lecturas que el detalle canónico ya incluye, no brechas.
+> Ver `docs/INTEGRATION_STATUS.md`.
+>
+> **Lo que sigue abajo es el registro histórico de M8**, y merece conservarse
+> porque la lección lo vale. Se mantuvo en «PARCIAL» varias fases después de
+> dejar de serlo, mientras la tabla resumen de este mismo documento ya decía
+> RESUELTO — un documento contradiciéndose a sí mismo sin que nadie mintiera.
+>
+> ---
+>
+> **Estado EN M8** (`origin/master` `43fffb0`): existían `Device`,
+> `RepairOrder`, el ciclo de vida con códigos estables y etiquetas por empresa,
+> el historial inmutable y la asignación de técnico.
 >
 > **El backend NO aceptó la propuesta tal cual, y con razón**: esta sección
-> proponía siete etapas y se implementaron cuatro. `in_repair`,
-> `quality_check`, `ready_for_pickup` y `delivered` necesitan módulos —
-> repuestos, una lista de comprobación, un flujo de entrega — que M8 no
-> construyó, y un estado sobre el que ningún código puede actuar es un estado
-> que miente.
+> proponía siete etapas y M8 implementó cuatro. `in_repair`, `quality_check`,
+> `ready_for_pickup` y `delivered` necesitaban módulos —repuestos, una lista de
+> comprobación, un flujo de entrega— que M8 no construyó, y un estado sobre el
+> que ningún código puede actuar es un estado que miente.
+>
+> Esos módulos llegaron después: M10 la ejecución y los repuestos, M11 el
+> control de calidad, M12 la entrega y M12B el cobro. La decisión de M8 fue
+> correcta *y* temporal, que es lo que hace que valga la pena recordarla.
 >
 > **M9 cerró la segunda mitad** (`origin/master` `36b8a8c`): diagnóstico,
 > cotización versionada con líneas, publicación y la aprobación o rechazo del
