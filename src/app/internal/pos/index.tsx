@@ -2,7 +2,10 @@ import { Stack } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Alert, View } from 'react-native';
 
-import { posErrorMessage } from '@/api/endpoints/internal-pos-v1';
+import {
+  PosInsufficientStockError,
+  posErrorMessage,
+} from '@/api/endpoints/internal-pos-v1';
 import {
   Button,
   Card,
@@ -26,31 +29,42 @@ import {
 } from '@/domain/internal/pos-types';
 import { hasUxCapability } from '@/domain/internal/types';
 import {
+  conditionsSignature,
+  type PosConditions,
+} from '@/features/internal/pos-conditions';
+import {
   useCreatePosSale,
   usePosContext,
+  usePosPreview,
   usePosProductSearch,
 } from '@/hooks/use-internal-pos';
 import { useInternalContext } from '@/hooks/use-internal-sales';
 import { useTheme } from '@/theme/theme-provider';
 
 /**
- * The counter till. IP1A.
+ * The counter till. IP1A, completed in IP2A.
  *
  * THIS SCREEN SELLS NOTHING BY ITSELF. It collects an intention — which shop,
- * which articles, how many, how it is being paid — and the server prices it,
- * applies whatever promotion is running, checks the shelf, takes the cash and
- * writes the sale. `pos_services.create_pos_sale`, the same function the Web
- * till calls.
+ * which articles, how many, which conditions, how it is paid — and the server
+ * prices it, applies whatever promotion is running, checks the shelf, takes the
+ * cash and writes the sale. `pos_services.create_pos_sale`, the same function
+ * the Web till calls.
  *
- * NO TOTAL IS COMPUTED HERE. Not for display, not "just to show a running
- * subtotal". A number added up on a phone can disagree with the till, and the
- * one that disagrees is the one a customer is being asked to pay. The screen
- * asks `preview/` for the figure, and shows what came back.
+ * NO TOTAL IS COMPUTED HERE. Not for display, not "just a running subtotal". A
+ * number added up on a phone can disagree with the till, and the one that
+ * disagrees is the one a customer is being asked to pay. Every figure on this
+ * screen arrived in a response.
+ *
+ * NOTHING IS CHARGED THAT WAS NOT PRICED FIRST — the addition IP2A makes. The
+ * charge button appears only once `preview/` has answered for THESE conditions,
+ * and it disappears the moment any of them change. A stale total is worse than
+ * no total: it is a number the operator read aloud and the server never agreed
+ * to. What the preview does NOT do is authorise: the sale recomputes from
+ * scratch, and if the answer moved, the screen shows the server's, not its own.
  *
  * THE BASKET IS LOCAL INTENTION, and it is not a cart. It shares no store with
- * the customer shop, persists nowhere, reserves nothing and survives no
- * restart. Somebody who walks away from the counter has abandoned a list, not
- * an order.
+ * the customer shop, persists nowhere, reserves nothing, survives no restart.
+ * Somebody who walks away from the counter abandoned a list, not an order.
  *
  * NO OFFLINE QUEUE. A sale that left a phone hours later, against a shelf that
  * has moved and a price that may have changed, is not the sale anybody made.
@@ -67,26 +81,51 @@ export default function PosScreen() {
   const [cash, setCash] = useState('');
   const [method, setMethod] = useState<string>('cash');
 
+  // The conditions that change what the basket COSTS. Every one of them blanks
+  // the priced total when it moves — see `pos-conditions.ts`.
+  const [coupon, setCoupon] = useState('');
+  const [discountType, setDiscountType] = useState<'' | 'percent' | 'amount'>('');
+  const [discountValue, setDiscountValue] = useState('');
+  const [discountReason, setDiscountReason] = useState('');
+  const [seller, setSeller] = useState<number | null>(null);
+
   // Held in a ref, NOT in render state: a retry must resend the SAME key, and a
   // key that changed on re-render would be no key at all — which on this screen
   // means charging somebody twice.
   const keys = useRef(new Map<string, string>());
 
-  // The branch the server chose, until somebody picks another. `defaultBranch`
-  // is NULL when the server refused to pick — several shops and no authorised
-  // default — and then the screen asks rather than guessing.
+  // The signature the figure on screen was priced under. Null means nothing has
+  // been priced, which is also the state after any condition changes.
+  const [pricedUnder, setPricedUnder] = useState<string | null>(null);
+
   const branch = branchId ?? context.data?.defaultBranch ?? null;
 
   const search = usePosProductSearch(branch, term, { enabled: mayUse });
+  const preview = usePosPreview();
   const sale = useCreatePosSale();
 
-  const canSell = mayUse && branch !== null && lines.length > 0;
+  const conditions: PosConditions = {
+    branch,
+    lines,
+    couponCode: coupon,
+    manualDiscountType: discountType,
+    manualDiscountValue: discountValue,
+    discountReason,
+    seller,
+  };
+  const signature = conditionsSignature(conditions);
+  const priced = pricedUnder === signature ? preview.data ?? null : null;
+
+  const canPrice = mayUse && branch !== null && lines.length > 0;
+  const canSell = canPrice && priced !== null;
+
+  /** Anything that moves the price invalidates the figure on screen. */
+  function repriceNeeded() {
+    setPricedUnder(null);
+  }
 
   function keyFor(): string {
-    const shape = `${branch}:${lines
-      .map((l) => `${l.product.id}x${l.quantity}`)
-      .sort()
-      .join(',')}:${method}:${cash.trim()}`;
+    const shape = `${signature}:${method}:${cash.trim()}`;
     const existing = keys.current.get(shape);
     if (existing) return existing;
     // 8–64 printable characters, no spaces. The server REFUSES a short key
@@ -107,6 +146,7 @@ export default function PosScreen() {
       return [...current, { product, quantity: 1 }];
     });
     setTerm('');
+    repriceNeeded();
   }
 
   function setQuantity(productId: number, quantity: number) {
@@ -117,14 +157,51 @@ export default function PosScreen() {
             l.product.id === productId ? { ...l, quantity } : l,
           ),
     );
+    repriceNeeded();
+  }
+
+  function clearAfterSale() {
+    setLines([]);
+    setCash('');
+    setCoupon('');
+    setDiscountType('');
+    setDiscountValue('');
+    setDiscountReason('');
+    setSeller(null);
+    setPricedUnder(null);
+    keys.current.clear();
+  }
+
+  function price() {
+    if (branch === null) return;
+    const taken = signature;
+    preview.mutate(
+      {
+        branch,
+        items: lines.map((l) => ({ product: l.product.id, quantity: l.quantity })),
+        paymentMethod: method,
+        couponCode: coupon.trim() || undefined,
+        seller: seller ?? undefined,
+        manualDiscountType: discountType || undefined,
+        manualDiscountValue: discountValue.trim() || undefined,
+        discountReason: discountReason.trim() || undefined,
+      },
+      {
+        // Stamped with the signature the request was BUILT from, not the one
+        // live when it returns. Somebody who edits the basket while the request
+        // is in flight must not be handed the older basket's total.
+        onSuccess: () => setPricedUnder(taken),
+        onError: () => setPricedUnder(null),
+      },
+    );
   }
 
   function confirm() {
-    if (branch === null) return;
+    if (branch === null || priced === null) return;
     Alert.alert(
       'Cobrar',
-      'El servidor calculará el total, aplicará las promociones vigentes y '
-      + 'descontará el stock. Confirma que informaste las condiciones de venta.',
+      `Total ${priced.total}. El servidor vuelve a calcularlo al cobrar y `
+      + 'descuenta el stock. Confirma que informaste las condiciones de venta.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -139,23 +216,33 @@ export default function PosScreen() {
                 })),
                 paymentMethod: method,
                 amountReceived: cash.trim() || undefined,
+                couponCode: coupon.trim() || undefined,
+                seller: seller ?? undefined,
+                manualDiscountType: discountType || undefined,
+                manualDiscountValue: discountValue.trim() || undefined,
+                discountReason: discountReason.trim() || undefined,
                 idempotencyKey: keyFor(),
-                // Asserted by the operator, never inferred. Handing the article
-                // over proves nothing was explained.
+                // NO price, NO subtotal, NO total, NO commission, NO promotion
+                // result. A till is TOLD what to charge; it is never asked, and
+                // sending back the preview's total would turn a figure this app
+                // is merely displaying into a figure it is asserting.
                 termsConfirmed: true,
               },
               {
                 onSuccess: (result) => {
-                  setLines([]);
-                  setCash('');
-                  keys.current.clear();
+                  clearAfterSale();
                   Alert.alert(
-                    result.created ? 'Venta registrada' : 'Esta venta ya estaba registrada',
+                    result.created
+                      ? 'Venta registrada'
+                      : 'Esta venta ya estaba registrada',
+                    // The FINAL figures, from the sale. If the shelf or a
+                    // promotion moved between pricing and charging, this is the
+                    // number that happened.
                     `Total ${result.total} · vuelto ${result.changeAmount ?? '—'}`,
                   );
                 },
                 onError: (error) => {
-                  Alert.alert('No se pudo cobrar', posErrorMessage(error));
+                  Alert.alert('No se pudo cobrar', saleFailureMessage(error));
                 },
               },
             ),
@@ -204,6 +291,7 @@ export default function PosScreen() {
   }
 
   const ctx = context.data!;
+  const busy = preview.isPending || sale.isPending;
 
   return (
     <>
@@ -234,8 +322,9 @@ export default function PosScreen() {
                       // A basket priced in one shop means nothing in another.
                       setLines([]);
                       keys.current.clear();
+                      repriceNeeded();
                     }}
-                    disabled={sale.isPending}
+                    disabled={busy}
                   />
                 ))}
               </View>
@@ -273,7 +362,7 @@ export default function PosScreen() {
                     <Button
                       label="Agregar"
                       onPress={() => add(product)}
-                      disabled={sale.isPending}
+                      disabled={busy}
                     />
                   </View>
                 </Card>
@@ -302,32 +391,256 @@ export default function PosScreen() {
                         {line.product.price} c/u
                       </Text>
                     </View>
-                    <View
-                      style={{ flexDirection: 'row', gap: theme.spacing.xs }}
-                    >
+                    <View style={{ flexDirection: 'row', gap: theme.spacing.xs }}>
                       <Button
                         label="−"
                         variant="secondary"
                         onPress={() => setQuantity(line.product.id, line.quantity - 1)}
-                        disabled={sale.isPending}
+                        disabled={busy}
                       />
                       <Text variant="headline">{line.quantity}</Text>
                       <Button
                         label="+"
                         variant="secondary"
                         onPress={() => setQuantity(line.product.id, line.quantity + 1)}
-                        disabled={sale.isPending}
+                        disabled={busy}
                       />
                     </View>
                     <Divider />
                   </View>
                 ))}
-                {/* NO TOTAL HERE, and its absence is the point: the only figure
-                    this app shows is one the server sent. */}
-                <Text variant="caption" color="textTertiary">
-                  El total lo calcula el servidor al cobrar, con las promociones
-                  vigentes.
-                </Text>
+              </Card>
+            </View>
+          ) : null}
+
+          {lines.length > 0 ? (
+            <View>
+              <SectionHeader title="Condiciones" />
+              <Card variant="outlined">
+                {/* A COUPON NEEDS NO PERMISSION, and that is the server's
+                    decision, not a gap here: the company configured the
+                    promotion in advance, so honouring it is not something the
+                    cashier is deciding. */}
+                <Input
+                  label="Código promocional"
+                  value={coupon}
+                  onChangeText={(value) => { setCoupon(value); repriceNeeded(); }}
+                  autoCapitalize="characters"
+                  placeholder="Opcional"
+                />
+
+                {/* A MANUAL DISCOUNT IS A DECISION, so it needs the authority to
+                    make it and a reason recorded next to it. Drawn only when
+                    the server said this account may; the server refuses it
+                    again anyway, and would 403 a control offered by mistake. */}
+                {ctx.canApplyDiscount ? (
+                  <>
+                    <Divider />
+                    <Text variant="footnote" color="textSecondary">
+                      Descuento manual
+                    </Text>
+                    <View
+                      style={{ flexDirection: 'row', gap: theme.spacing.xs }}
+                    >
+                      {([
+                        ['', 'Ninguno'],
+                        ['percent', '%'],
+                        ['amount', 'Monto'],
+                      ] as const).map(([value, label]) => (
+                        <Button
+                          key={label}
+                          label={label}
+                          variant={discountType === value ? 'primary' : 'secondary'}
+                          onPress={() => {
+                            setDiscountType(value);
+                            if (!value) {
+                              setDiscountValue('');
+                              setDiscountReason('');
+                            }
+                            repriceNeeded();
+                          }}
+                          disabled={busy}
+                        />
+                      ))}
+                    </View>
+                    {discountType ? (
+                      <>
+                        <Input
+                          label={discountType === 'percent' ? 'Porcentaje' : 'Monto'}
+                          value={discountValue}
+                          onChangeText={(value) => {
+                            setDiscountValue(value);
+                            repriceNeeded();
+                          }}
+                          keyboardType="decimal-pad"
+                          placeholder="0"
+                        />
+                        {/* Required by the server, so required here. A discount
+                            without a recorded reason is a hole in the till that
+                            nobody can explain afterwards. */}
+                        <Input
+                          label="Motivo"
+                          value={discountReason}
+                          onChangeText={(value) => {
+                            setDiscountReason(value);
+                            repriceNeeded();
+                          }}
+                          placeholder="Obligatorio"
+                        />
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {/* Attribution. The list arrives EMPTY for anybody without the
+                    capability — a roster of colleagues is staffing information,
+                    and somebody who cannot reassign a sale has no reason to
+                    hold one. */}
+                {ctx.canAssignSeller && ctx.sellers.length > 0 ? (
+                  <>
+                    <Divider />
+                    <Text variant="footnote" color="textSecondary">Vendedor</Text>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        flexWrap: 'wrap',
+                        gap: theme.spacing.xs,
+                      }}
+                    >
+                      <Button
+                        label={ctx.seller.name || 'Yo'}
+                        variant={seller === null ? 'primary' : 'secondary'}
+                        onPress={() => { setSeller(null); repriceNeeded(); }}
+                        disabled={busy}
+                      />
+                      {ctx.sellers.map((s) => (
+                        <Button
+                          key={s.id}
+                          label={s.name}
+                          variant={seller === s.id ? 'primary' : 'secondary'}
+                          onPress={() => { setSeller(s.id); repriceNeeded(); }}
+                          disabled={busy}
+                        />
+                      ))}
+                    </View>
+                  </>
+                ) : null}
+              </Card>
+            </View>
+          ) : null}
+
+          {lines.length > 0 ? (
+            <View>
+              <SectionHeader title="Total" />
+              <Card variant="outlined">
+                {priced === null ? (
+                  <>
+                    <Text variant="subhead" color="textSecondary">
+                      {preview.isPending
+                        ? 'Calculando…'
+                        : 'Pide el total antes de cobrar.'}
+                    </Text>
+                    {preview.isError ? (
+                      <Text variant="footnote" color="danger">
+                        {/* The server's own words. A promotion that will not
+                            stack with a coupon says so here, and this app must
+                            not paraphrase a policy it does not own. */}
+                        {posErrorMessage(preview.error)}
+                      </Text>
+                    ) : null}
+                    <Button
+                      label="Calcular total"
+                      fullWidth
+                      onPress={price}
+                      disabled={!canPrice || busy}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Text variant="subhead" color="textSecondary">Subtotal</Text>
+                      <Text variant="subhead">{priced.subtotal}</Text>
+                    </View>
+
+                    {/* Promotions the SERVER applied on its own, named so the
+                        counter can explain the reduction instead of showing a
+                        figure that dropped for no visible reason. This app
+                        neither chooses nor computes them. */}
+                    {priced.promotions.map((promo) => (
+                      <View
+                        key={promo.id}
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          gap: theme.spacing.sm,
+                        }}
+                      >
+                        <Text variant="caption" color="textTertiary" style={{ flex: 1 }}>
+                          {promo.name}
+                          {promo.applications > 1 ? ` ×${promo.applications}` : ''}
+                        </Text>
+                        <Text variant="caption" color="textTertiary">
+                          −{promo.discountAmount}
+                        </Text>
+                      </View>
+                    ))}
+
+                    {priced.discountSource !== 'none' ? (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <Text variant="caption" color="textTertiary">
+                          {priced.discountSource === 'coupon'
+                            ? `Cupón ${priced.couponCode}`
+                            : 'Descuento manual'}
+                        </Text>
+                        <Text variant="caption" color="textTertiary">
+                          −{priced.discount}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    <Divider />
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Text variant="headline">Total</Text>
+                      <Text variant="headline">{priced.total}</Text>
+                    </View>
+
+                    {priced.seller.id !== null ? (
+                      <Text variant="caption" color="textTertiary">
+                        Vendedor: {priced.seller.name}
+                      </Text>
+                    ) : null}
+
+                    {/* Shown ONLY because the payload carried it. The server
+                        sends null to anybody without `sales.commissions.view`,
+                        so its absence is the permission working — never
+                        something to infer from a role name. */}
+                    {priced.commission ? (
+                      <Text variant="caption" color="textTertiary">
+                        Comisión {priced.commission.ratePercent}% ·{' '}
+                        {priced.commission.amount}
+                      </Text>
+                    ) : null}
+
+                    <Text variant="caption" color="textTertiary">
+                      Calculado por el servidor. Se vuelve a calcular al cobrar.
+                    </Text>
+                  </>
+                )}
               </Card>
             </View>
           ) : null}
@@ -347,7 +660,7 @@ export default function PosScreen() {
                       label={m.label}
                       variant={method === m.value ? 'primary' : 'secondary'}
                       onPress={() => setMethod(m.value)}
-                      disabled={sale.isPending}
+                      disabled={busy}
                     />
                   ))}
                 </View>
@@ -364,29 +677,31 @@ export default function PosScreen() {
                 <Button
                   label="Cobrar"
                   onPress={confirm}
-                  disabled={!canSell || sale.isPending}
+                  disabled={!canSell || busy}
                 />
+                {!canSell && canPrice ? (
+                  <Text variant="footnote" color="textTertiary">
+                    Calcula el total antes de cobrar.
+                  </Text>
+                ) : null}
                 {sale.isError ? (
                   <Text variant="footnote" color="danger">
-                    {posErrorMessage(sale.error)}
+                    {saleFailureMessage(sale.error)}
                   </Text>
                 ) : null}
               </Card>
             </View>
           ) : null}
 
-          {ctx.canApplyDiscount || ctx.canAssignSeller ? (
+          {ctx.canManageCustomers ? (
             <Card variant="outlined">
               <StatusBadge label="Disponible en la Web" tone="info" />
               <Text variant="caption" color="textTertiary">
-                {/* Honest rather than silent: the permissions exist and this
-                    screen does not use them yet. Saying so beats a control that
+                {/* Honest rather than silent: the permission exists and this
+                    screen does not use it yet. Saying so beats a control that
                     is missing for no visible reason. */}
-                Tu cuenta puede
-                {ctx.canApplyDiscount ? ' aplicar descuentos' : ''}
-                {ctx.canApplyDiscount && ctx.canAssignSeller ? ' y' : ''}
-                {ctx.canAssignSeller ? ' asignar vendedor' : ''}
-                . Esta pantalla todavía no lo ofrece; hazlo desde la consola Web.
+                Tu cuenta puede registrar clientes. Esta pantalla todavía no lo
+                ofrece; hazlo desde la consola Web.
               </Text>
             </Card>
           ) : null}
@@ -394,4 +709,23 @@ export default function PosScreen() {
       </Screen>
     </>
   );
+}
+
+/**
+ * What to put in front of the person who pressed the button.
+ *
+ * A shelf that ran out is the one refusal with somewhere to go: the server says
+ * which other shops still hold the article, and repeating that is the whole
+ * difference between "no se pudo cobrar" and a counter that sends the customer
+ * two streets over. Carried since IP2A — see `PosInsufficientStockError`.
+ */
+function saleFailureMessage(error: unknown): string {
+  const base = posErrorMessage(error);
+  if (error instanceof PosInsufficientStockError && error.availableElsewhere.length > 0) {
+    const elsewhere = error.availableElsewhere
+      .map((row) => `${row.branchName}: ${row.available}`)
+      .join(' · ');
+    return `${base}\n\nHay en: ${elsewhere}`;
+  }
+  return base;
 }
