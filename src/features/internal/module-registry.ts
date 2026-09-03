@@ -1,4 +1,5 @@
 import { CAP_INVENTORY_VIEW } from '@/domain/internal/inventory-types';
+import { CAP_SALES_POS_USE } from '@/domain/internal/pos-types';
 import { CAP_SERVICE_ORDERS_VIEW } from '@/domain/internal/service-types';
 import {
   CAP_SALES_ORDERS_VIEW,
@@ -51,6 +52,16 @@ export const INTERNAL_MODULES: readonly InternalModule[] = [
     requires: CAP_SALES_ORDERS_VIEW,
     integration: 'ready',
     route: '/internal/orders',
+  },
+  {
+    key: 'pos',
+    title: 'Punto de venta',
+    description: 'Cobrar en mostrador, con el stock y los precios de la empresa.',
+    // IP1A. The SAME capability the backend enforces — `Ventas` holds it and
+    // `Inventario` does not, measured against the resolver rather than assumed.
+    requires: CAP_SALES_POS_USE,
+    integration: 'ready',
+    route: '/internal/pos',
   },
   {
     key: 'inventory',
