@@ -2,6 +2,7 @@ import type { CompanyBrand } from '@/domain/company/types';
 import type { Order } from '@/domain/orders/types';
 import type { Category, Product } from '@/domain/products/types';
 import type { QuoteDecision, RepairQuote } from '@/domain/repairs/quote';
+import type { CustomerPaymentSummary } from '@/domain/internal/service-types';
 import type { Repair } from '@/domain/repairs/types';
 
 /**
@@ -34,6 +35,13 @@ export type RepairRepository = {
   getRepairById(id: number, signal?: AbortSignal): Promise<Repair | null>;
   // BR-005B. `null` is a normal answer: most of a repair's life has no quote.
   getRepairQuote(repairId: number, signal?: AbortSignal): Promise<RepairQuote | null>;
+  // M12B. What I agreed to, what I have paid, what is left. FIVE numbers, all
+  // of them decimal STRINGS the server computed — this app never does
+  // arithmetic on money, because a second answer that disagrees with the shop's
+  // is the one the customer would be reading.
+  getPaymentSummary(
+    repairId: number, signal?: AbortSignal,
+  ): Promise<CustomerPaymentSummary>;
   decideQuote(
     input: { repairId: number; quoteId: number; decision: QuoteDecision; reason?: string },
     signal?: AbortSignal,

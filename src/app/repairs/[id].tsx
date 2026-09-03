@@ -15,8 +15,14 @@ import {
 } from '@/design-system';
 import { describeRepairStatus } from '@/domain/repairs/status';
 import { RepairTimeline } from '@/features/repairs/repair-timeline';
+import { RepairPaymentCard } from '@/features/repairs/repair-payment-card';
 import { RepairQuoteCard } from '@/features/repairs/repair-quote-card';
-import { useDecideQuote, useRepair, useRepairQuote } from '@/hooks/use-repairs';
+import {
+  useDecideQuote,
+  useRepair,
+  useRepairPaymentSummary,
+  useRepairQuote,
+} from '@/hooks/use-repairs';
 import { useTheme } from '@/theme/theme-provider';
 import { formatDate, formatRelativeTime } from '@/utils/format';
 
@@ -40,6 +46,7 @@ export default function RepairDetailScreen() {
   // life has no quote, and a screen that failed to load because an absent thing
   // failed to load would be worse than the absence.
   const quote = useRepairQuote(resolvedId);
+  const payment = useRepairPaymentSummary(resolvedId);
   const decide = useDecideQuote(resolvedId);
 
   if (isPending) {
@@ -132,6 +139,19 @@ export default function RepairDetailScreen() {
                     decide.mutate({ quoteId: quote.data!.id, ...input })
                   }
                 />
+              </Card>
+            </View>
+          ) : null}
+
+          {/* M12B. Below the decision and above the history: what somebody
+              owes matters less than what they are being asked to authorise, and
+              more than what already happened. There is deliberately no way to
+              pay from here — online payment for a repair does not exist. */}
+          {payment.data ? (
+            <View>
+              <SectionHeader title="Pago" />
+              <Card>
+                <RepairPaymentCard summary={payment.data} />
               </Card>
             </View>
           ) : null}

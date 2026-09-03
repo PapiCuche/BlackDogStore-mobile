@@ -2,7 +2,10 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 
-import { serviceErrorMessage } from '@/api/endpoints/internal-service-v1';
+import {
+  ServicePaymentRequiredError,
+  serviceErrorMessage,
+} from '@/api/endpoints/internal-service-v1';
 import {
   Button,
   Card,
@@ -19,6 +22,7 @@ import {
 } from '@/design-system';
 import {
   CAP_SERVICE_DELIVERY_MANAGE,
+  CAP_SERVICE_PAYMENTS_MANAGE,
   CAP_SERVICE_DIAGNOSTIC_MANAGE,
   CAP_SERVICE_QUALITY_MANAGE,
   CAP_SERVICE_REPAIR_MANAGE,
@@ -27,6 +31,7 @@ import {
 } from '@/domain/internal/service-types';
 import { hasUxCapability } from '@/domain/internal/types';
 import { ServiceDeliverySection } from '@/features/internal/service-delivery-section';
+import { ServicePaymentSection } from '@/features/internal/service-payment-section';
 import { ServiceDiagnosticSection } from '@/features/internal/service-diagnostic-section';
 import { ServiceExecutionSection } from '@/features/internal/service-execution-section';
 import { ServicePartsSection } from '@/features/internal/service-parts-section';
@@ -55,6 +60,9 @@ import {
   useFailQualityCheck,
   useServiceDelivery,
   useRecordDelivery,
+  useServicePayments,
+  useRecordServicePayment,
+  useReverseServicePayment,
   useStartRepair,
   useUpdateExecution,
   useCompleteRepair,
@@ -156,6 +164,15 @@ export default function ServiceOrderDetailScreen() {
   const mayDeliver = hasUxCapability(context ?? null, CAP_SERVICE_DELIVERY_MANAGE);
   const delivery = useServiceDelivery(safeId, { enabled: mayView });
   const recordDelivery = useRecordDelivery(orderId);
+
+  // M12B / BR-005F. Its OWN capability: moving an order through its lifecycle
+  // and taking cash for it are different jobs. READING the balance needs only
+  // `service.orders.view` — a technician who cannot see whether a customer has
+  // settled cannot answer the question they will be asked at the counter.
+  const mayCharge = hasUxCapability(context ?? null, CAP_SERVICE_PAYMENTS_MANAGE);
+  const payments = useServicePayments(safeId, { enabled: mayView });
+  const recordPayment = useRecordServicePayment(orderId);
+  const reversePayment = useReverseServicePayment(orderId);
 
   const { data: order, isPending, isError, error } = query;
   const title = order?.number ?? 'Orden de servicio';
@@ -388,6 +405,27 @@ export default function ServiceOrderDetailScreen() {
             onFail={(notes) => failQuality.mutate({ notes })}
           />
 
+          {/* M12B / BR-005F. Money and lifecycle are orthogonal: nothing here
+              writes a status, and there is no `paid` state. The one place they
+              meet is the delivery gate, and only for a tenant that turned it
+              on — which the summary reports so this screen can explain it. */}
+          <ServicePaymentSection
+            summary={payments.data?.summary ?? null}
+            payments={payments.data?.results ?? []}
+            canManage={mayCharge}
+            isBusy={recordPayment.isPending || reversePayment.isPending}
+            error={recordPayment.error ?? reversePayment.error ?? payments.error}
+            onRecord={(input) =>
+              recordPayment.mutate({
+                amount: input.amount,
+                method: input.method,
+                reference: input.reference,
+                idempotencyKey: input.idempotencyKey,
+              })
+            }
+            onReverse={(paymentId) => reversePayment.mutate({ paymentId })}
+          />
+
           {/* M12 / BR-005E. `delivered` is event-only on the server too, so the
               status buttons below cannot reach it: handing the device over is
               the only road in, and it records WHO took it. It records no
@@ -405,6 +443,16 @@ export default function ServiceOrderDetailScreen() {
                     'Entrega registrada',
                     `${order.number} quedó entregada a ${input.recipientName}.`,
                   ),
+                // M12B. A refusal for an outstanding balance is NOT a failed
+                // handover, and reporting it as one would send somebody looking
+                // for a problem with the device. Refetch the balance — it is
+                // what changed — and say what is owed.
+                onError: (error) => {
+                  if (error instanceof ServicePaymentRequiredError) {
+                    void payments.refetch();
+                    Alert.alert('Saldo pendiente', error.message);
+                  }
+                },
               })
             }
           />

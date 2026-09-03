@@ -1,3 +1,4 @@
+import type { CustomerPaymentSummary } from '@/domain/internal/service-types';
 import type { QuoteDecision, RepairQuote } from '@/domain/repairs/quote';
 import type { Repair } from '@/domain/repairs/types';
 import type { RepairRepository } from '@/repositories/types';
@@ -55,6 +56,29 @@ export class MockRepairRepository implements RepairRepository {
   ): Promise<RepairQuote | null> {
     await simulateLatency(signal);
     return this.quotes.get(repairId) ?? null;
+  }
+
+  /**
+   * M12B. The mock reports NO AGREED PRICE, not a zero balance.
+   *
+   * A fixture that invented "S/ 0.00 pendiente" would tell somebody running the
+   * app without a server that their repair is paid for. Null is the honest
+   * shape and it is a real server answer, so the screen that renders it is the
+   * same one production uses.
+   */
+  async getPaymentSummary(
+    repairId: number,
+    signal?: AbortSignal,
+  ): Promise<CustomerPaymentSummary> {
+    await simulateLatency(signal);
+    const quote = this.quotes.get(repairId) ?? null;
+    return {
+      currency: quote?.currency ?? 'PEN',
+      quotedTotal: quote ? quote.total : null,
+      paid: '0.00',
+      outstanding: quote ? quote.total : null,
+      status: quote ? 'unpaid' : 'no_quote',
+    };
   }
 
   /**

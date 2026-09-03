@@ -661,7 +661,7 @@ Conflicto 409 diferenciado     INTEGRADO / TESTED
 Cierre de la reparación        INTEGRADO / TESTED
 Capability propia de entrega   INTEGRADO / TESTED
 UI de servicio en Web          INTEGRADO (H2 + M12)
-COBRO DEL SERVICIO             **PENDIENTE — no existe en el backend**
+COBRO DEL SERVICIO             INTEGRADO / TESTED (M12B)
 Garantía / reingreso           PENDIENTE
 Evidencias (firma / foto)      API_PENDING (DEC-016, sin proveedor)
 Editor de roles en Web         PENDIENTE — API lista, pantalla no
@@ -700,3 +700,61 @@ equipo está listo y sigue en el taller.
 **Un código desconocido sigue contando como ABIERTO.** Nunca haber oído hablar
 de un estado no es prueba de que algo terminó, y adivinar «cerrado» escondería
 una reparación viva.
+
+## Cobro del servicio (M12B / BR-005F)
+
+```
+Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master 42ea453)
+Libro mayor (lectura)          INTEGRADO / TESTED
+Registrar pago                 INTEGRADO / TESTED
+Pagos parciales                INTEGRADO / TESTED
+Reverso                        INTEGRADO / TESTED
+Resumen de saldo (interno)     INTEGRADO / TESTED
+Resumen de saldo (cliente)     INTEGRADO / TESTED
+409 payment_required           INTEGRADO / TESTED
+Política pago-antes-de-entregar  INTEGRADO / TESTED (la aplica el servidor)
+Capability propia de cobro     INTEGRADO / TESTED
+PAGO EN LÍNEA DEL SERVICIO     **NO EXISTE** — ni aquí ni en el backend
+Comprobante fiscal             NO EXISTE
+Reembolso                      NO EXISTE
+Impuestos                      NO EXISTE (tax_amount sigue siendo columna muerta)
+```
+
+**Ni una operación aritmética sobre dinero.** Cada importe es una cadena decimal
+del servidor. Un guard estructural falla si aparece `Number(...)`, `parseFloat`,
+`toFixed` o una suma entre identificadores de dinero, en cualquier archivo de
+M12B — y se verificó plantando `Number(summary?.outstanding ?? '0') -
+Number(value)`. La **primera** versión del guard no lo detectó, porque `?.` no
+estaba en su clase de caracteres; un guard que no ve la forma obvia del error
+que existe para evitar es decoración, así que se arregló y se volvió a probar.
+
+**`null` se conserva.** Un total sin cotizar llega como `null` y se dibuja como
+«todavía sin presupuesto». Coercerlo a `'0.00'` diría que la reparación es
+gratis.
+
+**`online` no se ofrece** como medio. El servidor lo rechaza en dos capas.
+
+**Cobrar es capability propia.** Mismo catálogo que Web. `service.orders.manage`
+no la implica, ni la entrega; el preset técnico no la trae.
+
+**No hay editar ni borrar** — el servidor no los tiene. La app no exporta
+`patch`/`delete` para estas rutas y un test lo comprueba.
+
+**El 409 tiene tres significados** y se distinguen por `code`, nunca por el
+castellano. `payment_required` refresca el saldo en vez de reportar una entrega
+fallida.
+
+**El cliente no puede pagar desde la app**, y la tarjeta lo dice: el pago se
+realiza en el taller. No se simula nada.
+
+### Un guard de M12 hubo que estrecharlo
+
+`internal-delivery.test.ts` escaneaba **todos** los archivos de
+`src/app/internal/service` buscando identificadores de pago. Era correcto
+mientras el cobro no existía y dejó de serlo en cuanto existió: la pantalla de
+orden ahora monta una caja y reacciona a `payment_required`, legítimamente.
+
+Lo que la regla **siempre** quiso decir es lo que dice ahora — *la entrega no
+registra dinero* — así que se comprueba sobre la sección de entrega, y dos
+afirmaciones nuevas fijan que la llamada de entrega no manda ningún campo de
+pago y que la pantalla reacciona al 409 en lugar de reportar un fallo genérico.

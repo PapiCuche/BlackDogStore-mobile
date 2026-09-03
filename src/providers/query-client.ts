@@ -113,6 +113,11 @@ export const queryKeys = {
   // refetched half a step apart.
   repairQuote: (scope: QueryScope, repairId: number) =>
     [...customerPrefix(scope), 'repair', repairId, 'quote'] as const,
+  // M12B. Nested under the repair for the same reason the quote is: approving a
+  // quote changes what is owed, and a balance that survived the repair's
+  // invalidation would show a customer a figure the shop no longer agrees with.
+  repairPaymentSummary: (scope: QueryScope, repairId: number) =>
+    [...customerPrefix(scope), 'repair', repairId, 'payment-summary'] as const,
   orders: (scope: QueryScope) => [...customerPrefix(scope), 'orders'] as const,
   order: (scope: QueryScope, id: number) => [...customerPrefix(scope), 'order', id] as const,
 
@@ -201,6 +206,13 @@ export const queryKeys = {
   // write elsewhere invalidated the whole service root.
   internalServiceDelivery: (scope: QueryScope, orderId: number) =>
     [...internalPrefix(scope), 'service', 'order', orderId, 'delivery'] as const,
+  // M12B. The ledger and the balance hang off the same order. A payment or a
+  // reversal changes BOTH — and the order's deliverability with them — so every
+  // write invalidates the service root rather than one of these.
+  internalServicePayments: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'payments'] as const,
+  internalServicePaymentSummary: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'payment-summary'] as const,
   /** The whole module, for invalidation after a write. */
   internalServiceRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'service'] as const,

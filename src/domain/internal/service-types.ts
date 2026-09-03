@@ -609,3 +609,102 @@ export type ServiceDeliveryInput = {
 };
 
 export const CAP_SERVICE_DELIVERY_MANAGE = 'service.delivery.manage';
+
+// ---------------------------------------------------------------------------
+// M12B / BR-005F — the service payment ledger. INTERNAL.
+// ---------------------------------------------------------------------------
+//
+// MONEY ARRIVES AS STRINGS AND STAYS STRINGS. Every figure below is a decimal
+// the server computed, and this app prints it. Parsing one into a JavaScript
+// number would create a second answer to "how much is owed" that can disagree
+// with the server's — and the one that disagrees is always the one somebody is
+// looking at across a counter. `0.1 + 0.2` is why.
+
+/** How a manual payment may be recorded. `online` is deliberately absent. */
+export const PAYMENT_METHODS = [
+  { value: 'cash', label: 'Efectivo' },
+  { value: 'card', label: 'Tarjeta' },
+  { value: 'transfer', label: 'Transferencia' },
+  { value: 'other', label: 'Otro' },
+] as const;
+
+export type PaymentMethodValue = (typeof PAYMENT_METHODS)[number]['value'];
+
+/**
+ * One payment. Append-only on the server, so this app offers no way to edit it.
+ *
+ * `idempotencyKey` is absent because the server never echoes it back, and there
+ * is no provider field, no authorization code and no card data anywhere — a
+ * manual payment is a counter reporting what it received.
+ */
+export type ServicePayment = {
+  id: number;
+  /** A decimal STRING. Never parsed. */
+  amount: string;
+  currency: string;
+  method: string;
+  reference: string;
+  notes: string;
+  receivedByName: string;
+  receivedAt: string;
+  createdAt: string;
+  isReversed: boolean;
+  reversedAt: string | null;
+  reversedByName: string;
+  reversalReason: string;
+};
+
+export type PaymentStatus =
+  | 'no_quote' | 'unpaid' | 'partial' | 'paid' | 'overpaid'
+  | (string & {});
+
+/**
+ * The balance, COMPUTED BY THE SERVER.
+ *
+ * `quotedTotal` and `outstanding` are NULLABLE, and null is not zero: it means
+ * the shop has not agreed a price yet. Drawing "S/ 0.00" there would tell
+ * somebody their repair is free.
+ */
+export type ServicePaymentSummary = {
+  currency: string;
+  quotedTotal: string | null;
+  confirmedPaid: string;
+  outstanding: string | null;
+  credit: string;
+  paymentStatus: PaymentStatus;
+  /**
+   * The tenant's policy, so a screen can explain a refusal before it hits one.
+   * A PREVIEW: the server re-checks inside the delivery transaction, and if the
+   * two ever disagree the server wins.
+   */
+  requiresPaymentBeforeDelivery: boolean;
+};
+
+/**
+ * Recording money: WHAT ARRIVED and HOW.
+ *
+ * No currency — it comes from the approved quote, and a client that could
+ * choose one could record a payment against a debt in another. No clock and no
+ * cashier: both are the server's. `idempotencyKey` is here for the reason it is
+ * on a part usage and a handover — only the client can mint one that survives
+ * its own double-tap, and a payment taken twice is money the shop has to give
+ * back.
+ */
+export type ServicePaymentInput = {
+  amount: string;
+  method: PaymentMethodValue;
+  reference?: string;
+  notes?: string;
+  idempotencyKey: string;
+};
+
+export const CAP_SERVICE_PAYMENTS_MANAGE = 'service.payments.manage';
+
+/** What the CUSTOMER is told. Five fields, and no ledger. */
+export type CustomerPaymentSummary = {
+  currency: string;
+  quotedTotal: string | null;
+  paid: string;
+  outstanding: string | null;
+  status: PaymentStatus;
+};
