@@ -50,8 +50,21 @@ import {
 /**
  * INTERNAL technical service — `/api/v1/internal/<company_slug>/service/…`.
  *
- * Verified on `PapiCuche/BlackDogStore-web` @ `origin/master` `43fffb0` (PR #7)
- * with a live smoke over all nine routes.
+ * The core landed in M8 (`origin/master` `43fffb0`, PR #7) and the module has
+ * grown with every phase since — diagnosis, quoting, execution, parts, quality,
+ * delivery and payment. It no longer says HOW MANY routes it calls: that line
+ * read «all nine routes» for four phases after nine stopped being the number,
+ * and a count in a comment is a fact with an expiry date nobody sets. What is
+ * stable is the authority, so that is what is written down:
+ *
+ *   the contract is `/api/v1/internal/<slug>/service/…` and nothing else;
+ *   the server authorises EVERY request, capability by capability;
+ *   tenant and branch are resolved server-side, never sent;
+ *   out of scope answers 404, not 403;
+ *   capabilities decide, role names never do.
+ *
+ * Coverage against the router is asserted in `service-v1-coverage.test.ts`,
+ * where it can be checked rather than believed.
  *
  * ⚠️  NEVER `/api/admin/`. That surface authenticates by cookie and CSRF.
  *
