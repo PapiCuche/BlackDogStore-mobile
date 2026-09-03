@@ -710,7 +710,7 @@ Registrar pago                 INTEGRADO / TESTED
 Pagos parciales                INTEGRADO / TESTED
 Reverso                        INTEGRADO / TESTED
 Resumen de saldo (interno)     INTEGRADO / TESTED
-Resumen de saldo (cliente)     INTEGRADO / TESTED
+Resumen de saldo (cliente)     INTEGRADO / TESTED · Web: PENDIENTE
 409 payment_required           INTEGRADO / TESTED
 Política pago-antes-de-entregar  INTEGRADO / TESTED (la aplica el servidor)
 Capability propia de cobro     INTEGRADO / TESTED
@@ -746,6 +746,22 @@ fallida.
 
 **El cliente no puede pagar desde la app**, y la tarjeta lo dice: el pago se
 realiza en el taller. No se simula nada.
+
+### Paridad con Web, dicha en la fila que la necesita
+
+`Resumen de saldo (cliente)` lleva **`Web: PENDIENTE`** porque lo es: el portal
+Web de cliente de reparaciones no existe —ni el saldo ni ninguna otra pantalla
+suya— y esta capacidad vive hoy **solo en Mobile**.
+
+Eso NO la convierte en una operación inventada: el endpoint
+`GET /api/v1/customer/<slug>/repairs/<id>/payment-summary/` está mergeado en
+`origin/master`, aplica la propiedad server-side vía
+`customer_owned_repair_orders` y devuelve cinco campos en lista blanca. Mobile
+representa un contrato que existe; Web todavía no lo representa.
+
+La distinción importa lo suficiente para escribirla en la tabla y no solo en la
+prosa: un lector que escanea filas no puede deducir de «INTEGRADO» que falte la
+mitad de las superficies.
 
 ### Un guard de M12 hubo que estrecharlo
 
