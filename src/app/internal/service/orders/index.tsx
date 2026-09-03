@@ -14,7 +14,10 @@ import {
   StatusBadge,
   Text,
 } from '@/design-system';
-import { CAP_SERVICE_ORDERS_VIEW } from '@/domain/internal/service-types';
+import {
+  CAP_SERVICE_ORDERS_CREATE,
+  CAP_SERVICE_ORDERS_VIEW,
+} from '@/domain/internal/service-types';
 import { hasUxCapability } from '@/domain/internal/types';
 import { useServiceContext, useServiceOrders } from '@/hooks/use-internal-service';
 import { useInternalContext } from '@/hooks/use-internal-sales';
@@ -40,6 +43,12 @@ export default function ServiceOrderListScreen() {
 
   const { data: context, isPending: contextPending } = useInternalContext();
   const mayView = hasUxCapability(context ?? null, CAP_SERVICE_ORDERS_VIEW);
+  // Receiving a device is reachable from the console, and it should be
+  // reachable from HERE too: this is the screen somebody is on when they look
+  // up and see a customer walking in. Gated on the capability the server
+  // demands for the POST, never on the module being open — reading the board
+  // and opening an order are two different permissions.
+  const mayCreate = hasUxCapability(context ?? null, CAP_SERVICE_ORDERS_CREATE);
 
   const service = useServiceContext({ enabled: mayView });
   const query = useServiceOrders(
@@ -112,6 +121,13 @@ export default function ServiceOrderListScreen() {
               <Text variant="footnote" color="textTertiary">
                 {data.count} {data.count === 1 ? 'orden' : 'órdenes'} · {context?.company.name}
               </Text>
+              {mayCreate ? (
+                <Button
+                  label="Recibir un equipo"
+                  fullWidth
+                  onPress={() => router.push('/internal/service/orders/new')}
+                />
+              ) : null}
               <SearchInput
                 value={search}
                 onChangeText={setSearch}
