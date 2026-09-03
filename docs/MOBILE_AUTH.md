@@ -394,3 +394,80 @@ muestran un estado explícito y remiten a la web.
 
 Después de eso, la siguiente puerta es una **superficie privada v1 tenant-safe**
 (pedidos y reparaciones), que necesita BR-003 y BR-005.
+
+---
+
+## Accesos rápidos de desarrollo (Quick Login)
+
+Un bloque en la pantalla de login que **rellena** correo y contraseña de una de
+las seis cuentas demo. Nada más.
+
+### Qué es y qué no es
+
+| | |
+|---|---|
+| Qué hace | escribe dos campos del formulario |
+| Qué NO hace | crear un token, tocar SecureStore, fabricar sesión o capabilities, cambiar tenant, navegar, o llamar a `signIn()` |
+
+El operador sigue pulsando **Entrar**, y a partir de ahí el camino es el de
+siempre: `useAuth().signIn()` → `AuthRepository` → `POST /api/v1/auth/login/` →
+tokens reales → contexto y capabilities que resuelve el servidor en cada
+petición. **No hay bypass**, y los tests lo comprueban plantando uno.
+
+### De dónde salen las cuentas
+
+Del backend, y solo de ahí. Mobile no crea cuentas demo:
+
+```bash
+python manage.py seed_demo_users --company-slug <slug>
+python manage.py seed_demo_users --purge
+```
+
+`dev_customer` · `dev_sales` · `dev_inventory` · `dev_technician` ·
+`dev_admin` · `dev_master`, todas con `Demo123!`.
+
+### Correo, no usuario
+
+El widget Web rellena un *username* porque el contrato del navegador lo pide.
+`/api/v1/auth/login/` recibe `{email, password}`, así que Mobile rellena
+`<username>@example.invalid` — la dirección que genera el propio seeder.
+Rellenar el username puro haría que la cuenta pareciera rota.
+
+### Por qué la contraseña puede estar en el código
+
+No es un secreto: es una fixture de desarrollo.
+
+- `seed_demo_users` **se niega a ejecutarse** si `settings.DEBUG` es falso, y no
+  ofrece bandera para forzarlo;
+- todas las direcciones están bajo `.invalid`, reservado por RFC 2606, así que
+  ninguna puede ser real ni chocar con un cliente;
+- son usuarios corrientes: login real, JWT real, los mismos permisos que
+  cualquiera;
+- y el componente **no existe** fuera de un build de desarrollo.
+
+### Dónde se ve
+
+| environment | Quick Login |
+|---|---|
+| development | visible |
+| staging | **no se renderiza** |
+| production | **no se renderiza** |
+
+No está escondido con estilos: el componente devuelve `null`. La decisión sale
+de `appEnvironment` (derivado de `__DEV__` en `src/config/env.ts`) y **no hay
+ninguna variable `EXPO_PUBLIC_*` que pueda reactivarlo** — una variable que
+alguien define en un pipeline es justo el modo en que una fixture llega a una
+tienda de aplicaciones.
+
+Además solo aparece con `policy.mode === 'backend'`. Son filas de una base de
+datos Django: ofrecerlas sobre el login simulado las presentaría como sesiones
+reales cuando no se verifica nada, y las dos cosas se parecen demasiado en
+pantalla. En `unavailable` la pantalla ni siquiera llega ahí.
+
+### El nombre de la cuenta no autoriza nada
+
+`dev_admin` no abre módulos por llamarse así. Después del login la autoridad es
+la de siempre: sesión, Membership, capabilities y alcance de tenant/sucursal que
+devuelve el servidor. Si una cuenta demo no ve lo esperado, el arreglo está en
+la fixture del backend o en su capability — **nunca** en una condición Mobile
+sobre el nombre.
