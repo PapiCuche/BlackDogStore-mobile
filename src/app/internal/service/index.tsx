@@ -23,10 +23,15 @@ import { useTheme } from '@/theme/theme-provider';
 /**
  * The workshop's entrance.
  *
- * DELIBERATELY SMALL. A service module in a repair shop eventually holds
- * diagnosis, quotes, parts, quality control and warranty; M8 built none of
- * them, and a tile for each would be five promises the app cannot keep. What is
- * here is what works: the orders, and receiving a device.
+ * DELIBERATELY SMALL, AND NOT FOR THE ORIGINAL REASON. This screen used to be
+ * small because diagnosis, quotes, parts, quality and payments did not exist.
+ * They exist now — seven sections in the order detail, against V1 endpoints the
+ * backend has shipped — and this screen stayed small anyway, because the order
+ * IS the workspace. Every one of those steps happens to a specific device on a
+ * specific order; a tile here would only be a longer road to the same place.
+ *
+ * So the two doors are the two ways to reach an order: the list, and receiving
+ * a new device. What changed is the reason, not the layout.
  *
  * Everything drawn comes from FRESH capabilities and the server's own context —
  * the lifecycle labels are the tenant's words, and the branches are the ones
@@ -157,15 +162,24 @@ export default function ServiceHomeScreen() {
             </>
           )}
 
-          {/* Said out loud rather than implied by absence: somebody who knows
-              this shop diagnoses and quotes will look for those buttons. */}
+          {/* This card used to say that diagnosis, quotes, customer approval,
+              parts and quality control "no están construidos todavía — ni aquí
+              ni en el servidor", and that the lifecycle stopped at "esperando
+              aprobación". Every one of those statements had become false: the
+              backend ships V1 routes for all of them and the order detail
+              renders seven sections against those routes. Only warranty is
+              still genuinely absent, so only warranty is still named. */}
           <Card variant="outlined">
             <View style={{ gap: theme.spacing.xs }}>
-              <Text variant="headline">Todavía no en la app</Text>
+              <Text variant="headline">Dónde ocurre cada paso</Text>
               <Text variant="subhead" color="textSecondary">
-                Diagnóstico, cotización, aprobación del cliente, repuestos, control de
-                calidad y garantía no están construidos todavía — ni aquí ni en el
-                servidor. El ciclo de vida llega hasta «esperando aprobación».
+                Diagnóstico, cotización, repuestos, control de calidad, pagos y
+                entrega se trabajan dentro de cada orden, no desde aquí. Abre la
+                orden del equipo y verás lo que tu cuenta tiene permitido hacer
+                en la etapa en que esté.
+              </Text>
+              <Text variant="footnote" color="textTertiary">
+                La garantía todavía no está en la app.
               </Text>
             </View>
           </Card>

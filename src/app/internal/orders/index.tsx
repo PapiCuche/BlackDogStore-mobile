@@ -117,7 +117,7 @@ export default function InternalOrdersScreen() {
                   <Text variant="headline">#{item.id}</Text>
                   <Text variant="headline">{formatCurrency(item.total)}</Text>
                 </View>
-                <Text variant="subhead" color="textSecondary" numberOfLines={1}>
+                <Text variant="subhead" color="textSecondary" numberOfLines={2}>
                   {item.customerName || 'Sin nombre'}
                 </Text>
                 {/* Two independent facts, shown as two. Collapsing payment and

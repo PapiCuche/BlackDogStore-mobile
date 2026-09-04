@@ -101,18 +101,23 @@ export default function InternalHomeScreen() {
             ) : null}
           </View>
 
+          {/* The card IS the control, the way the orders list, the service
+              board and every customer-facing card already work. An "Abrir"
+              button inside a card the finger is already on adds a second thing
+              to aim at and makes the small one the only one that works. */}
           {ready.map((module) => (
-            <Card key={module.key} variant="outlined">
+            <Card
+              key={module.key}
+              variant="outlined"
+              onPress={() => router.push(module.route!)}
+              accessibilityLabel={module.title}
+              accessibilityHint={module.description}
+            >
               <View style={{ gap: theme.spacing.xs }}>
                 <Text variant="headline">{module.title}</Text>
                 <Text variant="subhead" color="textSecondary">
                   {module.description}
                 </Text>
-                <Button
-                  label="Abrir"
-                  variant="secondary"
-                  onPress={() => router.push(module.route!)}
-                />
               </View>
             </Card>
           ))}

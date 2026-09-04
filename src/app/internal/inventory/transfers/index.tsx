@@ -217,7 +217,13 @@ export default function TransfersScreen() {
             <View>
               <SectionHeader title={`${transfers.data!.count} documento(s)`} />
               {transfers.data!.results.map((t) => (
-                <Card key={t.id} variant="outlined">
+                <Card
+                  key={t.id}
+                  variant="outlined"
+                  onPress={() => router.push(`/internal/inventory/transfers/${t.id}`)}
+                  accessibilityLabel={`Transferencia ${t.id}, de ${t.sourceBranchName} a ${t.destinationBranchName}, ${t.statusLabel}, ${t.totalUnits} unidades`}
+                  accessibilityHint="Abre el documento de transferencia"
+                >
                   <View
                     style={{
                       flexDirection: 'row',
@@ -241,11 +247,6 @@ export default function TransfersScreen() {
                       tone={transferStatusTone(t.status)}
                     />
                   </View>
-                  <Button
-                    label="Abrir"
-                    variant="secondary"
-                    onPress={() => router.push(`/internal/inventory/transfers/${t.id}`)}
-                  />
                 </Card>
               ))}
             </View>
