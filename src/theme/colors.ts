@@ -66,6 +66,21 @@ export type ColorTokens = {
 
   textPrimary: string;
   textSecondary: string;
+  /**
+   * The quietest step of the scale — metadata, timestamps, helper copy.
+   *
+   * QUIET, NOT UNREADABLE. Every one of the three carries information somebody
+   * is meant to read, so all three clear `AA_NORMAL` against every surface the
+   * app paints them on, `surfacePressed` included. Tertiary used to sit at
+   * 2.78:1 on the worst light surface and 3.58:1 on the worst dark one; it was
+   * the least legible thing in the app and it was carrying dates, counts and
+   * identifiers. `theme.test.ts` measures all of this rather than trusting it.
+   *
+   * The floor is what constrains this value. Making it dimmer to "feel more
+   * tertiary" is not available — it collapses back through AA. Making it much
+   * darker is not available either: it closes on `textSecondary` and the
+   * hierarchy stops being one.
+   */
   textTertiary: string;
   /** Text drawn on top of `actionBackground`. */
   textOnAction: string;
@@ -138,7 +153,7 @@ export const lightColors: ColorTokens = {
 
   textPrimary: '#0A0A0A',
   textSecondary: '#5B5F66',
-  textTertiary: '#8A8F97',
+  textTertiary: '#686B71',
   textOnAction: '#FFFFFF',
 
   actionBackground: '#0A0A0A',
@@ -192,7 +207,7 @@ export const darkColors: ColorTokens = {
 
   textPrimary: '#FFFFFF',
   textSecondary: '#A1A6AE',
-  textTertiary: '#75797F',
+  textTertiary: '#8A8D92',
   textOnAction: '#0A0A0A',
 
   actionBackground: '#FFFFFF',
