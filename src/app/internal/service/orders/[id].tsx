@@ -14,6 +14,7 @@ import {
   ErrorState,
   icons,
   Input,
+  KeyValueRow,
   LoadingState,
   Screen,
   SectionHeader,
@@ -260,18 +261,17 @@ export default function ServiceOrderDetailScreen() {
 
           <Card variant="outlined">
             <View style={{ gap: theme.spacing.sm }}>
-              <Row label="Cliente" value={order.customerName} theme={theme} />
+              <KeyValueRow label="Cliente" value={order.customerName} />
               <Divider />
-              <Row label="Sucursal" value={order.branchName} theme={theme} />
+              <KeyValueRow label="Sucursal" value={order.branchName} />
               <Divider />
-              <Row label="Recibido" value={formatDate(order.receivedAt)} theme={theme} />
+              <KeyValueRow label="Recibido" value={formatDate(order.receivedAt)} />
               <Divider />
-              <Row label="Recibido por" value={order.receivedByName || '—'} theme={theme} />
+              <KeyValueRow label="Recibido por" value={order.receivedByName || '—'} />
               <Divider />
-              <Row
+              <KeyValueRow
                 label="Técnico"
                 value={order.technicianName || 'Sin asignar'}
-                theme={theme}
               />
             </View>
           </Card>
@@ -280,23 +280,23 @@ export default function ServiceOrderDetailScreen() {
             <SectionHeader title="Recepción" />
             <Card variant="outlined">
               <View style={{ gap: theme.spacing.sm }}>
-                <Field label="Problema reportado" value={order.reportedIssue} theme={theme} />
+                <KeyValueRow layout="stacked" label="Problema reportado" value={order.reportedIssue} />
                 {order.physicalCondition ? (
-                  <Field
+                  <KeyValueRow
+                    layout="stacked"
                     label="Condición física"
                     value={order.physicalCondition}
-                    theme={theme}
                   />
                 ) : null}
                 {order.receivedAccessories ? (
-                  <Field
+                  <KeyValueRow
+                    layout="stacked"
                     label="Accesorios recibidos"
                     value={order.receivedAccessories}
-                    theme={theme}
                   />
                 ) : null}
                 {order.internalNotes ? (
-                  <Field label="Notas internas" value={order.internalNotes} theme={theme} />
+                  <KeyValueRow layout="stacked" label="Notas internas" value={order.internalNotes} />
                 ) : null}
               </View>
             </Card>
@@ -595,49 +595,5 @@ export default function ServiceOrderDetailScreen() {
         </View>
       </Screen>
     </>
-  );
-}
-
-function Row({
-  label,
-  value,
-  theme,
-}: {
-  label: string;
-  value: string;
-  theme: ReturnType<typeof useTheme>;
-}) {
-  return (
-    <View
-      style={{ flexDirection: 'row', justifyContent: 'space-between', gap: theme.spacing.sm }}
-    >
-      <Text variant="subhead" color="textSecondary">
-        {label}
-      </Text>
-      <Text variant="subhead" style={{ flex: 1, textAlign: 'right' }} numberOfLines={2}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function Field({
-  label,
-  value,
-  theme,
-}: {
-  label: string;
-  value: string;
-  theme: ReturnType<typeof useTheme>;
-}) {
-  return (
-    <View style={{ gap: 2 }}>
-      <Text variant="footnote" color="textTertiary">
-        {label}
-      </Text>
-      <Text variant="subhead" style={{ marginBottom: theme.spacing.xxs }}>
-        {value}
-      </Text>
-    </View>
   );
 }

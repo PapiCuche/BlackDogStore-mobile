@@ -12,6 +12,7 @@ import {
   Divider,
   EmptyState,
   ErrorState,
+  IconButton,
   icons,
   Input,
   LoadingState,
@@ -391,17 +392,33 @@ export default function PosScreen() {
                         {line.product.price} c/u
                       </Text>
                     </View>
-                    <View style={{ flexDirection: 'row', gap: theme.spacing.xs }}>
-                      <Button
-                        label="−"
-                        variant="secondary"
+                    {/* The same stepper the customer cart already uses. It was
+                        two text Buttons reading "−" and "+", which a screen
+                        reader announced as bare symbols with no idea WHICH
+                        article they applied to — on the one screen an operator
+                        touches hundreds of times a day. */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: theme.spacing.sm,
+                      }}
+                    >
+                      <IconButton
+                        icon={icons.minus}
+                        accessibilityLabel={`Quitar uno de ${line.product.name}`}
                         onPress={() => setQuantity(line.product.id, line.quantity - 1)}
                         disabled={busy}
                       />
-                      <Text variant="headline">{line.quantity}</Text>
-                      <Button
-                        label="+"
-                        variant="secondary"
+                      <Text
+                        variant="headline"
+                        accessibilityLabel={`Cantidad ${line.quantity}`}
+                      >
+                        {line.quantity}
+                      </Text>
+                      <IconButton
+                        icon={icons.plus}
+                        accessibilityLabel={`Agregar uno de ${line.product.name}`}
                         onPress={() => setQuantity(line.product.id, line.quantity + 1)}
                         disabled={busy}
                       />
