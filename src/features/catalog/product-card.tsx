@@ -1,7 +1,8 @@
 import { Image } from 'expo-image';
 import { View } from 'react-native';
 
-import { Card, Icon, icons, Text } from '@/design-system';
+import { Card, Icon, icons, statusToneColor, Text } from '@/design-system';
+import { describeAvailability } from '@/domain/products/availability';
 import { productAvailability, type Product } from '@/domain/products/types';
 import { useTheme } from '@/theme/theme-provider';
 import { formatCurrency } from '@/utils/format';
@@ -10,12 +11,6 @@ export type ProductCardProps = {
   product: Product;
   onPress: () => void;
 };
-
-const availabilityLabel = {
-  in_stock: 'Disponible',
-  low_stock: 'Últimas unidades',
-  out_of_stock: 'Agotado',
-} as const;
 
 /**
  * One product in the catalogue.
@@ -26,20 +21,15 @@ const availabilityLabel = {
  */
 export function ProductCard({ product, onPress }: ProductCardProps) {
   const theme = useTheme();
-  const availability = productAvailability(product);
-  const isOutOfStock = availability === 'out_of_stock';
-
-  const availabilityColor =
-    availability === 'in_stock'
-      ? theme.colors.statusSuccess
-      : availability === 'low_stock'
-        ? theme.colors.statusWarning
-        : theme.colors.textTertiary;
+  // Label AND tone from the domain, so the list and the detail screen cannot
+  // disagree about what "Últimas unidades" means.
+  const availability = describeAvailability(product);
+  const isOutOfStock = productAvailability(product) === 'out_of_stock';
 
   return (
     <Card
       onPress={onPress}
-      accessibilityLabel={`${product.name}, ${formatCurrency(product.price)}, ${availabilityLabel[availability]}`}
+      accessibilityLabel={`${product.name}, ${formatCurrency(product.price)}, ${availability.label}`}
       accessibilityHint="Abre el detalle del producto"
     >
       <View style={{ flexDirection: 'row', gap: theme.spacing.sm, alignItems: 'center' }}>
@@ -88,8 +78,14 @@ export function ProductCard({ product, onPress }: ProductCardProps) {
             }}
           >
             <Text variant="headline">{formatCurrency(product.price)}</Text>
-            <Text variant="caption" style={{ color: availabilityColor, fontWeight: '600' }}>
-              {availabilityLabel[availability]}
+            <Text
+              variant="caption"
+              style={{
+                color: theme.colors[statusToneColor(availability.tone)],
+                fontWeight: '600',
+              }}
+            >
+              {availability.label}
             </Text>
           </View>
         </View>

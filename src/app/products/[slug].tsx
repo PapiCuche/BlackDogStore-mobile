@@ -12,10 +12,12 @@ import {
   icons,
   LoadingState,
   Screen,
+  statusToneColor,
   Text,
 } from '@/design-system';
 import { useCart } from '@/cart/cart-provider';
 import { useStorefrontConfig } from '@/hooks/use-storefront-config';
+import { describeAvailability } from '@/domain/products/availability';
 import { productAvailability } from '@/domain/products/types';
 import { openExternalLink } from '@/utils/external-links';
 import { hapticSuccess } from '@/utils/haptics';
@@ -89,8 +91,11 @@ export default function ProductDetailScreen() {
     );
   }
 
-  const availability = productAvailability(product);
-  const isOutOfStock = availability === 'out_of_stock';
+  // `exact` because this screen has room for the count the list does not. The
+  // number is the server's `inventory`; the tone is the domain's, the same one
+  // the catalogue card uses.
+  const availability = describeAvailability(product, { exact: true });
+  const isOutOfStock = productAvailability(product) === 'out_of_stock';
 
   return (
     <>
@@ -144,14 +149,10 @@ export default function ProductDetailScreen() {
                 variant="subhead"
                 style={{
                   fontWeight: '600',
-                  color: isOutOfStock ? theme.colors.textTertiary : theme.colors.statusSuccess,
+                  color: theme.colors[statusToneColor(availability.tone)],
                 }}
               >
-                {isOutOfStock
-                  ? 'Agotado'
-                  : availability === 'low_stock'
-                    ? `Últimas ${product.inventory} unidades`
-                    : 'Disponible'}
+                {availability.label}
               </Text>
             </View>
 
