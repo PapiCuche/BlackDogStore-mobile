@@ -41,8 +41,16 @@ export type ButtonProps = {
  * so it reads as the same material as the cards around it rather than as a
  * rectangle of paint.
  *
- * Height is `sizes.control` (52) and never drops below `minTouchTarget` (44)
- * even in `compact`, which is the HIG floor.
+ * Height is `sizes.control` (52). `compact` draws at `controlCompact` (40),
+ * which is SMALLER than the 44 `sizes.minTouchTarget` documents as the floor
+ * for every pressable — so compact carries `hitSlop` that brings the TOUCH
+ * target back to 44 while leaving the drawn button at 40.
+ *
+ * The visual size and the touch size are allowed to differ, and pretending
+ * otherwise is how a design token that says «floor, not a suggestion» ends up
+ * being 4pt short in nine screens. `IconButton` and `ListRow` reach 44 by being
+ * 44; this one reaches it by extending past its own edge, which is the standard
+ * answer when a control has to look small.
  */
 export function Button({
   label,
@@ -103,6 +111,13 @@ export function Button({
       // `busy` makes the spinner audible; without it a screen reader user gets
       // silence while a request is in flight.
       accessibilityState={{ disabled: isInert, busy: loading }}
+      // Only where it is needed: `default` is already 52. Half the shortfall on
+      // each side — (44 − 40) / 2 — so the target grows symmetrically.
+      hitSlop={
+        size === 'compact'
+          ? (theme.sizes.minTouchTarget - theme.sizes.controlCompact) / 2
+          : undefined
+      }
       style={({ pressed }) => [
         {
           minHeight: size === 'compact' ? theme.sizes.controlCompact : theme.sizes.control,

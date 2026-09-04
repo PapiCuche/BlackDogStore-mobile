@@ -25,6 +25,7 @@ import {
   type ServiceDevice,
 } from '@/domain/internal/service-types';
 import { hasUxCapability } from '@/domain/internal/types';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import {
   useCreateServiceDevice,
   useReceiveDevice,
@@ -56,6 +57,17 @@ import { useTheme } from '@/theme/theme-provider';
  * at somebody else's property, and the server would answer 404 while the app
  * encouraged the attempt.
  */
+/**
+ * How long a burst of typing is allowed to settle before it becomes a search.
+ *
+ * 250 ms is the usual UX figure: long enough to swallow the letters of a word
+ * typed at speed, short enough that a person who stops typing does not notice
+ * waiting. There is no repo-wide search-scheduling constant to reuse, and this
+ * is the only screen that needs one, so it stays here rather than becoming an
+ * architecture.
+ */
+const CUSTOMER_SEARCH_DEBOUNCE_MS = 250;
+
 export default function ServiceIntakeScreen() {
   const theme = useTheme();
 
@@ -92,7 +104,31 @@ export default function ServiceIntakeScreen() {
   const [serialNumber, setSerialNumber] = useState('');
   const [imei, setImei] = useState('');
 
-  const customers = useServiceCustomerSearch(search.trim(), {
+  // KEYSTROKES INSIDE THE WINDOW ARE COALESCED before they become a query term.
+  // Every distinct term is a distinct query key, so typing «Rodriguez» would
+  // otherwise start a search per character. This does NOT promise one HTTP
+  // request per search — a person who pauses mid-word has made two searches and
+  // gets two, correctly — only that the intermediate letters of a fast burst do
+  // not each start their own.
+  //
+  // `useDeferredValue` was tried here first and the claim was wrong: deferring
+  // is a scheduling hint, so React MAY skip intermediate values and on an idle
+  // device may skip none. A timer is what actually states the rule.
+  //
+  // AN EMPTY BOX SKIPS THE WAIT. Clearing the field means "show me everybody
+  // again", and making that take 250 ms would be a stall with no cause; the
+  // same is true on mount, where nobody has typed anything to coalesce. That
+  // rule lives here rather than inside the hook because it belongs to this
+  // screen — a general-purpose timer has no opinion about empty strings.
+  //
+  // A minimum length was the other option and it is the wrong one here: an
+  // empty search legitimately lists the shop's customers, and gating on two
+  // characters would leave that first render disabled and stuck on a skeleton.
+  const typed = search.trim();
+  const debouncedSearch = useDebouncedValue(typed, CUSTOMER_SEARCH_DEBOUNCE_MS);
+  const searchTerm = typed === '' ? '' : debouncedSearch;
+
+  const customers = useServiceCustomerSearch(searchTerm, {
     enabled: mayCreate && mayFindCustomers && customer === null,
   });
   const devices = useServiceDevices(
