@@ -38,5 +38,5 @@ export {
   type LoadingStateProps,
 } from './states';
 export { StaleDataNotice } from './stale-data-notice';
-export { StatusBadge, type StatusBadgeProps } from './status-badge';
+export { StatusBadge, statusToneColor, type StatusBadgeProps } from './status-badge';
 export { Text, type TextColor, type TextProps, type TextVariant } from './text';

@@ -42,7 +42,11 @@ export function RepairCard({ repair, onPress }: RepairCardProps) {
             <Text variant="mono" color="textTertiary">
               {repair.number}
             </Text>
-            <Text variant="headline" numberOfLines={1}>
+            {/* Two lines, not one. This is the field that tells a customer
+                WHICH of their devices this card is about, and "iPhone 13 Pro
+                Max 256GB" already runs past one line on a narrow phone before
+                anybody enlarges their text. */}
+            <Text variant="headline" numberOfLines={2}>
               {repair.deviceSummary}
             </Text>
           </View>

@@ -27,6 +27,17 @@ export type StatusBadgeProps = {
  * Colour is never the only signal: the label always carries the meaning in
  * words, so the badge survives greyscale, low vision and colour blindness.
  */
+/**
+ * The colour a tone is written in.
+ *
+ * Exported because a state is not always a badge: product availability is plain
+ * coloured text next to a price, and it must still be the tone the domain chose.
+ * One mapping, so "warning" cannot mean amber here and green there.
+ */
+export function statusToneColor(tone: StatusTone): keyof ColorTokens {
+  return `status${capitalise(tone)}` as keyof ColorTokens;
+}
+
 export function StatusBadge({
   label,
   tone,
@@ -35,7 +46,7 @@ export function StatusBadge({
 }: StatusBadgeProps) {
   const theme = useTheme();
 
-  const foregroundKey = `status${capitalise(tone)}` as keyof ColorTokens;
+  const foregroundKey = statusToneColor(tone);
   const backgroundKey = `status${capitalise(tone)}Surface` as keyof ColorTokens;
 
   return (
