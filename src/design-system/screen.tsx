@@ -77,15 +77,23 @@ export function Screen({
   // Undefined outside a tab navigator. That is not a failure — it is a screen
   // with no tab bar under it.
   const tabBarHeight = use(BottomTabBarHeightContext);
-  // Defined only under a stack header. It ALREADY includes the status-bar
-  // inset, so it replaces `insets.top` rather than adding to it — the classic
-  // way to end up with a screen that starts an inch too low.
+  // Defined under a stack header. It ALREADY includes the status-bar inset, so
+  // it replaces `insets.top` rather than adding to it — the classic way to end
+  // up with a screen that starts an inch too low.
+  //
+  // ZERO IS NOT A HEADER. A stack screen with `headerShown: false` still
+  // publishes this context, with the value 0, and `??` only falls back on
+  // null — so `0 ?? insets.top` is 0 and the status-bar inset vanished. The
+  // whole tab group is mounted under exactly such a screen, which put the
+  // greeting on the home screen underneath the clock and clipped the avatar
+  // against the Dynamic Island. Five screens, and no test could see it.
   const headerHeight = use(HeaderHeightContext);
+  const topInset = headerHeight ? headerHeight : insets.top;
 
   const frame: ViewStyle = {
     flex: 1,
     backgroundColor: theme.colors.background,
-    paddingTop: headerHeight ?? insets.top,
+    paddingTop: topInset,
     paddingLeft: insets.left,
     paddingRight: insets.right,
   };
