@@ -181,10 +181,15 @@ export default function ServiceOrderListScreen() {
                     accessibilityPrefix="Estado de la orden"
                   />
                 </View>
-                <Text variant="headline" numberOfLines={1}>
+                {/* Two lines each. The device says WHICH machine this order is
+                    about, and the second line carries the branch — the answer
+                    to "where am I working". Capped at one line, a long customer
+                    name pushed the branch off the end entirely, so the operator
+                    lost the context rather than a few characters of a name. */}
+                <Text variant="headline" numberOfLines={2}>
                   {item.deviceSummary}
                 </Text>
-                <Text variant="subhead" color="textSecondary" numberOfLines={1}>
+                <Text variant="subhead" color="textSecondary" numberOfLines={2}>
                   {item.customerName} · {item.branchName}
                 </Text>
                 <Text variant="caption" color="textTertiary">
