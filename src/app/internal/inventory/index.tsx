@@ -2,13 +2,13 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { ScrollView, View } from 'react-native';
 
 import {
-  Badge,
   Button,
   Card,
   Divider,
   EmptyState,
   ErrorState,
   icons,
+  KeyValueRow,
   LoadingState,
   Screen,
   Text,
@@ -165,26 +165,30 @@ export default function InventoryHomeScreen() {
             <>
               <Card variant="outlined">
                 <View style={{ gap: theme.spacing.sm }}>
-                  <Metric label="Unidades en stock" value={String(data.totalUnits)} theme={theme} />
+                  <KeyValueRow
+                    label="Unidades en stock"
+                    value={String(data.totalUnits)}
+                    emphasis="value"
+                  />
                   <Divider />
-                  <Metric
+                  <KeyValueRow
                     label="Productos con stock"
                     value={`${data.stockedCount} de ${data.activeProducts}`}
-                    theme={theme}
+                    emphasis="value"
                   />
                   <Divider />
-                  <Metric
+                  <KeyValueRow
                     label="Bajo mínimo"
                     value={String(data.lowStockCount)}
-                    theme={theme}
-                    tone={data.lowStockCount > 0 ? 'warning' : undefined}
+                    emphasis="value"
+                    badge={data.lowStockCount > 0}
                   />
                   <Divider />
-                  <Metric
+                  <KeyValueRow
                     label="Sin stock"
                     value={String(data.outOfStockCount)}
-                    theme={theme}
-                    tone={data.outOfStockCount > 0 ? 'warning' : undefined}
+                    emphasis="value"
+                    badge={data.outOfStockCount > 0}
                   />
                 </View>
               </Card>
@@ -267,37 +271,5 @@ export default function InventoryHomeScreen() {
         </View>
       </Screen>
     </>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  theme,
-  tone,
-}: {
-  label: string;
-  value: string;
-  theme: ReturnType<typeof useTheme>;
-  tone?: 'warning';
-}) {
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: theme.spacing.sm,
-      }}
-    >
-      <Text variant="subhead" color="textSecondary">
-        {label}
-      </Text>
-      {tone === 'warning' ? (
-        <Badge label={value} tone="accent" />
-      ) : (
-        <Text variant="headline">{value}</Text>
-      )}
-    </View>
   );
 }

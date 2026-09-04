@@ -16,6 +16,12 @@ export { GlassSurface, type GlassSurfaceProps } from './glass-surface';
 export { Icon, icons, type IconKey, type IconName, type IconProps } from './icon';
 export { IconButton, type IconButtonProps } from './icon-button';
 export { Input, type InputProps } from './input';
+export {
+  KeyValueRow,
+  type KeyValueEmphasis,
+  type KeyValueLayout,
+  type KeyValueRowProps,
+} from './key-value-row';
 export { ListRow, type ListRowProps } from './list-row';
 export { glassStackScreenOptions, renderHeaderBackground } from './navigation-chrome';
 export { OfflineBanner } from './offline-banner';

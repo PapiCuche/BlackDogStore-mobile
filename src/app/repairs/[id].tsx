@@ -7,6 +7,7 @@ import {
   EmptyState,
   ErrorState,
   icons,
+  KeyValueRow,
   LoadingState,
   Screen,
   SectionHeader,
@@ -110,15 +111,15 @@ export default function RepairDetailScreen() {
 
           <Card>
             <View style={{ gap: theme.spacing.sm }}>
-              <DetailRow label="Número de servicio" value={repair.number} mono />
+              <KeyValueRow layout="stacked" label="Número de servicio" value={repair.number} mono />
               <Divider />
-              <DetailRow label="Recibido" value={formatDate(repair.receivedAt)} />
+              <KeyValueRow layout="stacked" label="Recibido" value={formatDate(repair.receivedAt)} />
               <Divider />
-              <DetailRow label="Motivo" value={repair.reportedIssue} />
+              <KeyValueRow layout="stacked" label="Motivo" value={repair.reportedIssue} />
               {repair.closedAt ? (
                 <>
                   <Divider />
-                  <DetailRow label="Cerrado" value={formatDate(repair.closedAt)} />
+                  <KeyValueRow layout="stacked" label="Cerrado" value={formatDate(repair.closedAt)} />
                 </>
               ) : null}
             </View>
@@ -166,24 +167,5 @@ export default function RepairDetailScreen() {
         </View>
       </Screen>
     </>
-  );
-}
-
-function DetailRow({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <View accessible accessibilityLabel={`${label}: ${value}`} style={{ gap: 2 }}>
-      <Text variant="caption" color="textTertiary">
-        {label}
-      </Text>
-      <Text variant={mono ? 'mono' : 'callout'}>{value}</Text>
-    </View>
   );
 }

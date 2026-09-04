@@ -7,6 +7,7 @@ import {
   EmptyState,
   ErrorState,
   icons,
+  KeyValueRow,
   LoadingState,
   Screen,
   SectionHeader,
@@ -167,7 +168,7 @@ export default function OrderDetailScreen() {
             <View style={{ gap: theme.spacing.xs }}>
               {hasDiscount ? (
                 <>
-                  <SummaryRow
+                  <KeyValueRow
                     label={order.couponCode ? `Descuento (${order.couponCode})` : 'Descuento'}
                     value={`− ${formatCurrency(order.discountAmount)}`}
                   />
@@ -175,7 +176,7 @@ export default function OrderDetailScreen() {
                 </>
               ) : null}
 
-              <SummaryRow label="Total" value={formatCurrency(order.total)} emphasised />
+              <KeyValueRow label="Total" value={formatCurrency(order.total)} emphasis="pair" />
 
               {order.paidAt ? (
                 <Text variant="caption" color="textTertiary">
@@ -189,28 +190,5 @@ export default function OrderDetailScreen() {
         </View>
       </Screen>
     </>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  emphasised = false,
-}: {
-  label: string;
-  value: string;
-  emphasised?: boolean;
-}) {
-  return (
-    <View
-      accessible
-      accessibilityLabel={`${label}: ${value}`}
-      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-    >
-      <Text variant={emphasised ? 'headline' : 'subhead'} color={emphasised ? 'textPrimary' : 'textSecondary'}>
-        {label}
-      </Text>
-      <Text variant={emphasised ? 'title3' : 'subhead'}>{value}</Text>
-    </View>
   );
 }
