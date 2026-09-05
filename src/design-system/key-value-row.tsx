@@ -1,4 +1,4 @@
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { useTheme } from '@/theme/theme-provider';
 
@@ -84,6 +84,7 @@ export function KeyValueRow({
   badge = false,
 }: KeyValueRowProps) {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
 
   const valueVariant = mono
     ? 'mono'
@@ -95,13 +96,37 @@ export function KeyValueRow({
           ? 'callout'
           : 'subhead';
 
-  if (layout === 'stacked') {
+  // A ROW STOPS WORKING WHEN THE TEXT GETS BIG ENOUGH. Seen on an iPhone 17 Pro
+  // at the `accessibility-large` size: the inventory summary rendered
+  // "Productos con stock" beside "3 de 3", the label took the width it needed,
+  // and the value was left a column so narrow it broke one word per line —
+  // "3" / "de" / "3". Stacking is what a row was always going to have to do at
+  // that size, so it does it before the value is destroyed rather than after.
+  //
+  // The threshold is deliberately below the size where the damage was observed:
+  // by the time a value is visibly shredded it has been unreadable for a while.
+  const stacked = layout === 'stacked' || fontScale >= LARGE_TEXT_SCALE;
+
+  if (stacked) {
+    // A row that stacked because the text grew keeps ITS OWN typography. Only a
+    // pair the caller actually asked to stack gets the quieter caption label —
+    // otherwise an inventory KPI would change weight just because somebody
+    // enlarged their text, which is a second surprise on top of the first.
+    const askedToStack = layout === 'stacked';
+
     return (
       <View accessible accessibilityLabel={`${label}: ${value}`} style={{ gap: LABEL_GAP }}>
-        <Text variant="caption" color="textTertiary">
+        <Text
+          variant={labelVariant(layout, emphasis)}
+          color={labelColor(layout, emphasis)}
+        >
           {label}
         </Text>
-        <Text variant={valueVariant}>{value}</Text>
+        {badge && !askedToStack ? (
+          <Badge label={value} tone="accent" />
+        ) : (
+          <Text variant={valueVariant}>{value}</Text>
+        )}
       </View>
     );
   }
@@ -117,10 +142,7 @@ export function KeyValueRow({
         gap: theme.spacing.sm,
       }}
     >
-      <Text
-        variant={emphasis === 'pair' ? 'headline' : 'subhead'}
-        color={emphasis === 'pair' ? 'textPrimary' : 'textSecondary'}
-      >
+      <Text variant={labelVariant(layout, emphasis)} color={labelColor(layout, emphasis)}>
         {label}
       </Text>
 
@@ -152,3 +174,30 @@ export function KeyValueRow({
  * every other spacing decision in the app should still come from the scale.
  */
 const LABEL_GAP = 2;
+
+/**
+ * The text scale at which an inline pair becomes a stacked one.
+ *
+ * 1.35 sits just above the largest NON-accessibility size, so ordinary large
+ * text still reads as a row and only the accessibility sizes — where the label
+ * alone can fill the line — get the stacked form.
+ */
+const LARGE_TEXT_SCALE = 1.35;
+
+/**
+ * How the label reads, decided by the layout the CALLER asked for.
+ *
+ * Not by the layout that ends up on screen: a row forced to stack by a large
+ * text size is still a row, and it should not quietly change weight and colour
+ * as well as shape. Only a pair the caller declared `stacked` gets the quieter
+ * caption treatment.
+ */
+function labelVariant(layout: KeyValueLayout, emphasis: KeyValueEmphasis) {
+  if (layout === 'stacked') return 'caption' as const;
+  return emphasis === 'pair' ? ('headline' as const) : ('subhead' as const);
+}
+
+function labelColor(layout: KeyValueLayout, emphasis: KeyValueEmphasis) {
+  if (layout === 'stacked') return 'textTertiary' as const;
+  return emphasis === 'pair' ? ('textPrimary' as const) : ('textSecondary' as const);
+}
