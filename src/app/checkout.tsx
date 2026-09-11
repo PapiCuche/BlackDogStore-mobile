@@ -5,6 +5,10 @@ import { Controller, useForm } from 'react-hook-form';
 import { AppState, View } from 'react-native';
 
 import { useCart } from '@/cart/cart-provider';
+import {
+  CUSTOMER_PAYMENT_UNAVAILABLE,
+  customerPaymentAvailability,
+} from '@/config/customer-payment';
 import { Button, Card, EmptyState, icons, Input, Screen, Text } from '@/design-system';
 import {
   PrivateActionPrompt,
@@ -13,7 +17,6 @@ import {
 import { useCheckout } from '@/features/checkout/use-checkout';
 import { useOrder } from '@/hooks/use-orders';
 import { useTheme } from '@/theme/theme-provider';
-import { openExternalLink } from '@/utils/external-links';
 import { formatCurrency } from '@/utils/format';
 import { checkoutSchema, type CheckoutFormValues } from '@/validation/checkout-schemas';
 
@@ -24,15 +27,16 @@ import { checkoutSchema, type CheckoutFormValues } from '@/validation/checkout-s
  * session is asked for now, at the moment money moves and the person can see
  * why.
  *
- * THE PAYMENT PAGE IS HOSTED BY STRIPE. No card field exists in this app, and
- * none should: card data never touching the client is the entire reason the
- * hosted page exists. The app opens an HTTPS URL the server minted and waits.
+ * PAYING FROM THE APP IS BLOCKED FOR NOW (`config/customer-payment.ts`). The
+ * backend's gateway is Izipay and this app has no supported way to open its
+ * session yet (BR-010 / H-PAY-01). While that holds the screen says so and sends
+ * nothing: no checkout request, no order, no payment attempt. The cart is kept.
  *
- * "THE BROWSER CAME BACK" IS NOT A PAYMENT. Returning to the foreground proves
- * only that the user closed a tab. The order's real state comes from the server,
- * which learns it from Stripe's webhook — so on return the app REFETCHES the
- * order and believes that, and the basket survives anything short of a
- * confirmed payment.
+ * WHEN IT OPENS AGAIN, TWO RULES STAND. No card field exists in this app: the
+ * gateway's own form takes card data. And a callback or a returning browser is
+ * not a payment. The order's real state comes from the server, which learns it
+ * from the gateway's signed notification, so the app REFETCHES the order and
+ * believes that, and the basket survives anything short of a confirmed payment.
  */
 export default function CheckoutScreen() {
   const theme = useTheme();
@@ -75,7 +79,7 @@ export default function CheckoutScreen() {
   }, [order, cart.lines, clearPurchased]);
 
   const onSubmit = handleSubmit(async (values) => {
-    const result = await submit({
+    await submit({
       customerName: values.customerName,
       customerPhone: values.customerPhone,
       documentType: 'dni',
@@ -85,10 +89,22 @@ export default function CheckoutScreen() {
       acceptedTerms: true,
       acceptedWarrantyPolicy: true,
     });
-    // `checkoutUrl` is validated as an HTTPS Stripe URL before it gets here; a
-    // null one means the session expired and the order status is the answer.
-    if (result?.checkoutUrl) await openExternalLink(result.checkoutUrl);
+    // Nothing is opened here. The response's payment session is not read while
+    // paying from the app is blocked, and `useCheckout` refuses before sending.
   });
+
+  // Ahead of the session gate on purpose: nobody should be asked to sign in only
+  // to be told they cannot pay.
+  if (customerPaymentAvailability !== 'available') {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Pagar' }} />
+        <Screen scrollable contentContainerStyle={{ flexGrow: 1 }}>
+          <PaymentUnavailable />
+        </Screen>
+      </>
+    );
+  }
 
   if (access !== 'ready' && access !== 'pending') {
     return (
@@ -239,8 +255,8 @@ export default function CheckoutScreen() {
  * What the SERVER says about this order.
  *
  * Rendered from the refetched order rather than from anything the app assumed,
- * because the app cannot know whether a payment succeeded — only Stripe's
- * webhook can tell the server, and only the server can tell us.
+ * because the app cannot know whether a payment succeeded: only the gateway's
+ * signed notification can tell the server, and only the server can tell us.
  */
 function OrderStatusCard({
   order,
@@ -269,6 +285,39 @@ function OrderStatusCard({
         ) : (
           <Button label="Actualizar estado" variant="ghost" onPress={onRetry} />
         )}
+      </View>
+    </Card>
+  );
+}
+
+/**
+ * Paying from the app is blocked. Said once, plainly, with the ways back.
+ *
+ * No form, no "Continuar al pago" and no order card: this screen has created
+ * nothing and must not look as if it had. No gateway, SDK or ticket name
+ * either: those explain the pause to us, not to a customer.
+ */
+function PaymentUnavailable() {
+  const theme = useTheme();
+  return (
+    <Card variant="outlined">
+      <View style={{ gap: theme.spacing.sm }}>
+        <Text variant="headline">{CUSTOMER_PAYMENT_UNAVAILABLE.title}</Text>
+        <Text variant="subhead" color="textSecondary">
+          {CUSTOMER_PAYMENT_UNAVAILABLE.checkout}
+        </Text>
+        <Button
+          label="Volver al carrito"
+          variant="primary"
+          fullWidth
+          onPress={() => router.push('/cart')}
+        />
+        <Button
+          label="Explorar tienda"
+          variant="secondary"
+          fullWidth
+          onPress={() => router.push('/(tabs)/shop')}
+        />
       </View>
     </Card>
   );

@@ -93,8 +93,21 @@ describe('structural — a row and its endpoint module must agree', () => {
   it('names no module at all for anything still pending', () => {
     for (const key of KEYS) {
       const row = featureIntegration[key];
-      if (INTEGRATED.has(row.status)) continue;
+      // BLOCKED is not pending: its module can exist and be guarded. It is held
+      // to its own rule below.
+      if (INTEGRATED.has(row.status) || row.status === 'BLOCKED') continue;
       expect(row.source).toBeNull();
+    }
+  });
+
+  it('names the dependency behind every BLOCKED row', () => {
+    // A blocked feature with no stated reason is an unexplained dead end on that
+    // screen, and a module it names must still be a v1 module, not a way round.
+    for (const key of KEYS) {
+      const row = featureIntegration[key];
+      if (row.status !== 'BLOCKED') continue;
+      expect(row.note).toMatch(/\b(?:H-[A-Z]+-\d+|BR-\d{3})\b/);
+      if (row.source !== null) expect(code(row.source)).toMatch(/\/api\/v1\//);
     }
   });
 

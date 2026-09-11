@@ -9,7 +9,8 @@ import { ApiError } from '../errors';
 /**
  * The NATIVE checkout — `POST /api/v1/customer/<company_slug>/checkout/`.
  *
- * Verified on `PapiCuche/BlackDogStore-web` @ `origin/master` `0b184d3` (PR #4).
+ * Request verified on `PapiCuche/BlackDogStore-web` @ `origin/master` `0b184d3`
+ * (PR #4); response re-verified on `2dca0a3`.
  *
  * WHAT THIS SENDS: intent. A list of `{product_slug, quantity}`, the buyer's
  * details, and an idempotency key. Nothing about money.
@@ -71,15 +72,17 @@ export type CheckoutDetails = {
   contactEmail?: string;
 };
 
+/**
+ * What this app takes from the answer: the order, and nothing else.
+ *
+ * The server also returns `status` and a `payment` session: an Izipay session
+ * built for the web SDK (`08b8d7f`). This module deliberately does NOT read
+ * `payment`. Opening a payment from the app is blocked (BR-010 / H-PAY-01, see
+ * `config/customer-payment.ts`), and half-reading a session built for another
+ * client would be a payment integration nobody verified.
+ */
 export type CheckoutResult = {
   orderId: number;
-  /**
-   * The hosted Stripe page.
-   *
-   * Null on a replay whose session has expired. The order exists either way, so
-   * the caller reads its status rather than treating null as a failure.
-   */
-  checkoutUrl: string | null;
 };
 
 function customerPath(slug: string): string {
@@ -89,24 +92,6 @@ function customerPath(slug: string): string {
 function requireTenant(): string {
   if (!companySlug) throw new MissingTenantError();
   return companySlug;
-}
-
-/**
- * Only an HTTPS Stripe URL is ever opened.
- *
- * The server is trusted, and this still checks. A checkout URL is handed
- * straight to a browser, so it is the one response field that becomes an action
- * — and `javascript:` or a look-alike host reaching that call is exactly the
- * failure worth one line of validation.
- */
-export function isTrustedCheckoutUrl(raw: unknown): raw is string {
-  if (typeof raw !== 'string' || raw.length === 0) return false;
-  try {
-    const url = new URL(raw);
-    return url.protocol === 'https:' && url.hostname.endsWith('stripe.com');
-  } catch {
-    return false;
-  }
 }
 
 export async function postCheckout(
@@ -149,15 +134,12 @@ export async function postCheckout(
   }
 
   try {
-    const raw = await authenticatedRequest<{ order_id: number; checkout_url: unknown }>(
+    const raw = await authenticatedRequest<{ order_id: number }>(
       `${customerPath(requireTenant())}/checkout/`,
       { method: 'POST', body, scope: 'authenticated-v1', signal },
       deps,
     );
-    return {
-      orderId: Number(raw.order_id),
-      checkoutUrl: isTrustedCheckoutUrl(raw.checkout_url) ? raw.checkout_url : null,
-    };
+    return { orderId: Number(raw.order_id) };
   } catch (error) {
     if (error instanceof ApiError && error.status === 409) {
       throw new CheckoutConflictError(readOrderId(error));
