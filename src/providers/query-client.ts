@@ -235,6 +235,13 @@ export const queryKeys = {
     [...internalPrefix(scope), 'pos', 'context'] as const,
   internalPosSearch: (scope: QueryScope, branchId: number, term: string) =>
     [...internalPrefix(scope), 'pos', 'search', branchId, term] as const,
+  /**
+   * One scanned code, in one shop. Under the POS root on purpose, so a completed
+   * sale and a lost capability evict it together with everything else the till
+   * holds.
+   */
+  internalPosLookup: (scope: QueryScope, branchId: number, code: string) =>
+    [...internalPrefix(scope), 'pos', 'lookup', branchId, code] as const,
   internalPosRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'pos'] as const,
   /** The whole module, for invalidation after a write. */

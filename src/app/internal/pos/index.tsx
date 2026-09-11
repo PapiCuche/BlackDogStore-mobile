@@ -34,8 +34,16 @@ import {
   type PosConditions,
 } from '@/features/internal/pos-conditions';
 import {
+  describeScan,
+  scanCode,
+  scanFailureMessage,
+  scanNoticeColor,
+  type ScanNotice,
+} from '@/features/internal/pos-scan';
+import {
   useCreatePosSale,
   usePosContext,
+  usePosLookup,
   usePosPreview,
   usePosProductSearch,
 } from '@/hooks/use-internal-pos';
@@ -104,6 +112,10 @@ export default function PosScreen() {
   const search = usePosProductSearch(branch, term, { enabled: mayUse });
   const preview = usePosPreview();
   const sale = useCreatePosSale();
+  // A scanned code, resolved on Enter. The notice answers the LAST scan and
+  // nothing more: it is cleared the moment the next one starts.
+  const lookup = usePosLookup();
+  const [scanNotice, setScanNotice] = useState<ScanNotice | null>(null);
 
   const conditions: PosConditions = {
     branch,
@@ -195,6 +207,34 @@ export default function PosScreen() {
         onError: () => setPricedUnder(null),
       },
     );
+  }
+
+  /**
+   * Resolve what a scanner — or a person — typed, when Enter is pressed.
+   *
+   * The Web till's `handleScan`: the field is cleared BEFORE the server answers,
+   * so a scanner that sends a second Enter finds it empty and adds nothing
+   * twice; an unknown code and an empty shelf are said out loud and add nothing;
+   * anything else goes through `add()`, which blanks the price on screen like
+   * every other change to the basket.
+   *
+   * Refused while a price or a charge is in flight, for the same reason the
+   * «Agregar» buttons are disabled then: a basket that changes under a pending
+   * request is priced for something other than what the operator is looking at.
+   */
+  async function scan() {
+    const code = scanCode(term);
+    if (!code || branch === null || preview.isPending || sale.isPending) return;
+
+    setTerm('');
+    setScanNotice(null);
+    try {
+      const outcome = describeScan(code, await lookup(branch, code));
+      if (outcome.kind === 'add') add(outcome.product);
+      setScanNotice(outcome);
+    } catch (error) {
+      setScanNotice({ kind: 'error', message: scanFailureMessage(error) });
+    }
   }
 
   function confirm() {
@@ -338,8 +378,18 @@ export default function PosScreen() {
               <SearchInput
                 value={term}
                 onChangeText={setTerm}
+                onSubmitEditing={() => void scan()}
                 placeholder="Nombre o código de barras"
               />
+              {scanNotice ? (
+                <Text
+                  variant="footnote"
+                  color={scanNoticeColor(scanNotice.kind)}
+                  accessibilityLiveRegion="polite"
+                >
+                  {scanNotice.message}
+                </Text>
+              ) : null}
               {search.isFetching ? (
                 <Text variant="footnote" color="textTertiary">Buscando…</Text>
               ) : null}

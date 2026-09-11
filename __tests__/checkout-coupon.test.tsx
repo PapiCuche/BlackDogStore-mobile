@@ -9,6 +9,7 @@ import { ApiError } from '@/api/errors';
 import CheckoutScreen from '@/app/checkout';
 import type { AuthRepository } from '@/auth/auth-repository';
 import type { AuthSession } from '@/auth/types';
+import { CUSTOMER_PAYMENT_UNAVAILABLE } from '@/config/customer-payment';
 import type { CartLine } from '@/domain/cart/types';
 import { checkoutIntentShape } from '@/features/checkout/checkout-intent';
 import { useCheckout } from '@/features/checkout/use-checkout';
@@ -43,6 +44,33 @@ jest.mock('@/api/endpoints/customer-checkout-v1', () => ({
 jest.mock('@/auth/auth-runtime', () => ({
   getAuthRuntime: () => ({ coordinator: {} }),
 }));
+
+/**
+ * THE FUTURE PATH, OPENED FOR THIS FILE ONLY.
+ *
+ * Paying from the app is blocked in production (`config/customer-payment.ts`,
+ * BR-010 / H-PAY-01), so the coupon's submit path cannot be reached there. These
+ * tests exercise that path by mocking the gate open. Jest scopes the mock to this
+ * file's module registry, so no other suite sees it, and the production constant
+ * is untouched: a structural test below reads it from disk and asserts it is
+ * still `blocked`, a describe below closes the gate and proves the coupon waits
+ * behind it, and `checkout-payment-blocked.test.tsx` proves the real app sends
+ * nothing.
+ *
+ * A plain property on the mocked module, switched by `setPaymentGate`. The app
+ * reads `customerPaymentAvailability` from that module object on every call, so
+ * writing the property is seen at once, with no getter involved.
+ */
+jest.mock('@/config/customer-payment', () => ({
+  ...jest.requireActual('@/config/customer-payment'),
+  customerPaymentAvailability: 'available',
+}));
+
+function setPaymentGate(value: 'blocked' | 'available') {
+  jest.requireMock<{ customerPaymentAvailability: string }>(
+    '@/config/customer-payment',
+  ).customerPaymentAvailability = value;
+}
 
 let mockScope: { tenant: string; user: string | null } = { tenant: 'blackdog', user: '7' };
 jest.mock('@/providers/use-query-scope', () => ({
@@ -84,12 +112,6 @@ jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
 }));
 
-const mockOpenExternalLink = jest.fn();
-jest.mock('@/utils/external-links', () => ({
-  ...jest.requireActual('@/utils/external-links'),
-  openExternalLink: (...args: unknown[]) => mockOpenExternalLink(...args),
-}));
-
 jest.mock('@/hooks/use-orders', () => ({
   ...jest.requireActual('@/hooks/use-orders'),
   useOrder: () => ({ data: undefined, refetch: jest.fn() }),
@@ -116,12 +138,11 @@ function sent(index: number): SentInput {
 
 beforeEach(() => {
   mockPostCheckout.mockReset();
-  mockPostCheckout.mockResolvedValue({ orderId: 1, checkoutUrl: null });
-  mockOpenExternalLink.mockReset();
-  mockOpenExternalLink.mockResolvedValue(true);
+  mockPostCheckout.mockResolvedValue({ orderId: 1 });
   mockPush.mockClear();
   mockCart = cartValue();
   mockScope = { tenant: 'blackdog', user: '7' };
+  setPaymentGate('available');
 });
 
 // ── the intention ──────────────────────────────────────────────────────────
@@ -484,6 +505,37 @@ describe('the checkout screen', () => {
   });
 });
 
+// ── the same code, with the production gate closed ─────────────────────────
+
+describe('with the production gate closed, the coupon waits behind it', () => {
+  beforeEach(() => {
+    setPaymentGate('blocked');
+  });
+
+  it('the hook sends nothing, coupon or not', async () => {
+    const hook = await checkoutHook();
+
+    await hook.submit({ ...DETAILS, couponCode: 'ABC' });
+
+    expect(mockPostCheckout).not.toHaveBeenCalled();
+    expect(hook.result.current.state).toEqual({
+      status: 'unavailable',
+      message: CUSTOMER_PAYMENT_UNAVAILABLE.title,
+    });
+  });
+
+  it('the screen shows no coupon field and no way to pay', async () => {
+    await renderWithProviders(<CheckoutScreen />, { authRepository: signedIn() });
+    await waitFor(() => {
+      expect(screen.getByText(CUSTOMER_PAYMENT_UNAVAILABLE.title)).toBeOnTheScreen();
+    });
+
+    expect(screen.queryByLabelText(COUPON_LABEL)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continuar al pago' })).toBeNull();
+    expect(mockPostCheckout).not.toHaveBeenCalled();
+  });
+});
+
 // ── what the code must never contain ───────────────────────────────────────
 
 type FS = { readFileSync(p: string, e: 'utf8'): string };
@@ -556,5 +608,12 @@ describe('the wire and the authority', () => {
     for (const file of CHECKOUT_FILES) {
       expect(source(file)).not.toMatch(/role\s*[!=]==|isAdmin/);
     }
+  });
+
+  it('the gate this file opens is still closed in production', () => {
+    // Read from disk: the module itself is mocked at the top of this file.
+    expect(source('src/config/customer-payment.ts')).toMatch(
+      /export const customerPaymentAvailability = 'blocked' as CustomerPaymentAvailability;/,
+    );
   });
 });

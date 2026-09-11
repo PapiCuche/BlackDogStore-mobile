@@ -54,7 +54,23 @@ function load(
   let thrown: Error | null = null;
   const send = jest.fn(async (_path: string, _options: unknown, _deps: unknown) => {
     if (thrown) throw thrown;
-    return options.result ?? { order_id: 1042, checkout_url: 'https://checkout.stripe.com/c/pay/x' };
+    // The shape `origin/master` 2dca0a3 answers with: an order, and an Izipay
+    // session built for the web SDK.
+    return (
+      options.result ?? {
+        order_id: 1042,
+        status: 'pending_payment',
+        payment: {
+          provider: 'izipay',
+          environment: 'sandbox',
+          transaction_id: '12345678901234567890',
+          authorization: 'session-token',
+          merchant_code: '4001061',
+          public_key: 'public-key',
+          config: { action: 'pay' },
+        },
+      }
+    );
   });
 
   let module!: Loaded;
@@ -192,45 +208,32 @@ describe('the request', () => {
   });
 });
 
-describe('the checkout URL', () => {
-  it('accepts an HTTPS Stripe URL', () => {
+describe('the response', () => {
+  it('takes the order and nothing else from it', async () => {
+    // The Izipay session is left untouched on purpose. Opening a payment from
+    // the app is blocked (BR-010 / H-PAY-01), and a half-read session built for
+    // another client would be a payment integration nobody verified.
     const { module } = load();
-
-    expect(module.isTrustedCheckoutUrl('https://checkout.stripe.com/c/pay/abc')).toBe(true);
-  });
-
-  it.each([
-    'javascript:alert(1)',
-    'http://checkout.stripe.com/c/pay/abc',
-    'https://checkout.stripe.com.evil.test/pay',
-    'https://evil.test/pay',
-    '',
-    'no-es-una-url',
-  ])('refuses %p', (candidate) => {
-    // This value is handed straight to a browser, which makes it the one
-    // response field that becomes an action.
-    const { module } = load();
-
-    expect(module.isTrustedCheckoutUrl(candidate)).toBe(false);
-  });
-
-  it('returns null rather than an untrusted URL', async () => {
-    const { module } = load({ result: { order_id: 7, checkout_url: 'javascript:alert(1)' } });
 
     const result = await module.postCheckout(
       { cart: CART, details: DETAILS, idempotencyKey: 'k-1' }, DEPS,
     );
 
-    expect(result.orderId).toBe(7);
-    expect(result.checkoutUrl).toBeNull();
+    expect(result).toEqual({ orderId: 1042 });
   });
 
-  it('accepts a null URL from a replay whose session expired', async () => {
-    const { module } = load({ result: { order_id: 7, checkout_url: null } });
+  it('still reports the order when a replay carries no payment session', async () => {
+    const { module } = load({ result: { order_id: 7, status: 'failed', payment: null } });
 
     await expect(
       module.postCheckout({ cart: CART, details: DETAILS, idempotencyKey: 'k-1' }, DEPS),
-    ).resolves.toEqual({ orderId: 7, checkoutUrl: null });
+    ).resolves.toEqual({ orderId: 7 });
+  });
+
+  it('offers no helper to open a hosted payment page', () => {
+    const { module } = load();
+
+    expect(module).not.toHaveProperty('isTrustedCheckoutUrl');
   });
 });
 

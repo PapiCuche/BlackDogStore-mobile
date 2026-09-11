@@ -6,8 +6,9 @@ import { Platform } from 'react-native';
  *
  * SECURITY: every `EXPO_PUBLIC_*` variable is inlined into the JavaScript
  * bundle at build time and is therefore PUBLIC. Anyone with the .ipa/.apk can
- * read it. Nothing secret may be added to this file — no Stripe secret key, no
- * Django SECRET_KEY, no signing credential. See docs/MOBILE_AUTH.md.
+ * read it. Nothing secret may be added to this file — no payment-gateway key
+ * (Izipay's API or hash key), no Django SECRET_KEY, no signing credential. See
+ * docs/MOBILE_AUTH.md.
  *
  * FAIL-SAFE PRINCIPLE (M0.1): a release build must never acquire a permissive
  * behaviour because a variable was FORGOTTEN. Missing configuration in a

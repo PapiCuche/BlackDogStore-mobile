@@ -8,6 +8,10 @@ import {
 } from '@/api/endpoints/customer-checkout-v1';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import { useCart } from '@/cart/cart-provider';
+import {
+  CUSTOMER_PAYMENT_UNAVAILABLE,
+  customerPaymentAvailability,
+} from '@/config/customer-payment';
 import { makeIdempotencyKey } from '@/domain/idempotency';
 import { useQueryScope } from '@/providers/use-query-scope';
 
@@ -30,8 +34,10 @@ import { checkoutIntentShape } from './checkout-intent';
 export type CheckoutState =
   | { status: 'idle' }
   | { status: 'submitting' }
-  /** The hosted payment page is open. The order exists and is unpaid. */
+  /** The order exists and is unpaid. */
   | { status: 'awaiting-payment'; orderId: number }
+  /** Paying from the app is blocked, so nothing was sent. See `config/customer-payment.ts`. */
+  | { status: 'unavailable'; message: string }
   | { status: 'rejected'; message: string; reasons: readonly string[] }
   | { status: 'conflict'; message: string }
   | { status: 'error'; message: string };
@@ -90,5 +96,26 @@ export function useCheckout() {
     setState({ status: 'idle' });
   }, []);
 
-  return { state, submit, reset };
+  /**
+   * THE GATE, AND WHY IT WRAPS `submit` INSTEAD OF LIVING IN THE SCREEN.
+   *
+   * Hiding the button is the first defence. This is the one a stray
+   * `onSubmitEditing`, a test harness or a future screen cannot walk past: while
+   * paying from the app is blocked it answers before `submit` runs at all. No
+   * idempotency key is minted, no "submitting" state appears and no checkout
+   * request leaves the phone, so no pending order exists for anyone to fail to
+   * pay.
+   */
+  const guardedSubmit = useCallback(
+    async (details: CheckoutDetails) => {
+      if (customerPaymentAvailability !== 'available') {
+        setState({ status: 'unavailable', message: CUSTOMER_PAYMENT_UNAVAILABLE.title });
+        return null;
+      }
+      return submit(details);
+    },
+    [submit],
+  );
+
+  return { state, submit: guardedSubmit, reset };
 }

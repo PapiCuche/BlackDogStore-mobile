@@ -4,6 +4,10 @@ import { View } from 'react-native';
 
 import { useCart } from '@/cart/cart-provider';
 import {
+  CUSTOMER_PAYMENT_UNAVAILABLE,
+  customerPaymentAvailability,
+} from '@/config/customer-payment';
+import {
   Button,
   Card,
   Divider,
@@ -129,13 +133,27 @@ export default function CartScreen() {
             </Text>
           </View>
 
-          <Button
-            label="Ir a pagar"
-            variant="primary"
-            fullWidth
-            onPress={() => router.push('/checkout')}
-            accessibilityHint="Continúa al pago"
-          />
+          {/* Paying from the app is blocked (`config/customer-payment.ts`). Said
+              here, before any screen asks for details, instead of a button that
+              leads somewhere a purchase cannot finish. */}
+          {customerPaymentAvailability === 'available' ? (
+            <Button
+              label="Ir a pagar"
+              variant="primary"
+              fullWidth
+              onPress={() => router.push('/checkout')}
+              accessibilityHint="Continúa al pago"
+            />
+          ) : (
+            <Card variant="outlined">
+              <View style={{ gap: theme.spacing.xs }}>
+                <Text variant="headline">{CUSTOMER_PAYMENT_UNAVAILABLE.title}</Text>
+                <Text variant="subhead" color="textSecondary">
+                  {CUSTOMER_PAYMENT_UNAVAILABLE.cart}
+                </Text>
+              </View>
+            </Card>
+          )}
         </View>
       </Screen>
     </>

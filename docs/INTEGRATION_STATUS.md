@@ -6,10 +6,16 @@ decidir si muestra el aviso de "datos de ejemplo". Si este documento y ese
 archivo discrepan, **el archivo tiene razón**.
 
 > **Estado real, septiembre 2026.** Las superficies privadas de cliente
-> (pedidos, reparaciones, checkout) y toda la superficie interna (POS,
-> inventario, transferencias, servicio técnico) están integradas contra
-> `/api/v1/`. En development los mocks siguen disponibles como modo explícito,
-> no como estado por defecto de la integración.
+> (pedidos y reparaciones) y toda la superficie interna (POS, inventario,
+> transferencias, servicio técnico) están integradas contra `/api/v1/`. En
+> development los mocks siguen disponibles como modo explícito, no como estado por
+> defecto de la integración.
+>
+> **Pagar desde la app está BLOQUEADO.** El backend migró la pasarela a Izipay y la
+> app no tiene todavía una integración soportada para abrir esa sesión (BR-010 /
+> H-PAY-01). Mientras tanto la app **no envía el checkout**: no crea pedidos que no
+> pueda cobrar, y el carrito se conserva. Catálogo, carrito, pedidos existentes y
+> reparaciones siguen disponibles.
 >
 > La frase que ocupaba este lugar —«ninguna API privada está integrada»— era de
 > M0.1 y contradecía la tabla que está tres líneas más abajo. Se corrigió en
@@ -71,12 +77,12 @@ archivo discrepan, **el archivo tiene razón**.
 | Administración de plataforma | NO IMPLEMENTADO | n/a | n/a | n/a | **PENDIENTE** |
 | APIs internas de negocio | **PARCIAL** — ventas e inventario sí; servicio no | **PARCIAL** | **PARCIAL** | **TESTED** | **PARCIAL** |
 | Carrito móvil (público) | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
-| Checkout autenticado móvil | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
-| Cupón en checkout (envío con la compra) | **IMPLEMENTADO** | **API_READY** (`coupon_code`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
-| Vista previa de cupón antes de pagar | NO IMPLEMENTADO | **PENDIENTE** (sin ruta v1) | n/a | n/a | **PENDIENTE** |
-| Stripe Checkout alojado | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
-| Confirmación de pago | **IMPLEMENTADO** | **API_READY** (webhook + refetch) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
-| Compra / pagos | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Checkout autenticado móvil (creación del pedido) | IMPLEMENTADO, sin uso | **API_READY** | **BLOQUEADO** — la app no envía el checkout (BR-010 / H-PAY-01) | **TESTED** (0 peticiones) | **BLOQUEADO** |
+| Cupón en checkout (envío con la compra) | IMPLEMENTADO, inalcanzable | **API_READY** (`coupon_code`) | **LISTO EN CÓDIGO** — detrás del bloqueo del pago (BR-010) | **TESTED** (intención e idempotencia) | **BLOQUEADO** |
+| Vista previa de cupón antes de pagar | NO IMPLEMENTADO | **PENDIENTE** (sin ruta v1, H-02) | n/a | n/a | **PENDIENTE** |
+| Pago desde la app (inicio) | NO IMPLEMENTADO | sesión Izipay web; contrato nativo **PENDIENTE** (H-PAY-01) | n/a | n/a | **BLOQUEADO** |
+| Confirmación de pago | lectura del pedido IMPLEMENTADA | **API_READY** (notificación firmada + estado del pedido) | sin uso mientras el pago esté bloqueado | **TESTED** | **BLOQUEADO** |
+| Compra completa desde la app | **BLOQUEADO** | **API_READY** (pedido) | **BLOQUEADO** | **TESTED** (bloqueo) | **BLOQUEADO** |
 
 ## Qué sirve cada build (M0.1)
 
@@ -359,15 +365,15 @@ Carrito local tenant-scoped    IMPLEMENTADO / TESTED
 Persistencia no sensible       IMPLEMENTADO / TESTED
 Agregar sin sesión             IMPLEMENTADO / TESTED
 Gate de sesión en el pago      IMPLEMENTADO / TESTED
-Checkout v1 idempotente        INTEGRADO / TESTED
-Cupón en checkout (envío)      INTEGRADO / TESTED — el código viaja con la compra;
-                               el servidor lo valida y calcula descuento y total.
-                               Cambiar el cupón rota la clave de idempotencia
-Vista previa de cupón          PENDIENTE (Backend) — no hay ruta v1 que valide o
+Checkout v1 idempotente        BLOQUEADO (sept. 2026) — la app no lo envía; BR-010 / H-PAY-01
+Cupón en checkout (envío)      LISTO EN CÓDIGO / TESTED — viaja como intención y rota la
+                               clave de idempotencia; inalcanzable mientras el checkout
+                               esté bloqueado. El servidor lo valida y calcula el descuento
+Vista previa de cupón          PENDIENTE (Backend, H-02) — no hay ruta v1 que valide o
                                cotice un cupón antes de pagar
-Stripe Checkout alojado        IMPLEMENTADO / TESTED
-Validación de la URL de pago   IMPLEMENTADO / TESTED
-Refetch del pedido al volver   IMPLEMENTADO / TESTED
+Stripe Checkout alojado        RETIRADO — histórico M5; el backend usa Izipay (08b8d7f)
+Validación de la URL de pago   RETIRADO — el contrato actual no trae URL
+Refetch del pedido al volver   SIN USO mientras pagar desde la app esté bloqueado
 Vaciar solo tras pago pagado   IMPLEMENTADO / TESTED
 Config pública por slug        INTEGRADO / TESTED   (BR-006 cerrado)
 Enlace de WhatsApp del tenant  INTEGRADO / TESTED
@@ -863,7 +869,11 @@ falla si aparece una tabla de transiciones en el cliente.
 Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master d484e3e)
 Contexto de caja               INTEGRADO / TESTED
 Búsqueda de producto           INTEGRADO / TESTED
-Lectura de código de barras    INTEGRADO / TESTED (endpoint; sin cámara)
+Lectura de código de barras    INTEGRADO / TESTED — escáner tipo teclado o
+                               código tecleado + Enter; mismas reglas que
+                               `handleScan` de la caja Web. Hasta esta ola la
+                               fila decía TESTED con sólo el endpoint:
+                               ninguna pantalla lo alcanzaba
 Registrar venta                INTEGRADO / TESTED
 Idempotencia (misma clave)     INTEGRADO / TESTED
 409 insufficient_stock         INTEGRADO / TESTED

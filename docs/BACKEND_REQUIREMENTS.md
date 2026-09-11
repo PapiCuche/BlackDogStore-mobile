@@ -38,6 +38,7 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | BR-007 | Superficie versionada `/api/v1/` | **PARCIAL** — público, auth, cliente, checkout, interno de ventas, inventario y servicio técnico están; faltan recuentos (BR-009), reportes de inventario y clientes internos |
 | BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
 | BR-009 | Superficie v1 para **recuentos físicos de inventario** | **ALTA** — dominio y Web existen; sin adapter v1 Mobile no puede integrarlo |
+| BR-010 | Sesión de pago para el **SDK nativo de Izipay** (H-PAY-01) | **BLOQUEANTE** — sin él Mobile no puede cobrar; mientras tanto la app no envía el checkout |
 
 ---
 
@@ -1100,3 +1101,41 @@ Una vez mergeado el adapter, contra `origin/master` ya mergeado y con login real
 14. **todo el recorrido sin una sola llamada a `/api/admin/`**.
 
 Sólo cuando esto pase en vivo, y con el SHA revalidado, empieza IP2B Mobile.
+
+---
+
+## BR-010 — Sesión de pago para el SDK nativo de Izipay (H-PAY-01)
+
+**Estado:** PROPUESTA · **Prioridad:** **BLOQUEANTE** para pagar desde Mobile
+**Verificado en:** `origin/master` `2dca0a3`, que contiene `08b8d7f` (*migrate checkout to izipay*)
+
+Mientras esto no se resuelva, Mobile **no envía** `POST /api/v1/customer/<slug>/checkout/`
+(`src/config/customer-payment.ts`). Enviarlo creaba un pedido `pending_payment` que la
+app no podía cobrar.
+
+| Campo | Contenido |
+|---|---|
+| Título | V1 — sesión de pago para el SDK nativo de Izipay |
+| Operación Mobile bloqueada | Abrir el formulario nativo de Izipay (Android/iOS) con la sesión del checkout v1 y, con ello, completar una compra desde la app |
+| Backend actual | `checkout_services.build_payment_config` arma un `config` para el SDK **web** (`order.processType: "AT"`, sin `payMethod`); `izipay.request_session_token` acuña el token con ese mismo payload; `v1_checkout_views._payment_payload` lo devuelve en `payment.config` |
+| Web actual | Usa ese `config` con el SDK web (`new Izipay({config}).LoadForm({authorization, keyRSA})`); correcto para Web |
+| Endpoint v1 actual/faltante | Existe `POST /api/v1/customer/<slug>/checkout/`; falta una forma de pedir una sesión **nativa** |
+| Capability | — (cliente autenticado de la empresa) |
+| Tenant/branch rule | La del checkout: cliente de la empresa del slug; sucursal de despacho decidida por el servidor; credenciales de comercio hoy globales |
+| Problema | La tabla oficial de valores de Izipay indica que en móvil (iOS/Android) `processType` se envía como `autorize`/`preautorize`, y el token se acuña con `AT`. Mobile tendría que reescribir `config` y apartarse del payload con el que se emitió el token (TA1 y P54 son errores documentados de validación de token) |
+| Por qué Mobile no puede resolverlo | Los parámetros con que se acuña el token son del servidor: cambiarlos en el teléfono sería fabricar parámetros de pago. Los secretos (`IZIPAY_API_KEY`, `IZIPAY_HASH_KEY`) siguen solo en Backend |
+| Contrato mínimo requerido | Discriminador explícito (p. ej. `payment_client: "web" \| "native"`) o endpoint dedicado; sesión nativa acuñada con el vocabulario de la guía nativa; `environment` sigue siendo un nombre; sin URLs; mismos secretos fuera de la respuesta; decidir si el modo entra en la huella de idempotencia |
+| Tests backend requeridos | Sesión nativa → `autorize` y web sigue `AT`; el replay conserva el modo; ningún secreto en la respuesta; valor desconocido → 400; verificación en sandbox con SDK nativo ≥ 2.3.1 |
+| Impacto de compatibilidad | Aditivo si el valor por defecto sigue siendo web |
+
+**Además de BR-010, Mobile necesita** (nada de esto es Backend): el ejemplo oficial de
+React Native de Izipay con SDK nativo ≥ 2.3.1 (el publicado trae 2.1.0 y la 2.3.1 es
+obligatoria), una decisión sobre mantener un config plugin propio de Expo, una vía de
+build nativo verificada y credenciales sandbox.
+
+Fuentes oficiales:
+[value-table](https://developers.izipay.pe/value-table/) ·
+[react-native-core](https://developers.izipay.pe/react-native-core/) ·
+[sample-record](https://developers.izipay.pe/react-native-core/sample-record/) ·
+[android release notes](https://developers.izipay.pe/android-core/release-notes/) ·
+[ios release notes](https://developers.izipay.pe/ios-core/release-notes/)

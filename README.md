@@ -479,16 +479,22 @@ un 403, no inventario.
 ### Qué se ve de un pedido
 
 Estado de pago y **estado de entrega** por separado (BR-003), con las etiquetas
-que renderiza el servidor. No llegan identificadores de Stripe, diagnósticos
-operativos ni claves de sesión.
+que renderiza el servidor. No llegan identificadores de la pasarela de pago,
+diagnósticos operativos ni claves de sesión.
 
 ## Carrito y compra
 
 **Navegar y armar carrito no piden cuenta. Pagar sí** (DEC-MOBILE-006).
 
+> **Pagar desde la app está BLOQUEADO (septiembre 2026).** El backend migró la
+> pasarela a Izipay (`08b8d7f`) y la app todavía no tiene una integración soportada
+> para abrir esa sesión (**BR-010 / H-PAY-01**). Mientras tanto la app **no envía el
+> checkout**: no crea pedidos que no pueda cobrar. El carrito se conserva y el
+> cliente ve un aviso claro. La decisión vive en `src/config/customer-payment.ts`.
+
 ```
-producto → agregar → carrito → «Ir a pagar» → login si hace falta
-        → Stripe Checkout alojado → vuelta a la app → refetch del pedido
+producto → agregar → carrito → aviso «el pago desde la app no está disponible»
+        (sin POST de checkout · sin pedido · sin intento de pago)
 ```
 
 ### El carrito es intención local
@@ -505,15 +511,17 @@ falla no debe perder lo que eligió.
 
 ### El pago
 
-Sin campo de tarjeta en la app, y no debe haberlo: que los datos de tarjeta nunca
-toquen el cliente es la razón entera de que exista la página alojada de Stripe.
-La app abre una URL HTTPS que el servidor emitió y **valida que sea de Stripe**
-antes de abrirla.
+Sin campo de tarjeta en la app, y no debe haberlo: los datos de tarjeta los toma el
+formulario de la pasarela, nunca la app.
 
-**«El navegador volvió» no es un pago.** Al volver a primer plano la app
-**pregunta al servidor** por el pedido, que lo sabe por el webhook de Stripe. El
-carrito solo se vacía cuando el pago se confirma; cancelar, expirar o quedarse
-sin red lo conservan.
+**Un callback o un navegador que vuelve no es un pago.** El estado real lo sabe el
+servidor, que lo aprende de la notificación firmada de la pasarela; la app
+**pregunta al servidor** por el pedido y cree eso. El carrito solo se vacía cuando el
+pago se confirma; cancelar, expirar o quedarse sin red lo conservan.
+
+Hasta septiembre de 2026 (M5, histórico) la pasarela era Stripe Checkout alojado y
+la app abría una URL HTTPS de `stripe.com` emitida por el servidor. Ese contrato ya
+no existe en `master`.
 
 ### Marca del tenant
 
