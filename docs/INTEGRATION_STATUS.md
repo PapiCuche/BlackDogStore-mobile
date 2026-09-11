@@ -856,7 +856,11 @@ falla si aparece una tabla de transiciones en el cliente.
 Contrato backend               IMPLEMENTADO / VERIFICADO (origin/master d484e3e)
 Contexto de caja               INTEGRADO / TESTED
 Búsqueda de producto           INTEGRADO / TESTED
-Lectura de código de barras    INTEGRADO / TESTED (endpoint; sin cámara)
+Lectura de código de barras    INTEGRADO / TESTED — escáner tipo teclado o
+                               código tecleado + Enter; mismas reglas que
+                               `handleScan` de la caja Web. Hasta esta ola la
+                               fila decía TESTED con sólo el endpoint:
+                               ninguna pantalla lo alcanzaba
 Registrar venta                INTEGRADO / TESTED
 Idempotencia (misma clave)     INTEGRADO / TESTED
 409 insufficient_stock         INTEGRADO / TESTED

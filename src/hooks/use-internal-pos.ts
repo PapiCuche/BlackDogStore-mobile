@@ -61,6 +61,60 @@ export function usePosProductSearch(
 }
 
 /**
+ * Resolve a scanned code, in one shop, at the moment the operator submits it.
+ *
+ * THE ADAPTER EXISTED AND NOTHING REACHED IT. `lookupPosProduct` and the
+ * repository method had shipped since IP1A, and the integration status called
+ * barcode reading integrated — but no hook wrapped it and no screen could call
+ * it. This is the missing half, and it adds no behaviour the Web till does not
+ * already have: its `handleScan` asks the same resolver on Enter.
+ *
+ * A READ ON DEMAND, NOT A MUTATION AND NOT A SUBSCRIPTION. It is a GET, so it
+ * lives in the query cache under a key scoped to tenant, user, shop and code —
+ * and it runs only when asked, because a keyboard-wedge scanner types the whole
+ * payload before it presses Enter and every intermediate prefix is noise.
+ *
+ * `staleTime: 0` and `gcTime: 0`: a second scan of the same label asks the
+ * server again. `available` is the shelf as it is NOW, and a cached answer from
+ * a minute ago is how a till sells the last unit twice.
+ *
+ * `retry: false`: a 400 (a shop this person may not sell from) and a 404 (no
+ * such code here) are answers, not failures.
+ *
+ * A 404 comes back as `null` from the endpoint, for a code that exists nowhere
+ * AND for one belonging to another company — the server makes those
+ * indistinguishable on purpose, and so does the Web till.
+ *
+ * A 403 evicts the till's cache exactly as a refused sale does, so the screen
+ * re-resolves what this person may do instead of offering a scanner they no
+ * longer hold. Nobody is signed out by it: that is the auth layer's decision,
+ * and it only makes it on a 401.
+ */
+export function usePosLookup() {
+  const client = useQueryClient();
+  const scope = useQueryScope();
+
+  return async function lookup(branchId: number, code: string) {
+    try {
+      return await client.fetchQuery({
+        queryKey: queryKeys.internalPosLookup(scope, branchId, code),
+        queryFn: ({ signal }) =>
+          repository().lookupProduct({ code, branch: branchId }, signal),
+        retry: false,
+        staleTime: 0,
+        gcTime: 0,
+      });
+    } catch (error) {
+      if (error instanceof InternalCapabilityMissingError) {
+        client.removeQueries({ queryKey: queryKeys.internalPosRoot(scope) });
+        client.removeQueries({ queryKey: queryKeys.internalContext(scope) });
+      }
+      throw error;
+    }
+  };
+}
+
+/**
  * What the basket costs. THE ONLY SOURCE OF A TOTAL IN THIS APP.
  *
  * A mutation rather than a query because it is a POST with a body, and because
