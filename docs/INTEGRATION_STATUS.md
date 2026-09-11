@@ -78,6 +78,8 @@ archivo discrepan, **el archivo tiene razón**.
 | APIs internas de negocio | **PARCIAL** — ventas e inventario sí; servicio no | **PARCIAL** | **PARCIAL** | **TESTED** | **PARCIAL** |
 | Carrito móvil (público) | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
 | Checkout autenticado móvil (creación del pedido) | IMPLEMENTADO, sin uso | **API_READY** | **BLOQUEADO** — la app no envía el checkout (BR-010 / H-PAY-01) | **TESTED** (0 peticiones) | **BLOQUEADO** |
+| Cupón en checkout (envío con la compra) | IMPLEMENTADO, inalcanzable | **API_READY** (`coupon_code`) | **LISTO EN CÓDIGO** — detrás del bloqueo del pago (BR-010) | **TESTED** (intención e idempotencia) | **BLOQUEADO** |
+| Vista previa de cupón antes de pagar | NO IMPLEMENTADO | **PENDIENTE** (sin ruta v1, H-02) | n/a | n/a | **PENDIENTE** |
 | Pago desde la app (inicio) | NO IMPLEMENTADO | sesión Izipay web; contrato nativo **PENDIENTE** (H-PAY-01) | n/a | n/a | **BLOQUEADO** |
 | Confirmación de pago | lectura del pedido IMPLEMENTADA | **API_READY** (notificación firmada + estado del pedido) | sin uso mientras el pago esté bloqueado | **TESTED** | **BLOQUEADO** |
 | Compra completa desde la app | **BLOQUEADO** | **API_READY** (pedido) | **BLOQUEADO** | **TESTED** (bloqueo) | **BLOQUEADO** |
@@ -364,6 +366,11 @@ Persistencia no sensible       IMPLEMENTADO / TESTED
 Agregar sin sesión             IMPLEMENTADO / TESTED
 Gate de sesión en el pago      IMPLEMENTADO / TESTED
 Checkout v1 idempotente        BLOQUEADO (sept. 2026) — la app no lo envía; BR-010 / H-PAY-01
+Cupón en checkout (envío)      LISTO EN CÓDIGO / TESTED — viaja como intención y rota la
+                               clave de idempotencia; inalcanzable mientras el checkout
+                               esté bloqueado. El servidor lo valida y calcula el descuento
+Vista previa de cupón          PENDIENTE (Backend, H-02) — no hay ruta v1 que valide o
+                               cotice un cupón antes de pagar
 Stripe Checkout alojado        RETIRADO — histórico M5; el backend usa Izipay (08b8d7f)
 Validación de la URL de pago   RETIRADO — el contrato actual no trae URL
 Refetch del pedido al volver   SIN USO mientras pagar desde la app esté bloqueado

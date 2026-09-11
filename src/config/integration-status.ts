@@ -80,9 +80,10 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
     label: 'Checkout',
     // Was TESTED. The request still is, but since the backend moved to Izipay the
     // app could create an order and never open its payment. BLOCKED says what
-    // the app actually does now: it does not send it.
+    // the app actually does now: it does not send it. The coupon rides along in
+    // code (intent, idempotency, request) and waits behind the same block.
     status: 'BLOCKED',
-    note: 'El backend acepta el pedido en /api/v1/customer/<empresa>/checkout/, pero la app no lo envía mientras pagar desde Mobile esté bloqueado (BR-010 / H-PAY-01): así no se crean pedidos que no se pueden pagar. El carrito se conserva.',
+    note: 'El backend acepta el pedido en /api/v1/customer/<empresa>/checkout/, pero la app no lo envía mientras pagar desde Mobile esté bloqueado (BR-010 / H-PAY-01): así no se crean pedidos que no se pueden pagar. El carrito se conserva. El cupón ya viaja en el código como intención (coupon_code), inalcanzable hasta que el pago se abra; validarlo antes de pagar sigue pendiente de Backend (H-02).',
     source: 'api/endpoints/customer-checkout-v1.ts',
   },
   customerPayment: {

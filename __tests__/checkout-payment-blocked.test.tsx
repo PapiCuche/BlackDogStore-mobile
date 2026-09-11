@@ -54,6 +54,15 @@ jest.mock('@/auth/auth-runtime', () => ({
   getAuthRuntime: () => ({ coordinator: {} }),
 }));
 
+// `useCheckout` reads the session scope for its idempotency intention. The hook
+// suites below render it without an AuthProvider, so the scope is fixed here.
+// The gate itself reads no scope, and a test below changes it to prove that.
+let mockScope: { tenant: string; user: string | null } = { tenant: 'blackdog', user: '7' };
+jest.mock('@/providers/use-query-scope', () => ({
+  ...jest.requireActual('@/providers/use-query-scope'),
+  useQueryScope: () => mockScope,
+}));
+
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   router: { push: (...args: unknown[]) => mockPush(...args) },
@@ -160,6 +169,7 @@ beforeEach(() => {
   mockUseOrder.mockReturnValue({ data: undefined, refetch: jest.fn() });
   mockOpenExternalLink.mockResolvedValue(true);
   mockCart = cartValue();
+  mockScope = { tenant: 'blackdog', user: '7' };
 });
 
 // ── UX ─────────────────────────────────────────────────────────────────────
@@ -297,6 +307,22 @@ describe('useCheckout refuses below the screen', () => {
     for (const change of ['clearPurchased', 'remove', 'setQuantity', 'clear'] as const) {
       expect(mockCart[change]).not.toHaveBeenCalled();
     }
+  });
+
+  it.each([
+    ['otro usuario', { tenant: 'blackdog', user: '8' }],
+    ['otra empresa', { tenant: 'otra-tienda', user: '7' }],
+    ['sin sesión', { tenant: 'blackdog', user: null }],
+  ])('%s: still nothing is sent', async (_label, scope) => {
+    mockScope = scope;
+    const hook = await renderHook(() => useCheckout());
+
+    await act(async () => {
+      await hook.result.current.submit(DETAILS);
+    });
+
+    expect(mockPostCheckout).not.toHaveBeenCalled();
+    expect(hook.result.current.state.status).toBe('unavailable');
   });
 });
 
