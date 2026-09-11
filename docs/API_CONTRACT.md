@@ -220,31 +220,39 @@ Mobile **no** debe diseñar contra este código hasta que esté en `master`.
 
 ---
 
-## Compra · `/api/v1/customer/<slug>/checkout/` — **INTEGRADO**
+## Compra · `/api/v1/customer/<slug>/checkout/` — **BLOQUEADO EN MOBILE**
 
 ```
-VERIFIED_STABLE_MASTER · VERSIONED · PRIVADO · INTEGRADO POR MOBILE (M5)
+VERIFIED_STABLE_MASTER · VERSIONED · PRIVADO · LA APP NO LO ENVÍA (BR-010 / H-PAY-01)
 ```
 
-Verificado en `origin/master` **`0b184d3`** (PR #4), leyendo el código en `master`
-y con smoke real: checkout 201, replay 200 con el mismo pedido, conflicto 409,
-precio falso 400, stock intacto.
+Petición verificada en `origin/master` **`0b184d3`** (PR #4), leyendo el código en
+`master` y con smoke real. Respuesta re-verificada en **`2dca0a3`**.
 
 ```
 POST /api/v1/customer/<company_slug>/checkout/   Bearer v1
 ```
 
 **Envía intención, no dinero.** `items: [{product_slug, quantity}]`, los datos del
-comprador y una `idempotency_key`. El servidor **rechaza** —no ignora— `price`,
-`total`, `subtotal`, `discount_amount`, `stock`, `company_id`, `branch_id`,
-`status`, `paid`, `user_id`, `stripe_session_id` y `session_key`.
+comprador y una `idempotency_key`. El servidor **rechaza** —no ignora— entre otros
+`price`, `total`, `subtotal`, `discount_amount`, `stock`, `company_id`, `branch_id`,
+`status`, `paid`, `user_id`, `payment_reference`, `transaction_id` y `session_key`.
 
-Respuesta: `{order_id, checkout_url}`. La URL es una página **alojada por
-Stripe**; la app la valida como HTTPS de `stripe.com` antes de abrirla.
+**Respuesta actual** (`2dca0a3`): `{order_id, status, payment}`. `payment` es una
+sesión **Izipay** para el SDK web: `provider`, `environment`, `transaction_id`,
+`authorization`, `merchant_code`, `public_key` y `config`. Un replay con el pedido
+pendiente → 200 con un intento de pago **nuevo**; con el pedido ya no pendiente →
+200 con `payment: null`; un fallo de la pasarela → 502 y el pedido queda `failed`.
 
-**Idempotencia.** Misma clave y misma cesta → el mismo pedido (200). Misma clave,
-cesta distinta → **409**. En un replay cuya sesión caducó, `checkout_url` es null
-y el cliente lee el estado del pedido.
+**Mobile no envía este request mientras pagar desde la app esté bloqueado**
+(`src/config/customer-payment.ts`): crear el pedido sin poder abrir su pago dejaba
+órdenes incobrables. `postCheckout` sigue existiendo y tipado, pero solo lee
+`order_id` y no consume `payment`. Hasta septiembre de 2026 (M5, histórico) la
+respuesta era `{order_id, checkout_url}` con una página alojada por Stripe; ese
+contrato ya no existe.
+
+**Idempotencia.** Misma clave y misma huella → el mismo pedido (200). Misma clave,
+huella distinta → **409**.
 
 **Nada se consume antes del pago**: ni carrito ni stock.
 
@@ -308,7 +316,7 @@ regla, y la deriva sería un botón que falla.
 
 ### Qué NO viaja
 
-Identificadores de Stripe, `payment_error`, `email_send_error`,
+Identificadores de la pasarela de pago, `payment_error`, `email_send_error`,
 `cart_session_key`, `company_snapshot`. Allowlist, igual que en cliente.
 
 ---
@@ -492,7 +500,7 @@ Archivar la ficha CRM **no** quita acceso al propio historial.
 **BR-003 cerrado para v1.** Las etiquetas las renderiza el servidor: es dueño de
 la máquina de estados, así que es dueño de sus palabras.
 
-**No viajan**: identificadores de Stripe, `payment_error`, `email_send_error`,
+**No viajan**: identificadores de la pasarela de pago, `payment_error`, `email_send_error`,
 `cart_session_key`, marcas de correos internos, `company_snapshot`,
 `fulfillment_branch`, ni los datos personales que el comprador ya tecleó.
 
@@ -516,8 +524,11 @@ Campos serializados (`OrderSerializer.fields`, todos read-only):
 
 ```
 id, user, customer_name, customer_email, total, discount_amount,
-coupon_code, status, paid, paid_at, stripe_session_id, created_at, items[]
+coupon_code, status, paid, paid_at, created_at, items[]
 ```
+
+Re-verificado en `2dca0a3`: `stripe_session_id` salió del serializer con la migración a
+Izipay (`08b8d7f`).
 
 `status` (`Order.Status` — **pago**):
 `pending_payment` · `paid` · `failed` · `cancelled` · `expired` · `refunded`
@@ -722,7 +733,7 @@ Verificados en `master`, pero fuera de alcance de esta fase — se listan para q
 no se "redescubran" más adelante:
 
 - `/api/cart/` — carrito por `session_key` de navegador.
-- `/api/payments/create-checkout-session/`, `/webhook/`, `/status/` — Stripe Checkout web.
+- `/api/payments/create-checkout-session/`, `/api/payments/izipay/notification/`, `/api/payments/status/` — pago web con Izipay (antes, Stripe Checkout).
 - `/api/coupons/validate/`
 - `/api/reviews/`
 - Toda la superficie `/api/admin/*` — inventario, kardex, notas de venta, empresas, roles.

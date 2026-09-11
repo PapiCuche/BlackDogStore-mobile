@@ -25,6 +25,11 @@ export type IntegrationStatus =
   | 'API_PENDING'
   /** The endpoint exists and is verified, but the app is not wired to it. */
   | 'API_READY'
+  /**
+   * The backend side exists and the app deliberately refuses the flow until a
+   * verified dependency lands. The note names that dependency.
+   */
+  | 'BLOCKED'
   /** The app calls the real endpoint. */
   | 'INTEGRATED'
   /** Integrated and covered by tests. */
@@ -34,6 +39,7 @@ export type FeatureKey =
   // ── Customer audience ────────────────────────────────────────────────────
   | 'catalog'
   | 'checkout'
+  | 'customerPayment'
   | 'orders'
   | 'repairs'
   | 'auth'
@@ -72,9 +78,18 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   },
   checkout: {
     label: 'Checkout',
-    status: 'TESTED',
-    note: 'Integrado con /api/v1/customer/<empresa>/checkout/. El servidor calcula el total y reserva el stock; la app no compone ningún importe.',
+    // Was TESTED. The request still is, but since the backend moved to Izipay the
+    // app could create an order and never open its payment. BLOCKED says what
+    // the app actually does now: it does not send it.
+    status: 'BLOCKED',
+    note: 'El backend acepta el pedido en /api/v1/customer/<empresa>/checkout/, pero la app no lo envía mientras pagar desde Mobile esté bloqueado (BR-010 / H-PAY-01): así no se crean pedidos que no se pueden pagar. El carrito se conserva.',
     source: 'api/endpoints/customer-checkout-v1.ts',
+  },
+  customerPayment: {
+    label: 'Pago desde la app',
+    status: 'BLOCKED',
+    note: 'Iniciar y completar un pago desde la app está bloqueado. El backend emite una sesión Izipay pensada para el SDK web; falta el contrato nativo (BR-010 / H-PAY-01) y una integración Mobile soportada y probada en sandbox.',
+    source: null,
   },
   orders: {
     label: 'Pedidos',

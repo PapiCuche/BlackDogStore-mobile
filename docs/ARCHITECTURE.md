@@ -588,33 +588,38 @@ recalcula todo desde `Product.price` en el momento de comprar.
 ### El flujo de compra
 
 ```
-producto → agregar (público) → carrito (público) → «Ir a pagar»
+producto → agregar (público) → carrito (público) → aviso: pagar desde la app
+                                                   no está disponible por ahora
                                                         │
-                                              gate de sesión (DEC-MOBILE-006)
+                            customerPaymentAvailability = 'blocked'
+                            (src/config/customer-payment.ts · BR-010 / H-PAY-01)
                                                         │
-                                    POST /api/v1/customer/<empresa>/checkout/
-                                                        │
-                                    Stripe Checkout ALOJADO (expo-web-browser)
-                                                        │
-                            vuelta a foreground → REFETCH del pedido al servidor
-                                                        │
-                                      ¿pagado? → vaciar esas líneas
-                                      ¿no?     → conservar el carrito
+                    sin POST /api/v1/customer/<empresa>/checkout/ · sin pedido
+                    sin intento de pago · el carrito se conserva
 ```
 
-**«El navegador volvió» no es un pago.** Volver a primer plano solo demuestra que
-alguien cerró una pestaña. El estado real del pedido lo sabe el servidor, que lo
-aprende del webhook de Stripe. Por eso al volver se **refetchea** y se cree eso.
+**Mientras pagar desde la app esté bloqueado, la app no crea pedidos.** El backend
+migró la pasarela a Izipay (`08b8d7f`) y responde el checkout con una sesión
+pensada para el SDK web, que la app no puede abrir. Enviarlo dejaba un pedido
+`pending_payment` que nadie podía cobrar. Dos defensas lo impiden: la pantalla (el
+carrito explica la pausa y el checkout no muestra formulario ni «Continuar al
+pago») y `useCheckout`, que rechaza antes de generar la clave de idempotencia o de
+enviar nada. La constante es de código fuente, no una variable de entorno: solo
+puede pasar a `available` en el commit que traiga una integración probada en
+sandbox.
+
+**Un callback o un navegador que vuelve no es un pago.** Cuando el pago vuelva a
+abrirse, el estado real del pedido lo sabrá el servidor por la notificación firmada
+de la pasarela; la app **refetchea** el pedido y cree eso.
 
 **El carrito no se vacía hasta que el pago se confirma.** Cancelar, expirar,
 fallar o quedarse sin red conservan la cesta: perderla por un pago abandonado
 sería castigar al cliente por dudar.
 
-**No hay campo de tarjeta en la app**, y no debe haberlo: que los datos de tarjeta
-nunca toquen el cliente es la razón entera de que exista la página alojada. La
-app abre una URL HTTPS que el servidor emitió, y **valida** que sea de Stripe
-antes de abrirla — una URL es el único campo de una respuesta que se convierte en
-una acción.
+**No hay campo de tarjeta en la app**, y no debe haberlo: los datos de tarjeta los
+toma el formulario de la pasarela. Hasta septiembre de 2026 (M5, histórico) ese
+formulario era Stripe Checkout alojado, abierto con `expo-web-browser` tras validar
+que la URL fuera de `stripe.com`; ese contrato ya no existe en `master`.
 
 **La clave de idempotencia** se genera una vez por intento y se reutiliza en cada
 reintento de ese intento; se regenera cuando la cesta cambia, porque una cesta
@@ -1233,8 +1238,9 @@ un error 500.
 | Carrito en AsyncStorage, no en SecureStore | No hay credencial ni autorización dentro; el Keychain es para secretos. |
 | El carrito sobrevive al login y al logout | Quien entra para pagar y falla no debe perder lo que eligió. |
 | No vaciar hasta el pago confirmado | Volver del navegador solo prueba que se cerró una pestaña. |
-| Stripe Checkout alojado, sin campo de tarjeta | Que los datos de tarjeta no toquen el cliente es la razón de que exista. |
-| Validar la URL de pago aunque venga del servidor | Es el único campo de una respuesta que se convierte en una acción. |
+| Sin campo de tarjeta en la app (M5: Stripe Checkout alojado, retirado por el backend en `08b8d7f`) | Que los datos de tarjeta no toquen el cliente. |
+| Validar la URL de pago aunque venga del servidor (M5, histórico) | Era el único campo de la respuesta que se convertía en acción; el contrato actual no trae URL. |
+| Pagar desde la app bloqueado hasta probar la integración (BR-010 / H-PAY-01) | Un pedido que la app no puede cobrar es peor que no ofrecer el pago. |
 | Contextos de acceso conservados, no descartados | El backend los enviaba desde M4 y Mobile los tiraba; el área interna es imposible sin ellos. |
 | Dos fuentes: sesión para ofrecer, servidor para abrir | Los roles cambian mientras una sesión sigue viva. |
 | `hasUxCapability`, sin `can()` ni `isAllowed()` | Esos nombres invitan a leer la respuesta como permiso. |
