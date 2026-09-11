@@ -146,7 +146,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   internalPos: {
     label: 'Interno · Punto de venta',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/internal/<empresa>/sales/pos/ — contexto, búsqueda, lectura de código, previsualización y venta. El total lo calcula siempre el servidor.',
+    note: 'Integrado con /api/v1/internal/<empresa>/sales/pos/ — contexto, búsqueda, lectura de código (escáner tipo teclado o código + Enter; sin cámara), previsualización y venta. El total lo calcula siempre el servidor.',
     source: 'api/endpoints/internal-pos-v1.ts',
   },
   internalInventory: {
