@@ -15,7 +15,11 @@ import { useOrder } from '@/hooks/use-orders';
 import { useTheme } from '@/theme/theme-provider';
 import { openExternalLink } from '@/utils/external-links';
 import { formatCurrency } from '@/utils/format';
-import { checkoutSchema, type CheckoutFormValues } from '@/validation/checkout-schemas';
+import {
+  checkoutSchema,
+  COUPON_CODE_MAX_LENGTH,
+  type CheckoutFormValues,
+} from '@/validation/checkout-schemas';
 
 /**
  * Payment.
@@ -52,6 +56,7 @@ export default function CheckoutScreen() {
       customerName: '',
       customerPhone: '',
       documentNumber: '',
+      couponCode: '',
     },
     mode: 'onTouched',
   });
@@ -84,6 +89,8 @@ export default function CheckoutScreen() {
       receiptType: 'boleta',
       acceptedTerms: true,
       acceptedWarrantyPolicy: true,
+      // Omitted when empty, exactly as the endpoint omits every blank optional.
+      couponCode: values.couponCode.trim() || undefined,
     });
     // `checkoutUrl` is validated as an HTTPS Stripe URL before it gets here; a
     // null one means the session expired and the order status is the answer.
@@ -182,6 +189,33 @@ export default function CheckoutScreen() {
             )}
           />
 
+          {/* A COUPON IS INPUT, NOT A RESULT. No v1 route prices a code before
+              the purchase, so this field promises nothing: the code travels with
+              the checkout, the server decides whether it applies and by how
+              much, and a refusal comes back in the server's own words.
+              `autoCapitalize` is a keyboard hint; the value is sent as typed. */}
+          <Controller
+            control={control}
+            name="couponCode"
+            render={({ field, fieldState }) => (
+              <Input
+                label="Código de cupón (opcional)"
+                value={field.value}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                error={fieldState.error?.message}
+                hint="La tienda lo comprueba al iniciar el pago."
+                autoCapitalize="characters"
+                autoCorrect={false}
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={COUPON_CODE_MAX_LENGTH}
+                returnKeyType="go"
+                onSubmitEditing={onSubmit}
+              />
+            )}
+          />
+
           <Card variant="outlined">
             <View style={{ gap: theme.spacing.xs }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -189,7 +223,8 @@ export default function CheckoutScreen() {
                 <Text variant="headline">{formatCurrency(totals.estimatedSubtotal)}</Text>
               </View>
               <Text variant="footnote" color="textTertiary">
-                El total definitivo lo calcula la tienda al procesar el pago.
+                El total definitivo, con el cupón si corresponde, lo calcula la tienda al
+                procesar el pago.
               </Text>
             </View>
           </Card>

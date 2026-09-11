@@ -73,7 +73,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   checkout: {
     label: 'Checkout',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/customer/<empresa>/checkout/. El servidor calcula el total y reserva el stock; la app no compone ningún importe.',
+    note: 'Integrado con /api/v1/customer/<empresa>/checkout/. El cupón viaja como intención con la compra; el servidor lo valida y calcula descuento y total, y la app no compone ningún importe. Validar un cupón antes de pagar sigue pendiente de Backend.',
     source: 'api/endpoints/customer-checkout-v1.ts',
   },
   orders: {

@@ -135,6 +135,23 @@ describe('the request', () => {
     expect(body).not.toHaveProperty('coupon_code');
   });
 
+  it('sends a coupon as intent, and still no money', async () => {
+    // `coupon_code` is the one commercial input a customer types. What it is
+    // worth is decided by `price_checkout` on the server and never travels here.
+    const { module, send } = load();
+
+    await module.postCheckout(
+      { cart: CART, details: { ...DETAILS, couponCode: 'BIENVENIDO10' }, idempotencyKey: 'k-1' },
+      DEPS,
+    );
+
+    const body = (send.mock.calls[0]![1] as { body: Record<string, unknown> }).body;
+    expect(body.coupon_code).toBe('BIENVENIDO10');
+    for (const forbidden of ['discount', 'discount_amount', 'discount_percent', 'total']) {
+      expect(body).not.toHaveProperty(forbidden);
+    }
+  });
+
   it('sends address fields when a delivery needs them', async () => {
     const { module, send } = load();
 

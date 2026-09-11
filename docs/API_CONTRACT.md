@@ -239,6 +239,23 @@ comprador y una `idempotency_key`. El servidor **rechaza** —no ignora— `pric
 `total`, `subtotal`, `discount_amount`, `stock`, `company_id`, `branch_id`,
 `status`, `paid`, `user_id`, `stripe_session_id` y `session_key`.
 
+**Cupón (`coupon_code`)** · re-verificado en `origin/master` **`2dca0a3`**. Opcional,
+`max_length=50`; el serializer recorta espacios. Lo aplica
+`checkout_services.price_checkout`, la misma función que usa el checkout web: pasa
+el código a mayúsculas, lo busca **dentro de la empresa** y exige que esté activo.
+Un código inexistente, inactivo o de otra empresa → **400** «Cupón no válido o
+inactivo.»; uno de esta empresa ya vencido → **400** «El cupón ha expirado.».
+Descuento y total los calcula el servidor y no viajan en la respuesta del checkout;
+se leen después en el pedido (`discount_amount`, `coupon_code`). La app envía el
+código tal como se escribió, sin espacios alrededor, y muestra la negativa con las
+palabras del servidor. **No existe ruta v1 para validar o cotizar un cupón antes de
+pagar**: esa vista previa sigue pendiente de Backend.
+
+La huella de idempotencia del servidor (`payload_fingerprint`) cubre la cesta, el
+cupón, el método de entrega, el tipo de comprobante y el documento. La app deriva
+su clave de esos mismos campos más el tenant y el usuario, así que cambiar el cupón
+es un intento nuevo y reintentar sin cambios reutiliza la clave.
+
 Respuesta: `{order_id, checkout_url}`. La URL es una página **alojada por
 Stripe**; la app la valida como HTTPS de `stripe.com` antes de abrirla.
 

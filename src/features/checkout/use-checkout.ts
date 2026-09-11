@@ -8,20 +8,23 @@ import {
 } from '@/api/endpoints/customer-checkout-v1';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import { useCart } from '@/cart/cart-provider';
-import type { Cart } from '@/domain/cart/types';
 import { makeIdempotencyKey } from '@/domain/idempotency';
+import { useQueryScope } from '@/providers/use-query-scope';
+
+import { checkoutIntentShape } from './checkout-intent';
 
 /**
  * Driving one purchase attempt.
  *
- * THE IDEMPOTENCY KEY IS THE INTERESTING PART. It is generated ONCE per basket
- * attempt and reused for every retry of that attempt, which is what lets the
- * server recognise a repeat and answer with the original order instead of
+ * THE IDEMPOTENCY KEY IS THE INTERESTING PART. It is generated ONCE per
+ * intention and reused for every retry of that intention, which is what lets
+ * the server recognise a repeat and answer with the original order instead of
  * creating a second one.
  *
- * It is regenerated when the basket CHANGES, because a different basket is a
- * different purchase — and reusing the key there would earn a 409 rather than
- * silently buying the wrong thing.
+ * It is regenerated when the INTENTION changes — the basket, the coupon, or
+ * anything else the server fingerprints (see `checkout-intent.ts`) — because a
+ * different ask is a different purchase, and reusing the key there would earn a
+ * 409 rather than silently buying the wrong thing.
  */
 
 export type CheckoutState =
@@ -33,15 +36,12 @@ export type CheckoutState =
   | { status: 'conflict'; message: string }
   | { status: 'error'; message: string };
 
-function basketShape(cart: Cart): string {
-  return cart.lines.map((line) => `${line.productSlug}x${line.quantity}`).sort().join('|');
-}
-
 // The key generator moved to `@/domain/idempotency` in M10, when a second
 // caller needed it. Same function, same behaviour, one copy.
 
 export function useCheckout() {
   const { cart } = useCart();
+  const scope = useQueryScope();
   const [state, setState] = useState<CheckoutState>({ status: 'idle' });
 
   // Held in a ref, not state: changing it must not re-render, and a retry has to
@@ -50,7 +50,7 @@ export function useCheckout() {
 
   const submit = useCallback(
     async (details: CheckoutDetails) => {
-      const shape = basketShape(cart);
+      const shape = checkoutIntentShape(scope, cart, details);
       if (attempt.current === null || attempt.current.shape !== shape) {
         attempt.current = { key: makeIdempotencyKey(shape), shape };
       }
@@ -67,7 +67,7 @@ export function useCheckout() {
         if (error instanceof CheckoutRejectedError) {
           setState({ status: 'rejected', message: error.message, reasons: error.reasons });
         } else if (error instanceof CheckoutConflictError) {
-          // The key was reused for a different basket. A fresh attempt is the
+          // The key was reused for a different purchase. A fresh attempt is the
           // fix, so the next submit generates a new key.
           attempt.current = null;
           setState({ status: 'conflict', message: error.message });
@@ -82,7 +82,7 @@ export function useCheckout() {
         return null;
       }
     },
-    [cart],
+    [cart, scope],
   );
 
   const reset = useCallback(() => {

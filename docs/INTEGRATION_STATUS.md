@@ -72,6 +72,8 @@ archivo discrepan, **el archivo tiene razón**.
 | APIs internas de negocio | **PARCIAL** — ventas e inventario sí; servicio no | **PARCIAL** | **PARCIAL** | **TESTED** | **PARCIAL** |
 | Carrito móvil (público) | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
 | Checkout autenticado móvil | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Cupón en checkout (envío con la compra) | **IMPLEMENTADO** | **API_READY** (`coupon_code`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Vista previa de cupón antes de pagar | NO IMPLEMENTADO | **PENDIENTE** (sin ruta v1) | n/a | n/a | **PENDIENTE** |
 | Stripe Checkout alojado | **IMPLEMENTADO** | n/a | n/a | **TESTED** | **IMPLEMENTADO** |
 | Confirmación de pago | **IMPLEMENTADO** | **API_READY** (webhook + refetch) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Compra / pagos | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
@@ -358,6 +360,11 @@ Persistencia no sensible       IMPLEMENTADO / TESTED
 Agregar sin sesión             IMPLEMENTADO / TESTED
 Gate de sesión en el pago      IMPLEMENTADO / TESTED
 Checkout v1 idempotente        INTEGRADO / TESTED
+Cupón en checkout (envío)      INTEGRADO / TESTED — el código viaja con la compra;
+                               el servidor lo valida y calcula descuento y total.
+                               Cambiar el cupón rota la clave de idempotencia
+Vista previa de cupón          PENDIENTE (Backend) — no hay ruta v1 que valide o
+                               cotice un cupón antes de pagar
 Stripe Checkout alojado        IMPLEMENTADO / TESTED
 Validación de la URL de pago   IMPLEMENTADO / TESTED
 Refetch del pedido al volver   IMPLEMENTADO / TESTED
