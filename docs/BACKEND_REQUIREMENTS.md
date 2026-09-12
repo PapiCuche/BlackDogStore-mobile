@@ -39,6 +39,8 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
 | BR-009 | Superficie v1 para **recuentos físicos de inventario** | **ALTA** — dominio y Web existen; sin adapter v1 Mobile no puede integrarlo |
 | BR-010 | Sesión de pago para el **SDK nativo de Izipay** (H-PAY-01) | **BLOQUEANTE** — sin él Mobile no puede cobrar; mientras tanto la app no envía el checkout |
+| H-02 | Cotización v1 del cupón **antes** de crear el pedido | MEDIA — sin ella Mobile no puede enseñar un descuento sin inventarlo; no reabre el checkout por sí sola |
+| H-06 | Cobertura de tests del `payload_fingerprint` del checkout v1 | BAJA — deuda de garantía sobre código que ya existe; no bloquea Mobile |
 
 ---
 
@@ -802,7 +804,7 @@ token. `INTEGRATION_STATUS.md` lo mantiene en `API_PENDING`.
 
 ---
 
-# BR-009 — Superficie `/api/v1/` para recuentos físicos de inventario
+## BR-009 — Superficie `/api/v1/` para recuentos físicos de inventario
 
 **Estado:** **PENDIENTE** · **Prioridad:** ALTA · **Bloquea:** IP2B Mobile
 
@@ -1078,7 +1080,18 @@ en la primera versión. Mobile **no** la va a tapar inventando una fuente.
 14. paridad Web/dominio — la misma intención por ambas puertas deja el mismo `InventoryCount`, el mismo `BranchStock`, el mismo `StockMovement` y la misma auditoría;
 15. no contado ≠ cero — una línea sin cantidad no baja el stock a cero;
 16. contar **cero** sí es un recuento y sí corrige;
-17. entrada hostil — `physical_quantity: true` no debe registrarse como 1, y una `note` estructurada no debe producir un 500.
+17. entrada hostil — `physical_quantity: true` no debe registrarse como 1, y una `note` estructurada no debe producir un 500;
+18. **`approve` repetido** — la segunda llamada no aplica el delta otra vez: o es idempotente y devuelve los movimientos existentes, o se rechaza de forma determinista. Lo mismo para `cancel` terminal. El dominio ya se comporta así; lo que falta es que un test lo fije para el adapter.
+
+## Refetch: la verdad es el response, no el estado local
+
+Tras `create`, `PUT items/`, `approve` y `cancel`, Mobile invalida y vuelve a
+pedir. No mantiene un stock optimista ni una cola offline: `MUTATION_RETRY` es
+`false` en `src/providers/retry-policy.ts`, así que una mutación que falla falla
+una vez y se muestra. Lo que el adapter devuelva es lo que la pantalla dibuja.
+
+Por eso el response de cada mutación debe bastar para repintar el documento sin
+una segunda petición inventada por el cliente.
 
 ## Smoke requerido antes de tocar Mobile
 
@@ -1139,3 +1152,267 @@ Fuentes oficiales:
 [sample-record](https://developers.izipay.pe/react-native-core/sample-record/) ·
 [android release notes](https://developers.izipay.pe/android-core/release-notes/) ·
 [ios release notes](https://developers.izipay.pe/ios-core/release-notes/)
+
+### El contrato, en detalle
+
+Revalidado el 2026-09-11 contra Mobile `da35be8` y Backend `origin/master`
+`2dca0a3`, que no ha cambiado desde la auditoría anterior.
+
+**Discriminador de cliente de pago.** Lo mínimo y aditivo es que el checkout que
+ya existe acepte quién va a abrir el formulario:
+
+```jsonc
+// POST /api/v1/customer/<slug>/checkout/
+{ "payment_client": "native" }   // valores: "web" | "native"
+```
+
+Omitirlo debe conservar el comportamiento actual, que es el de Web. Si Backend
+prefiere un endpoint separado, es aceptable mientras siga bajo `/api/v1/` y **no
+duplique el dominio de checkout**: un segundo lifecycle de pedido sería peor que
+el problema que resuelve.
+
+**Huella e idempotencia.** Si el modo puede cambiar el tipo de sesión emitida,
+entonces forma parte de la intención:
+
+| Situación | Respuesta esperada |
+|---|---|
+| Misma key · misma intención · pedido pendiente | el mismo pedido, y un nuevo intento de pago cuando corresponda |
+| Misma key · intención distinta | `409` |
+| Pedido ya pagado o terminal | no se cobra otra vez; `payment: null` cuando ésa sea la semántica vigente |
+| Misma key · `payment_client` distinto | nunca devolver en silencio una sesión acuñada para el otro cliente |
+
+**Autoridad.** Superficie de cliente, sin capability interna: usuario
+autenticado → relación de cliente → empresa del `<slug>`, con la misma autoridad
+que hoy. Mobile nunca envía el tenant como autoridad, y las credenciales de
+comercio siguen en el servidor. La deuda de multi-comercio por empresa no se
+resuelve en Mobile.
+
+**Respuesta para `payment_client=native`.** La misma envoltura de hoy —
+`order_id`, `status`, y `payment` con `provider`, `environment`, `transaction_id`,
+`authorization`, `merchant_code`, `public_key`, `config` — con un `config`
+construido y acuñado por Backend **con el vocabulario del SDK nativo soportado**,
+no el del SDK web.
+
+> **Corrección respecto de la nota anterior.** En `origin/master` el único
+> vocabulario presente es `'processType': 'AT'`, una sola vez, en
+> `checkout_services.py:478`. Los valores `'PA'`, `autorize` y `preautorize` **no
+> aparecen en ninguna parte del repo Web**. La tabla oficial de Izipay indica que
+> el móvil usa `autorize`/`preautorize`, pero eso es evidencia externa: antes de
+> mergear hay que contrastarlo con el artefacto oficial vigente y soportado, no
+> copiar este documento. Como mínimo hay que fijar `processType`, el contrato de
+> token/authorization, el identificador de comercio, importe, moneda, número de
+> pedido, identidad del comprador, fecha/hora y los campos obligatorios del
+> `ConfigRequest` nativo.
+
+**Seguridad.** Nunca devolver `IZIPAY_API_KEY`, `IZIPAY_HASH_KEY` ni ninguna
+credencial capaz de acuñar tokens o de verificar el IPN; hoy la respuesta solo
+lleva `merchant_code` y `public_key`, y así debe seguir. Nunca aceptar desde
+Mobile un secreto de comercio, una URL de SDK, una autoridad de callback, un
+importe o moneda calculados en el cliente, ni un `processType` arbitrario.
+`environment` sigue siendo un nombre cerrado (`sandbox` · `production`), nunca
+una URL ejecutable.
+
+**Confirmación del pago.** El invariante no cambia:
+
+```text
+callback del SDK nativo  ≠  pagado
+```
+
+El callback solo dice que el formulario devolvió el control. La única autoridad
+para pasar un pedido a `paid` sigue siendo la notificación firmada de Izipay
+verificada en el servidor. Mobile abre el SDK, recibe el callback, invalida y
+vuelve a preguntar; enseña «pagado» solo si Backend lo dice. No descuenta stock,
+no vacía el carrito y no confirma dinero localmente.
+
+**Errores.** La misma semántica que el checkout actual: `400` intención o dominio
+inválido · `401` autenticación · `404` cliente o empresa no accesible · `409`
+misma clave con huella distinta · `429` throttle · `500` configuración del
+proveedor incompleta · `502` no se pudo iniciar el intento. Una caída de Izipay
+no se convierte en éxito parcial.
+
+**Tests backend requeridos antes del merge**
+
+1. `payment_client=native` produce una sesión nativa;
+2. `payment_client=web` conserva el contrato web existente;
+3. cada modo acuña el `processType` correcto para su SDK;
+4. valor desconocido de `payment_client` → `400`;
+5. `payment_client` participa en la huella;
+6. misma clave con modo distinto → `409` cuando corresponda;
+7. replay pendiente conserva el modo y crea un nuevo intento, no otro pedido;
+8. replay sobre pagado o terminal no vuelve a cobrar;
+9. ningún secreto aparece en la respuesta ni en `config`;
+10. otra empresa u otro cliente no obtienen sesión;
+11. importe y moneda proceden solo del servidor;
+12. una caída de la pasarela no deja al API diciendo que el pago empezó bien;
+13. el callback del SDK no marca `paid`;
+14. solo el IPN firmado confirma `paid`;
+15. verificación en sandbox real con el SDK nativo soportado.
+
+**Gate externo.** BR-010 no se declara cerrado porque exista el JSON. Hace falta
+SDK nativo vigente **más** build Android **más** build iOS **más** transacción en
+sandbox **más** IPN confirmado en servidor.
+
+**Qué hace Mobile después.** Solo con el merge en `master` y el smoke hecho, la
+fila pasa de bloqueada a candidata y Mobile abre un checkpoint propio de
+integración Izipay. Hasta entonces `customerPaymentAvailability` sigue en
+`'blocked'`.
+
+---
+
+## H-02 — Cotización v1 del cupón antes de crear el pedido
+
+**Estado:** PROPUESTA · **Prioridad:** MEDIA · **Verificado en:** `origin/master` `2dca0a3`
+
+### Operación Mobile bloqueada
+
+Que un cliente escriba un cupón y vea, **antes** de crear el pedido, si es válido
+y qué subtotal, descuento y total decide el servidor. Mobile no simula descuentos:
+hoy el cupón viaja en el código como intención y es inalcanzable.
+
+### Estado actual
+
+| Capa | Estado |
+|---|---|
+| Dominio de cupón y pricing | **EXISTE** — `checkout_services.price_checkout` |
+| Ruta legacy | **EXISTE** — `POST /api/coupons/validate/` (`urls.py:122`), `AllowAny` + `CouponThrottle`, consumida por `frontend/app/cart/page.tsx` |
+| Ruta `/api/v1/customer/…` | **NO EXISTE** ← el bloqueo. Cero menciones de cupón en `v1_urls.py` |
+| Mobile | **PROHIBIDO** consumir la legacy: `/api/auth/`, `/api/admin/` y `/api/me/` están en la denylist de `src/api/api-scope.ts` por diseño |
+
+### Endpoint requerido
+
+```text
+POST /api/v1/customer/<slug>/checkout/quote/
+```
+
+Otro nombre es aceptable mientras viva bajo `/api/v1/customer/<slug>/…` y
+represente el mismo acto: cotizar la intención **sin crear pedido**.
+
+### Autoridad y tenant
+
+La misma superficie de cliente del checkout: usuario autenticado más empresa del
+slug. Sin capability interna y sin autoridad por rol. El cupón se busca solo
+dentro de la empresa del slug, y un código que existe en otra empresa se comporta
+como inválido — nunca se revela que existe en otro sitio.
+
+### Request
+
+La misma representación de cesta que el checkout v1, sin inventar una segunda:
+
+```jsonc
+{
+  "items": [ { "product_slug": "cable-usb-c", "quantity": 1 } ],
+  "coupon_code": "ABC"
+}
+```
+
+> **Corrección respecto del borrador del handoff:** los campos son `product_slug`
+> y `quantity`, que es lo que acepta `V1CheckoutItemSerializer`
+> (`v1_checkout_serializers.py:57-58`). No existe un campo `product`.
+
+Mobile envía producto, cantidad e intención de cupón. **No** envía precio,
+subtotal, descuento, total, porcentaje, caducidad ni validez como autoridad. La
+normalización — recorte, mayúsculas, búsqueda, activo, caducado, empresa — sigue
+siendo del servidor: Mobile no pone el código en mayúsculas para decidir si vale.
+
+### Respuesta
+
+Montos autoritativos con la convención decimal existente, reutilizando el payload
+de pricing si ya existe uno:
+
+```jsonc
+{ "coupon_code": "ABC", "subtotal": "0.00", "discount_amount": "0.00", "total": "0.00" }
+```
+
+Los valores son forma, no negocio. Sin `discount_percent`, catálogo de cupones ni
+metadatos cruzados entre empresas, salvo que el dominio Web ya los necesite.
+
+### Errores
+
+Se preservan las negativas que ya existen, con los literales del dominio:
+«Cupón no válido o inactivo.» y «El cupón ha expirado.»
+(`checkout_services.py:302` y `:304`). Mobile muestra el `detail` del servidor y
+no reescribe esa decisión.
+
+> **Divergencia deliberada con la ruta legacy, que conviene no «corregir».**
+> `CouponValidateView` responde **404** al cupón inexistente o inactivo y `400` al
+> caducado (`views.py:162-165`). Por la ruta v1 ambos son **400**, porque
+> `CheckoutError` nace con `status_code: int = 400` (`checkout_services.py:56`) y
+> el checkout v1 devuelve `exc.status_code`. La cotización debe alinearse con v1,
+> no con la vista legacy.
+
+### Efectos colaterales: ninguno
+
+Una cotización deja `0` pedidos, `0` intentos de pago, `0` movimientos de stock,
+`0` mutaciones de carrito server-side y `0` transiciones de ciclo. No reserva
+stock ni acuña sesión de Izipay.
+
+### `quote` no es `commit`
+
+```text
+cliente edita cesta o cupón → quote → la UI muestra los valores del servidor
+→ el cliente confirma → checkout → Backend vuelve a validar y recalcular
+```
+
+Si el cupón caduca o cambia entre una cosa y otra, **manda el checkout**. Mobile
+no fuerza el resultado de la cotización, y la cotización no es autoridad
+persistente.
+
+Al no tener efectos, puede modelarse como consulta remota. Aun así su caché va
+acotada por empresa, usuario e intención, no se persiste catálogo de cupones y
+una cotización vieja nunca se usa como autoridad para comprar.
+
+### Tests backend requeridos
+
+1. cliente autenticado con cupón propio válido → cotización;
+2. el subtotal sale de los precios actuales del backend;
+3. el descuento sale de `price_checkout`;
+4. el total lo decide el backend;
+5. los precios enviados por el cliente no existen o se ignoran;
+6. cupón de otra empresa → el mismo `400` genérico que uno inexistente;
+7. cupón inactivo → `400`;
+8. cupón caducado → `400` con su literal;
+9. la normalización de espacios y mayúsculas es server-side;
+10. usuario sin relación con el slug → lo que el contrato de cliente ya define;
+11. la cotización no crea pedido;
+12. la cotización no crea intento de pago;
+13. la cotización no toca stock;
+14. el checkout posterior vuelve a cotizar y no confía en la cotización previa.
+
+### Qué hace Mobile después
+
+Con H-02 mergeado, la fila pasa a candidata y Mobile puede implementar la vista
+previa del cupón. Pero **H-02 no autoriza por sí sola** cambiar
+`customerPaymentAvailability` a `'available'`: mientras BR-010 siga abierto, la
+UI de checkout de cliente permanece cerrada.
+
+---
+
+## H-06 — Cobertura del `payload_fingerprint` del checkout v1
+
+**Estado:** DEUDA DE GARANTÍA · **Prioridad:** BAJA · **No bloquea Mobile**
+
+No necesita endpoint nuevo. Es cobertura sobre código que ya existe.
+
+### Lo que sí está cubierto hoy
+
+Medido en `backend/store/tests.py` @ `2dca0a3`: el bloque del checkout v1
+(`M5CheckoutBase` más seis clases: auth, autoridad comercial, propiedad,
+idempotencia, no consumo y validación) suma **51 tests**, y el cupón aparece en
+dos: `test_a_coupon_of_another_company_is_refused` (400) y
+`test_a_coupon_of_THIS_company_is_applied_by_the_server`, que comprueba que el
+descuento lo aplica el servidor.
+
+### Lo que falta
+
+`payload_fingerprint` existe en `v1_checkout_views.py:38` y se usa en `:116`,
+pero **no aparece ni una vez en los tests**. Es justo donde el cupón entra en la
+idempotencia, así que la parte no cubierta es la que Mobile ya ejercita desde el
+código. Casos a fijar:
+
+1. `coupon_code` participa en la huella;
+2. dos escrituras equivalentes tras recorte y normalización dan la misma huella;
+3. un cupón realmente distinto da una huella distinta;
+4. misma clave de idempotencia con huella distinta → `409`;
+5. empresas y usuarios distintos no reutilizan la intención entre ámbitos.
+
+El objetivo es probar la semántica que ya existe, no cambiarla desde Mobile.
