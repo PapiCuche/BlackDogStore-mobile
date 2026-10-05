@@ -209,6 +209,16 @@ export type ServiceOrderInput = {
 export const CAP_SERVICE_ORDERS_VIEW = 'service.orders.view';
 export const CAP_SERVICE_ORDERS_CREATE = 'service.orders.create';
 export const CAP_SERVICE_ORDERS_MANAGE = 'service.orders.manage';
+/**
+ * SERVICE-TRACKING. Its own capability, and the gate on revealing a link.
+ *
+ * WHOEVER HOLDS THE LINK CAN ANSWER THE QUOTE AS THE CUSTOMER, so the server
+ * hands it only to somebody who may already record that decision. A person who
+ * can quote but cannot record decisions must not be able to fetch the link and
+ * approve their own quote with it — which is why reading the link is NOT part
+ * of what "may open the order" allows.
+ */
+export const CAP_SERVICE_QUOTE_RECORD_DECISION = 'service.quotes.record_decision';
 export const CAP_SERVICE_DEVICES_VIEW = 'service.devices.view';
 export const CAP_SERVICE_DEVICES_MANAGE = 'service.devices.manage';
 export const CAP_SERVICE_CUSTOMERS_VIEW = 'service.customers.view';
@@ -708,3 +718,66 @@ export type CustomerPaymentSummary = {
   outstanding: string | null;
   status: PaymentStatus;
 };
+
+
+/**
+ * Whether an order's public tracking link is live, and how it is being used —
+ * SERVICE-TRACKING.
+ *
+ * NOT THE LINK ITSELF. Every order has one from reception, and this payload is
+ * what anybody who may open the order can know about it: that it exists, how
+ * many times it was opened, and when. Revealing is a separate, audited act.
+ *
+ * `canReveal` is the SERVER's answer about the caller, not a role read locally.
+ * The app uses it to decide what to draw; the route re-checks regardless.
+ */
+export type ServiceTrackingLink = {
+  active: boolean;
+  viewCount: number;
+  lastViewedAt: string | null;
+  canReveal: boolean;
+};
+
+/**
+ * The link, handed over once so staff can give it to the customer.
+ *
+ * Held in memory and never cached to disk: this is a bearer credential for the
+ * customer view of one repair, and the audit entry deliberately does not store
+ * it either.
+ */
+export type ServiceTrackingReveal = {
+  /** Absolute URL, built by the server from its own `FRONTEND_URL`. */
+  url: string;
+  /** The same destination as a path, for display when the host is noise. */
+  path: string;
+};
+
+/**
+ * How a customer's answer reached the shop, when it reached a PERSON.
+ *
+ * `RepairQuoteDecision.STAFF_CHANNELS` on the server, and deliberately short:
+ * the customer's OWN channels (the app, the tracking link) are not in this
+ * list, because a staff member must not be able to record an answer as if the
+ * customer had given it themselves.
+ */
+export type StaffDecisionChannel = 'in_person' | 'phone' | 'whatsapp' | 'other';
+
+export const STAFF_DECISION_CHANNELS: readonly {
+  value: StaffDecisionChannel;
+  label: string;
+}[] = [
+  { value: 'in_person', label: 'En persona' },
+  { value: 'phone', label: 'Por teléfono' },
+  { value: 'whatsapp', label: 'Por WhatsApp' },
+  { value: 'other', label: 'Otro medio' },
+];
+
+/** What a staff member writes down. The actor comes from the session. */
+export type StaffQuoteDecisionInput = {
+  decision: 'approved' | 'rejected';
+  channel: StaffDecisionChannel;
+  /** Free text; the server collapses whitespace and refuses over 300 chars. */
+  note?: string;
+};
+
+export const STAFF_DECISION_NOTE_MAX_LENGTH = 300;

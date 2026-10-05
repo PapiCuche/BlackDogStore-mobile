@@ -37,8 +37,16 @@ export type InternalModule = {
   key: string;
   title: string;
   description: string;
-  /** The capability the SERVER will demand. Used to decide what to draw. */
-  requires: string;
+  /**
+   * The capability the SERVER will demand. Used to decide what to draw.
+   *
+   * `null` is not "no check": it means the server gates this on being an
+   * active member of the company and nothing more. M12B's inbox is the first
+   * of those — your own notices are not administrative data about other
+   * people, so requiring a permission would let an admin stop somebody
+   * reading their own assignment.
+   */
+  requires: string | null;
   integration: ModuleIntegration;
   /** Only for `ready` modules. */
   route?: string;
@@ -87,6 +95,16 @@ export const INTERNAL_MODULES: readonly InternalModule[] = [
     route: '/internal/service',
   },
   {
+    key: 'notifications',
+    title: 'Avisos',
+    description: 'Asignaciones y comunicados que te tocan.',
+    // M12B. No capability: active membership is the whole requirement, which
+    // is how `InternalNotificationListView` is written.
+    requires: null,
+    integration: 'ready',
+    route: '/internal/notifications',
+  },
+  {
     key: 'settings',
     title: 'Configuración',
     description: 'Datos, sucursales y personal de la empresa.',
@@ -104,5 +122,7 @@ export const INTERNAL_MODULES: readonly InternalModule[] = [
  */
 export function visibleModules(context: InternalContext | null): readonly InternalModule[] {
   if (!context) return [];
-  return INTERNAL_MODULES.filter((module) => hasUxCapability(context, module.requires));
+  return INTERNAL_MODULES.filter(
+    (module) => module.requires === null || hasUxCapability(context, module.requires),
+  );
 }

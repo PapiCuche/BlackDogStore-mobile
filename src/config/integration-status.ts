@@ -49,6 +49,8 @@ export type FeatureKey =
   | 'companyBrand'
   // ── Internal audience ────────────────────────────────────────────────────
   | 'internalSales'
+  | 'internalNotifications'
+
   | 'internalServiceEvidence'
   | 'internalPos'
   | 'internalInventory'
@@ -158,6 +160,12 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
     status: 'TESTED',
     note: 'Integrado con /api/v1/internal/<empresa>/sales/orders/ — listado, detalle y fulfillment. Capabilities resueltas por el servidor en cada petición.',
     source: 'api/endpoints/internal-v1.ts',
+  },
+  internalNotifications: {
+    label: 'Interno · Avisos',
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/internal/<empresa>/notifications/ — bandeja del personal, contador de no leídos y marcado como leído. Sin capability: el servidor sólo exige ser miembro activo, porque los avisos propios no son datos administrativos sobre terceros.',
+    source: 'api/endpoints/internal-notifications-v1.ts',
   },
   internalServiceEvidence: {
     label: 'Interno · Fotos de reparación',

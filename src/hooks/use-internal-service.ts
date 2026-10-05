@@ -15,6 +15,9 @@ import type {
   ServiceOrderInput,
   ServiceQuoteInput,
   ServiceQuoteItemInput,
+  ServiceTrackingLink,
+  ServiceTrackingReveal,
+  StaffQuoteDecisionInput,
 } from '@/domain/internal/service-types';
 import { queryKeys } from '@/providers/query-client';
 import { useQueryScope } from '@/providers/use-query-scope';
@@ -264,6 +267,34 @@ export function useRemoveQuoteItem(orderId: number) {
 export function usePublishQuote(orderId: number) {
   return useServiceMutation<{ quoteId: number }, unknown>(({ quoteId }) =>
     repository().publishQuote(orderId, quoteId),
+  );
+}
+
+/**
+ * Write down the answer the customer gave a person — SERVICE-TRACKING.
+ *
+ * `service.quotes.record_decision`, which the server demands on top of
+ * `service.orders.view`. No retry: an approval starts a repair, and a client
+ * that resent one on a flaky network would be deciding on somebody's behalf.
+ * A 409 means the quote already has an answer, and the screen shows the
+ * server's sentence.
+ */
+export function useRecordQuoteDecision(orderId: number) {
+  return useServiceMutation<
+    { quoteId: number; input: StaffQuoteDecisionInput },
+    unknown
+  >(({ quoteId, input }) => repository().recordQuoteDecision(orderId, quoteId, input));
+}
+
+/**
+ * Void an approval and quote again — `service.diagnostic.manage`.
+ *
+ * The answer is the NEW draft. The approved quote stays `superseded` with its
+ * decision, so what was agreed before remains answerable.
+ */
+export function useReopenQuote(orderId: number) {
+  return useServiceMutation<{ quoteId: number; reason: string }, unknown>(
+    ({ quoteId, reason }) => repository().reopenQuote(orderId, quoteId, reason),
   );
 }
 
@@ -535,6 +566,59 @@ export function useReverseServicePayment(orderId: number) {
   return useServiceMutation<{ paymentId: number; reason?: string }, unknown>(
     ({ paymentId, reason }) =>
       repository().reversePayment(orderId, paymentId, reason ?? ''),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SERVICE-TRACKING — the customer's link to one repair
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether the order's public link is live, and how often it was opened.
+ *
+ * `service.orders.view`, like reading the order itself, so this rides along
+ * with the detail screen. It does NOT carry the link.
+ */
+export function useServiceTrackingLink(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceTrackingLink(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().getTrackingLink(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+/**
+ * Ask the server for the link, to hand it to the customer.
+ *
+ * A MUTATION although it reads: the server audits the act, needs
+ * `service.quotes.record_decision` for it, and answers 409 when the order's
+ * link was revoked. A query would retry it and cache a bearer credential; this
+ * neither retries nor stores the result anywhere but the screen's own state.
+ */
+export function useRevealTrackingLink(orderId: number) {
+  return useServiceMutation<void, ServiceTrackingReveal>(() =>
+    repository().revealTrackingLink(orderId),
+  );
+}
+
+/**
+ * Replace the link, or turn it off. Both take `service.orders.manage` and
+ * neither answers with a link — the status that comes back is the whole reply.
+ */
+export function useRotateTrackingLink(orderId: number) {
+  return useServiceMutation<void, ServiceTrackingLink>(() =>
+    repository().rotateTrackingLink(orderId),
+  );
+}
+
+export function useRevokeTrackingLink(orderId: number) {
+  return useServiceMutation<void, ServiceTrackingLink>(() =>
+    repository().revokeTrackingLink(orderId),
   );
 }
 
