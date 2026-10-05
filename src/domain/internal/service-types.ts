@@ -781,3 +781,57 @@ export type StaffQuoteDecisionInput = {
 };
 
 export const STAFF_DECISION_NOTE_MAX_LENGTH = 300;
+
+
+/**
+ * A device the shop may already know — DEVICE-IDENTITY.
+ *
+ * Asked at the counter BEFORE registering, so a phone that was here in March
+ * is re-used with its history instead of becoming a second row nobody can
+ * join. `repairOrdersCount` and `lastRepairOrder` are what make the answer
+ * useful: "this is the same device, and it was here twice".
+ *
+ * MATCHING IS EXACT AND COMPANY-SCOPED. What another company holds is not
+ * found — not hidden, not partially matched — so a serial cannot be used to
+ * ask whether a competitor ever serviced it.
+ */
+export type ServiceDeviceMatch = ServiceDevice & {
+  repairOrdersCount: number;
+  lastRepairOrder: {
+    id: number;
+    status: string;
+    statusLabel: string;
+    createdAt: string;
+  } | null;
+};
+
+/**
+ * What the server will actually look up.
+ *
+ * It normalises before matching — a serial is upper-cased with spaces
+ * removed, an IMEI keeps only digits — and then IGNORES a value too short to
+ * mean anything: under `SERIAL_MIN` characters, or an IMEI that is not 15
+ * digits. Mirrored here so the app does not fire a request that cannot match,
+ * never to decide validity: saving is where validation belongs, and a lookup
+ * that errored on a half-typed IMEI would help nobody.
+ */
+export const DEVICE_SERIAL_MIN_LENGTH = 4;
+export const DEVICE_IMEI_LENGTH = 15;
+
+export function normaliseDeviceSerial(raw: string): string {
+  return raw.trim().toUpperCase().replace(/\s+/g, '');
+}
+
+export function normaliseDeviceImei(raw: string): string {
+  return raw.replace(/\D/g, '');
+}
+
+/** Whether there is enough typed for the server to match anything. */
+export function isDeviceLookupWorthAsking(input: {
+  serialNumber?: string;
+  imei?: string;
+}): boolean {
+  const serial = normaliseDeviceSerial(input.serialNumber ?? '');
+  const imei = normaliseDeviceImei(input.imei ?? '');
+  return serial.length >= DEVICE_SERIAL_MIN_LENGTH || imei.length === DEVICE_IMEI_LENGTH;
+}

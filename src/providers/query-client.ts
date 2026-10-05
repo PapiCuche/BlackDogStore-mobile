@@ -234,6 +234,23 @@ export const queryKeys = {
     [...internalPrefix(scope), 'service', 'assignment', id] as const,
   internalServiceCustomers: (scope: QueryScope, search: string) =>
     [...internalPrefix(scope), 'service', 'customers', search] as const,
+  // DEVICE-IDENTITY. Keyed by what was typed, because that is the question:
+  // "is THIS serial already ours". Separate from the device LIST, which is a
+  // customer's devices and a different answer.
+  internalServiceDeviceLookup: (
+    scope: QueryScope,
+    query: { serialNumber?: string; imei?: string },
+  ) =>
+    [
+      ...internalPrefix(scope),
+      'service',
+      'device-lookup',
+      query.serialNumber ?? '',
+      query.imei ?? '',
+    ] as const,
+  /** POS-SVC-01 — who may take a repair at one branch, before the order exists. */
+  internalServiceTechnicians: (scope: QueryScope, branchId: number) =>
+    [...internalPrefix(scope), 'service', 'technicians', branchId] as const,
   internalServiceDevices: (
     scope: QueryScope,
     customerId: number | null,
