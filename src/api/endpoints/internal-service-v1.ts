@@ -38,6 +38,7 @@ import type {
   ServiceOrderInput,
   CustomerNotice,
   NotificationDeliveryStatus,
+  ServiceDeviceDetail,
   ServiceDeviceMatch,
   WhatsAppConsent,
   ServiceOrderPage,
@@ -485,6 +486,42 @@ export async function fetchServiceDevices(
     );
   } catch (error) {
     return translate(error, query.customerId !== undefined);
+  }
+}
+
+/**
+ * One device, with every visit it has made — DEVICE-IDENTITY.
+ *
+ * `service.devices.view`, and scoped to the company in the path: another
+ * shop's device is not found. The visit list arrives newest first and this
+ * client does not reorder it.
+ */
+export async function fetchServiceDeviceDetail(
+  deviceId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceDeviceDetail> {
+  try {
+    const raw = await authenticatedRequest<Row>(
+      `${servicePath(requireTenant())}/devices/${encodeURIComponent(String(deviceId))}/`,
+      { scope: 'authenticated-v1', signal },
+      deps,
+    );
+    const visits = Array.isArray(raw?.repair_orders) ? raw.repair_orders : [];
+    return {
+      ...toServiceDeviceMatch(raw),
+      repairOrders: visits.map((entry) => {
+        const visit = (entry ?? {}) as Row;
+        return {
+          id: Number(visit.id),
+          number: str(visit.number),
+          status: str(visit.status),
+          receivedAt: str(visit.received_at),
+        };
+      }),
+    };
+  } catch (error) {
+    return translate(error, true);
   }
 }
 

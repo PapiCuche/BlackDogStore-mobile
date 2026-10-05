@@ -221,9 +221,7 @@ export const CAP_SERVICE_ORDERS_MANAGE = 'service.orders.manage';
  * approve their own quote with it — which is why reading the link is NOT part
  * of what "may open the order" allows.
  */
-export const CAP_SERVICE_QUOTE_RECORD_DECISION = 'service.quotes.record_decision';
-export const CAP_SERVICE_DEVICES_VIEW = 'service.devices.view';
-export const CAP_SERVICE_DEVICES_MANAGE = 'service.devices.manage';
+export const CAP_SERVICE_QUOTE_RECORD_DECISION = 'service.quotes.record_decision';export const CAP_SERVICE_DEVICES_MANAGE = 'service.devices.manage';
 export const CAP_SERVICE_CUSTOMERS_VIEW = 'service.customers.view';
 
 /**
@@ -916,3 +914,24 @@ export type WhatsAppConsent = {
 };
 
 export const CAP_SERVICE_CUSTOMERS_MANAGE = 'service.customers.manage';
+
+
+/**
+ * One device and every time it has been in the shop — DEVICE-IDENTITY.
+ *
+ * The visit list is the whole reason this exists: a technician holding a phone
+ * that was here in March needs to see March, not just a count. Newest first,
+ * as the server orders it.
+ */
+export type ServiceDeviceVisit = {
+  id: number;
+  number: string;
+  status: string;
+  receivedAt: string;
+};
+
+export type ServiceDeviceDetail = ServiceDeviceMatch & {
+  repairOrders: readonly ServiceDeviceVisit[];
+};
+
+export const CAP_SERVICE_DEVICES_VIEW = 'service.devices.view';

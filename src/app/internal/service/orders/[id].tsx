@@ -62,6 +62,7 @@ import {
   useServiceEvidence,
   useServiceEvidenceAuthorization,
   usePublishEvidence,
+  useUpdateEvidenceCaption,
   useRetryWhatsAppNotice,
   useSetWhatsAppConsent,
   useUnlinkCustomerAccount,
@@ -173,6 +174,7 @@ export default function ServiceOrderDetailScreen() {
   const setConsent = useSetWhatsAppConsent();
   const unlinkAccount = useUnlinkCustomerAccount();
   const publishEvidence = usePublishEvidence(orderId);
+  const updateCaption = useUpdateEvidenceCaption(orderId);
   const hideEvidence = useHideEvidence(orderId);
   const voidEvidence = useVoidEvidence(orderId);
 
@@ -738,10 +740,17 @@ export default function ServiceOrderDetailScreen() {
                   )
                 }
                 isBusy={
-                  publishEvidence.isPending || hideEvidence.isPending || voidEvidence.isPending
+                  publishEvidence.isPending || hideEvidence.isPending
+                  || voidEvidence.isPending || updateCaption.isPending
                 }
-                error={publishEvidence.error ?? hideEvidence.error ?? voidEvidence.error}
+                error={
+                  publishEvidence.error ?? hideEvidence.error
+                  ?? voidEvidence.error ?? updateCaption.error
+                }
                 onPublish={(evidenceId) => publishEvidence.mutate({ evidenceId })}
+                onUpdateCaption={(evidenceId, caption) =>
+                  updateCaption.mutate({ evidenceId, caption })
+                }
                 onHide={(evidenceId) => hideEvidence.mutate({ evidenceId })}
                 onVoid={(evidenceId, reason) => voidEvidence.mutate({ evidenceId, reason })}
               />

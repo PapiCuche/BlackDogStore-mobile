@@ -58,3 +58,12 @@ export const EVIDENCE_STAGE_CAPABILITY: Record<RepairEvidenceStage, string> = {
 
 /** The server collapses whitespace and refuses a longer void reason. */
 export const EVIDENCE_VOID_REASON_MAX_LENGTH = 300;
+
+/**
+ * The note is the ONLY thing about a photo that can be edited.
+ *
+ * `InternalEvidenceDetailView.patch` accepts `caption` and nothing else — not
+ * the stage, not the visibility, not the file. Editing a stage would relabel
+ * evidence after the fact; editing visibility is its own audited act.
+ */
+export const EVIDENCE_CAPTION_MAX_LENGTH = 300;

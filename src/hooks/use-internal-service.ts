@@ -770,3 +770,30 @@ export function useUnlinkCustomerAccount() {
     { id: number; hasAccount: boolean }
   >(({ customerId, reason }) => repository().unlinkCustomerAccount(customerId, reason));
 }
+
+/** One device and every visit it has made — `service.devices.view`. */
+export function useServiceDevice(
+  deviceId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceDevice(scope, deviceId ?? -1),
+    queryFn: ({ signal }) => repository().getDevice(deviceId!, signal),
+    enabled: (options.enabled ?? true) && deviceId !== undefined && Number.isFinite(deviceId),
+    retry: false,
+  });
+}
+
+/**
+ * Correct the note on a photo.
+ *
+ * The only editable field of an evidence row, gated by the capability its STAGE
+ * demands. An empty note is a legitimate correction and is sent as such.
+ */
+export function useUpdateEvidenceCaption(orderId: number) {
+  return useServiceMutation<{ evidenceId: number; caption: string }, unknown>(
+    ({ evidenceId, caption }) =>
+      repository().updateEvidenceCaption(orderId, evidenceId, caption),
+  );
+}

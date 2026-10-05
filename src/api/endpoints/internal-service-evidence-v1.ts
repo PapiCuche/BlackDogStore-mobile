@@ -148,6 +148,36 @@ export async function resolveInternalEvidenceAuthorization(deps: Deps): Promise<
   return resolveImageAuthorization(deps);
 }
 
+/**
+ * Correct the note on a photo — the ONLY editable field.
+ *
+ * The server accepts `caption` and nothing else, demands a real string (400
+ * otherwise) and gates the write on the capability the photo's STAGE demands
+ * plus branch access. An empty string clears the note, which is a legitimate
+ * correction, so it is sent as given rather than omitted.
+ */
+export async function updateInternalEvidenceCaption(
+  orderId: number,
+  evidenceId: number,
+  caption: string,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<InternalEvidence> {
+  try {
+    return toInternalEvidence(
+      await authenticatedRequest<unknown>(
+        `${evidencePath(requireTenant(), orderId)}/${encodeURIComponent(
+          String(evidenceId),
+        )}/`,
+        { method: 'PATCH', body: { caption }, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error);
+  }
+}
+
 async function act(
   orderId: number,
   evidenceId: number,

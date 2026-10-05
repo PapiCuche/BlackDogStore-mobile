@@ -50,6 +50,7 @@ import {
   type ServiceOrderQuery,
 } from '@/api/endpoints/internal-service-v1';
 import {
+  updateInternalEvidenceCaption,
   fetchInternalEvidence,
   hideInternalEvidence,
   internalEvidenceContentUrl,
@@ -58,6 +59,7 @@ import {
   voidInternalEvidence,
 } from '@/api/endpoints/internal-service-evidence-v1';
 import {
+  fetchServiceDeviceDetail,
   fetchServiceTechnicianCandidates,
   lookupServiceDevices,
 } from '@/api/endpoints/internal-service-v1';
@@ -545,6 +547,22 @@ export class V1InternalServiceRepository {
   /** `service.customers.manage`. The way out of a wrong account link. */
   async unlinkCustomerAccount(customerId: number, reason: string, signal?: AbortSignal) {
     return postCustomerAccountUnlink(customerId, reason, this.deps, signal);
+  }
+
+
+  /** One device and every visit it has made. `service.devices.view`. */
+  async getDevice(deviceId: number, signal?: AbortSignal) {
+    return fetchServiceDeviceDetail(deviceId, this.deps, signal);
+  }
+
+  /** The note is the only editable field of a photo. */
+  async updateEvidenceCaption(
+    orderId: number,
+    evidenceId: number,
+    caption: string,
+    signal?: AbortSignal,
+  ) {
+    return updateInternalEvidenceCaption(orderId, evidenceId, caption, this.deps, signal);
   }
 
 }
