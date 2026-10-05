@@ -53,6 +53,7 @@ export type FeatureKey =
 
   | 'internalCommunications'
   | 'internalMessaging'
+  | 'platformAnnouncements'
   | 'internalServiceEvidence'
   | 'internalPos'
   | 'internalInventory'
@@ -174,6 +175,12 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
     status: 'TESTED',
     note: 'Integrado con /api/v1/internal/<empresa>/messaging/whatsapp/ — lectura con settings.view y cambios con settings.manage sobre la lista cerrada que el servidor acepta (activación, código de país, idioma y plantillas). Las credenciales del proveedor llegan como booleanos y las fija quien administra la instalación.',
     source: 'api/endpoints/internal-messaging-v1.ts',
+  },
+  platformAnnouncements: {
+    label: 'Plataforma · Comunicados',
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/platform/announcements/ — listado, detalle y cifras de los comunicados que cruzan empresas. La autoridad es la CUENTA (is_superuser), nunca un rol de empresa, y quien no lo es recibe 404. Redactar y publicar sigue en la consola web: publicar escribe un aviso por destinatario en cada empresa alcanzada.',
+    source: 'api/endpoints/platform-announcements-v1.ts',
   },
   internalCommunications: {
     label: 'Interno · Comunicados',

@@ -155,6 +155,24 @@ export const queryKeys = {
   // ── tenant + user private, INTERNAL audience ─────────────────────────────
   internalContext: (scope: QueryScope) => [...internalPrefix(scope), 'context'] as const,
   /** WHATSAPP-NOTIFY. One per tenant: it is the company's setup, not a person's. */
+  // M12C, platform master. Cross-company data, so it is NOT the tenant's — but
+  // it stays inside the private namespace, and under the tenant prefix, so that
+  // signing out or switching company evicts it like everything else personal.
+  platformAnnouncements: (
+    scope: QueryScope,
+    params: { status?: string; page?: number } = {},
+  ) =>
+    [
+      ...internalPrefix(scope),
+      'platform',
+      'announcements',
+      params.status ?? 'all',
+      params.page ?? 1,
+    ] as const,
+  platformAnnouncement: (scope: QueryScope, id: number) =>
+    [...internalPrefix(scope), 'platform', 'announcement', id] as const,
+  platformAnnouncementStats: (scope: QueryScope, id: number) =>
+    [...internalPrefix(scope), 'platform', 'announcement', id, 'stats'] as const,
   internalMessagingSettings: (scope: QueryScope) =>
     [...internalPrefix(scope), 'messaging', 'whatsapp'] as const,
   // M12B — the STAFF inbox, under the internal prefix. The customer inbox has

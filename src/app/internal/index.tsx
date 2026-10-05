@@ -105,6 +105,24 @@ export default function InternalHomeScreen() {
               board and every customer-facing card already work. An "Abrir"
               button inside a card the finger is already on adds a second thing
               to aim at and makes the small one the only one that works. */}
+          {/* M12C. Only for the platform ACCOUNT, which the server resolves —
+              `context.isPlatformMaster` comes from it, not from a role name. */}
+          {context.isPlatformMaster ? (
+            <Card
+              variant="outlined"
+              onPress={() => router.push('/internal/platform/announcements')}
+              accessibilityLabel="Comunicados de plataforma"
+              accessibilityHint="Mensajes que cruzan empresas"
+            >
+              <View style={{ gap: theme.spacing.xs }}>
+                <Text variant="headline">Comunicados de plataforma</Text>
+                <Text variant="subhead" color="textSecondary">
+                  Mensajes que cruzan empresas, y cuántos los leyeron.
+                </Text>
+              </View>
+            </Card>
+          ) : null}
+
           {ready.map((module) => (
             <Card
               key={module.key}
