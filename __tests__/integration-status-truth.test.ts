@@ -166,11 +166,15 @@ describe('behavioural — the table matches what the composition root builds', (
   });
 
   /** The features whose data source the composition root actually decides. */
-  const REPOSITORY_BACKED: readonly [FeatureKey, 'catalog' | 'orders' | 'repairs' | 'company'][] = [
+  const REPOSITORY_BACKED: readonly [
+    FeatureKey,
+    'catalog' | 'orders' | 'repairs' | 'company' | 'notifications',
+  ][] = [
     ['catalog', 'catalog'],
     ['orders', 'orders'],
     ['repairs', 'repairs'],
     ['companyBrand', 'company'],
+    ['customerNotifications', 'notifications'],
   ];
 
   it('builds a real repository for every feature it calls integrated', () => {

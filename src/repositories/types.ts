@@ -1,4 +1,5 @@
 import type { CompanyBrand } from '@/domain/company/types';
+import type { AppNotification, NotificationPage } from '@/domain/notifications/types';
 import type { Order } from '@/domain/orders/types';
 import type { Category, Product } from '@/domain/products/types';
 import type { QuoteDecision, RepairQuote } from '@/domain/repairs/quote';
@@ -51,6 +52,27 @@ export type RepairRepository = {
 export type OrderRepository = {
   listOrders(signal?: AbortSignal): Promise<Order[]>;
   getOrderById(id: number, signal?: AbortSignal): Promise<Order | null>;
+};
+
+/**
+ * The customer's own inbox (M12B).
+ *
+ * `listNotifications` takes the server's own paging vocabulary rather than an
+ * offset the client invents, and `getUnreadCount` is separate because the
+ * badge must count the whole inbox, not the page in hand.
+ *
+ * `markRead` answers with the notice as it now stands: the server is the one
+ * that decides when it was read, and a client timestamp would disagree with
+ * the next refetch.
+ */
+export type NotificationRepository = {
+  listNotifications(
+    params: { page?: number; pageSize?: number; unreadOnly?: boolean },
+    signal?: AbortSignal,
+  ): Promise<NotificationPage>;
+  getUnreadCount(signal?: AbortSignal): Promise<number>;
+  markRead(id: number, signal?: AbortSignal): Promise<AppNotification>;
+  markAllRead(signal?: AbortSignal): Promise<number>;
 };
 
 export type CompanyRepository = {

@@ -119,6 +119,23 @@ export const queryKeys = {
   repairPaymentSummary: (scope: QueryScope, repairId: number) =>
     [...customerPrefix(scope), 'repair', repairId, 'payment-summary'] as const,
   orders: (scope: QueryScope) => [...customerPrefix(scope), 'orders'] as const,
+  // M12B — the inbox. The PAGE and the BADGE are separate keys because they
+  // answer different questions: one is twenty rows, the other is the whole
+  // unread count, and a screen that derived the badge from the page would
+  // report twenty for an inbox of two hundred. Reading one notice invalidates
+  // the root, so both move together.
+  notifications: (scope: QueryScope, params: { unreadOnly?: boolean; page?: number } = {}) =>
+    [
+      ...customerPrefix(scope),
+      'notifications',
+      params.unreadOnly ? 'unread' : 'all',
+      params.page ?? 1,
+    ] as const,
+  notificationsUnread: (scope: QueryScope) =>
+    [...customerPrefix(scope), 'notifications-unread'] as const,
+  /** The inbox and its badge, for invalidation after a read. */
+  notificationsRoot: (scope: QueryScope) =>
+    [...customerPrefix(scope), 'notifications'] as const,
   order: (scope: QueryScope, id: number) => [...customerPrefix(scope), 'order', id] as const,
 
   // ── tenant + user private, INTERNAL audience ─────────────────────────────
