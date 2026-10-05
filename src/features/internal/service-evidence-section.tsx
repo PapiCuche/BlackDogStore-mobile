@@ -5,7 +5,10 @@ import { ScrollView, View } from 'react-native';
 import { serviceErrorMessage } from '@/api/endpoints/internal-service-v1';
 import { Button, Divider, Input, StatusBadge, Text } from '@/design-system';
 import type { InternalEvidence } from '@/domain/internal/evidence-types';
-import { EVIDENCE_VOID_REASON_MAX_LENGTH } from '@/domain/internal/evidence-types';
+import {
+  EVIDENCE_CAPTION_MAX_LENGTH,
+  EVIDENCE_VOID_REASON_MAX_LENGTH,
+} from '@/domain/internal/evidence-types';
 import { describeEvidenceStage } from '@/domain/repairs/evidence';
 import { useTheme } from '@/theme/theme-provider';
 import { formatDate } from '@/utils/format';
@@ -40,6 +43,8 @@ export type ServiceEvidenceSectionProps = {
   isBusy: boolean;
   error: unknown;
   onPublish: (evidenceId: number) => void;
+  /** The note is the only editable field of a photo. */
+  onUpdateCaption: (evidenceId: number, caption: string) => void;
   onHide: (evidenceId: number) => void;
   onVoid: (evidenceId: number, reason: string) => void;
 };
@@ -54,12 +59,15 @@ export function ServiceEvidenceSection({
   isBusy,
   error,
   onPublish,
+  onUpdateCaption,
   onHide,
   onVoid,
 }: ServiceEvidenceSectionProps) {
   const theme = useTheme();
   const [openId, setOpenId] = useState<number | null>(null);
   const [voidingId, setVoidingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [caption, setCaption] = useState('');
   const [voidReason, setVoidReason] = useState('');
 
   const open = evidence.find((item) => item.id === openId) ?? null;
@@ -155,6 +163,47 @@ export function ServiceEvidenceSection({
               the SAME answer the server will give for this photo. */}
           {!open.voidedAt && canActOnStage(open) ? (
             <View style={{ gap: theme.spacing.xs }}>
+              {/* The NOTE, and only the note. Editing a stage would relabel
+                  evidence after the fact, and visibility is its own audited
+                  act — the server accepts `caption` and nothing else. */}
+              {editingId === open.id ? (
+                <View style={{ gap: theme.spacing.xs }}>
+                  <Input
+                    label="Nota de la foto"
+                    value={caption}
+                    onChangeText={setCaption}
+                    maxLength={EVIDENCE_CAPTION_MAX_LENGTH}
+                    multiline
+                    hint="Vacío borra la nota."
+                  />
+                  <Button
+                    label="Guardar la nota"
+                    size="compact"
+                    loading={isBusy}
+                    onPress={() => {
+                      setEditingId(null);
+                      onUpdateCaption(open.id, caption);
+                    }}
+                  />
+                  <Button
+                    label="Cancelar"
+                    variant="ghost"
+                    size="compact"
+                    onPress={() => setEditingId(null)}
+                  />
+                </View>
+              ) : (
+                <Button
+                  label={open.caption ? 'Corregir la nota' : 'Añadir una nota'}
+                  variant="ghost"
+                  size="compact"
+                  onPress={() => {
+                    setCaption(open.caption);
+                    setEditingId(open.id);
+                  }}
+                />
+              )}
+
               {open.visibility === 'customer' ? (
                 <Button
                   label="Dejar de compartirla"

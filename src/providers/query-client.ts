@@ -280,6 +280,9 @@ export const queryKeys = {
   // DEVICE-IDENTITY. Keyed by what was typed, because that is the question:
   // "is THIS serial already ours". Separate from the device LIST, which is a
   // customer's devices and a different answer.
+  /** One device with its visit history. Keyed by device, not by order. */
+  internalServiceDevice: (scope: QueryScope, deviceId: number) =>
+    [...internalPrefix(scope), 'service', 'device', deviceId] as const,
   internalServiceDeviceLookup: (
     scope: QueryScope,
     query: { serialNumber?: string; imei?: string },
