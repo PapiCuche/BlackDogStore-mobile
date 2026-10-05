@@ -28,6 +28,7 @@ import {
   CAP_SERVICE_QUALITY_MANAGE,
   CAP_SERVICE_REPAIR_MANAGE,
   CAP_SERVICE_ORDERS_MANAGE,
+  CAP_SERVICE_CUSTOMERS_MANAGE,
   CAP_SERVICE_QUOTE_RECORD_DECISION,
   CAP_SERVICE_ORDERS_VIEW,
 } from '@/domain/internal/service-types';
@@ -41,6 +42,7 @@ import { ServiceExecutionSection } from '@/features/internal/service-execution-s
 import { ServicePartsSection } from '@/features/internal/service-parts-section';
 import { ServiceQualitySection } from '@/features/internal/service-quality-section';
 import { ServiceEvidenceSection } from '@/features/internal/service-evidence-section';
+import { ServiceCustomerAdminSection } from '@/features/internal/service-customer-admin-section';
 import { ServiceNoticesSection } from '@/features/internal/service-notices-section';
 import { EVIDENCE_STAGE_CAPABILITY } from '@/domain/internal/evidence-types';
 import { internalEvidenceContentUrl } from '@/api/endpoints/internal-service-evidence-v1';
@@ -61,6 +63,8 @@ import {
   useServiceEvidenceAuthorization,
   usePublishEvidence,
   useRetryWhatsAppNotice,
+  useSetWhatsAppConsent,
+  useUnlinkCustomerAccount,
   useHideEvidence,
   useVoidEvidence,
   useServiceOrder,
@@ -159,6 +163,15 @@ export default function ServiceOrderDetailScreen() {
   // WHATSAPP-NOTIFY. Resending takes `service.orders.manage`, which `mayManage`
   // already carries; the server re-checks and scopes the notice to this order.
   const retryNotice = useRetryWhatsAppNotice(orderId);
+  // WHATSAPP-NOTIFY + the account link: two acts on the customer RECORD, both
+  // behind `service.customers.manage`. Neither has a readable state in v1, so
+  // what the last write answered is held here and shown as exactly that.
+  const mayManageCustomers = hasUxCapability(
+    context ?? null,
+    CAP_SERVICE_CUSTOMERS_MANAGE,
+  );
+  const setConsent = useSetWhatsAppConsent();
+  const unlinkAccount = useUnlinkCustomerAccount();
   const publishEvidence = usePublishEvidence(orderId);
   const hideEvidence = useHideEvidence(orderId);
   const voidEvidence = useVoidEvidence(orderId);
@@ -676,6 +689,28 @@ export default function ServiceOrderDetailScreen() {
               customer told?" is the question somebody asks right after moving
               an order, and before looking at evidence. The statuses were
               already in the order payload and the app simply never read them. */}
+          {mayManageCustomers ? (
+            <View>
+              <SectionHeader title="Ficha del cliente" />
+              <Card variant="outlined">
+                <ServiceCustomerAdminSection
+                  customerName={order.customerName}
+                  mayManage={mayManageCustomers}
+                  consent={setConsent.data ?? null}
+                  unlinked={unlinkAccount.data ?? null}
+                  isBusy={setConsent.isPending || unlinkAccount.isPending}
+                  error={setConsent.error ?? unlinkAccount.error}
+                  onRecordConsent={(optIn) =>
+                    setConsent.mutate({ customerId: order.customer, optIn })
+                  }
+                  onUnlinkAccount={(reason) =>
+                    unlinkAccount.mutate({ customerId: order.customer, reason })
+                  }
+                />
+              </Card>
+            </View>
+          ) : null}
+
           <View>
             <SectionHeader title="Avisos al cliente" />
             <Card variant="outlined">

@@ -638,6 +638,45 @@ export async function postWhatsAppConsent(
   }
 }
 
+/**
+ * Undo a wrong link between a customer record and an account.
+ *
+ * `service.customers.manage`. The way out of a mistake: without it the real
+ * customer is told "this already belongs to another account" and nobody can
+ * fix it. The answer is minimal on purpose — the record's id and whether it
+ * still has an account — because nothing else about the account is the
+ * counter's business.
+ */
+export async function postCustomerAccountUnlink(
+  customerId: number,
+  reason: string,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<{ id: number; hasAccount: boolean }> {
+  const body: Record<string, unknown> = {};
+  if (reason.trim()) body.reason = reason.trim();
+
+  try {
+    const raw = await authenticatedRequest<unknown>(
+      `${servicePath(requireTenant())}/customers/${encodeURIComponent(
+        String(customerId),
+      )}/unlink-account/`,
+      { method: 'POST', body, scope: 'authenticated-v1', signal },
+      deps,
+    );
+    const row = (raw ?? {}) as Row;
+    return {
+      id: Number(row.id),
+      // Absent reads as STILL LINKED: claiming the link is gone when the
+      // server did not say so would send somebody to re-link an account that
+      // is already attached.
+      hasAccount: row.has_account !== false,
+    };
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
 export async function postServiceDevice(
   input: ServiceDeviceInput,
   deps: Deps,

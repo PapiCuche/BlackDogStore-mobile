@@ -39,6 +39,7 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | BR-008 | Seguimiento seguro para el cliente (deep link) | ALTA |
 | BR-009 | Superficie v1 para **recuentos físicos de inventario** | **ALTA** — dominio y Web existen; sin adapter v1 Mobile no puede integrarlo |
 | BR-010 | Sesión de pago para el **SDK nativo de Izipay** (H-PAY-01) | **BLOQUEANTE** — sin él Mobile no puede cobrar; mientras tanto la app no envía el checkout |
+| BR-011 | Estado del consentimiento de WhatsApp **legible** en v1 | BAJA — hoy el consentimiento se escribe a ciegas: no hay payload que lo exponga |
 | H-02 | Cotización v1 del cupón **antes** de crear el pedido | MEDIA — sin ella Mobile no puede enseñar un descuento sin inventarlo; no reabre el checkout por sí sola |
 | H-06 | Cobertura de tests del `payload_fingerprint` del checkout v1 | BAJA — deuda de garantía sobre código que ya existe; no bloquea Mobile |
 
@@ -1416,3 +1417,76 @@ código. Casos a fijar:
 5. empresas y usuarios distintos no reutilizan la intención entre ámbitos.
 
 El objetivo es probar la semántica que ya existe, no cambiarla desde Mobile.
+
+---
+
+## BR-011 — Exponer el consentimiento de WhatsApp en una lectura v1
+
+**Estado:** PROPUESTA · **Prioridad:** BAJA · **Verificado en:** `origin/master` `aec829c`
+
+### Operación Mobile a medias
+
+Anotar en el mostrador si el cliente acepta avisos por WhatsApp. La escritura
+existe y está integrada:
+
+```text
+POST /api/v1/internal/<empresa>/service/customers/<id>/whatsapp-consent/
+     { "opt_in": true | false }   → service.customers.manage
+```
+
+Lo que falta es **leerlo**. Ninguna respuesta v1 expone `whatsapp_opt_in`:
+`V1ServiceCustomerSerializer` es deliberadamente mínimo (`id`, `display_name`,
+`document_number`, `phone`) y el detalle de la orden no lo incluye. El
+`consent_payload` sólo viaja como respuesta del POST, es decir, después de
+haber escrito.
+
+### Por qué importa
+
+Un interruptor dibujado sobre un estado desconocido invita a cambiarlo a ciegas,
+y el valor que se pierde no es un detalle de UI: es permiso para escribirle a
+alguien al teléfono. Mobile por tanto **no** dibuja un interruptor. Ofrece dos
+actos explícitos —«Aceptó recibir avisos» y «Ya no quiere avisos»— y muestra
+únicamente lo que acaba de escribir. Es honesto, y es peor de lo necesario:
+quien atiende no puede ver si ya había respuesta antes de preguntar otra vez.
+
+### Contrato mínimo requerido
+
+Añadir el estado a una lectura que ya existe, sin ruta nueva. Cualquiera de las
+dos sirve:
+
+```jsonc
+// GET .../service/customers/?search=…  (o el detalle del cliente)
+{ "whatsapp_opt_in": true,
+  "whatsapp_opt_in_at": "2026-10-04T15:10:00Z",
+  "whatsapp_opt_in_source": "counter",
+  "whatsapp_opt_out_at": null }
+```
+
+o los mismos cuatro campos dentro del detalle de la orden de servicio, junto al
+cliente, que es donde el mostrador ya los necesita.
+
+### Autoridad
+
+La misma que ya gobierna el acto de escribir: `service.customers.manage` para
+cambiarlo. Para **leerlo** basta `service.customers.view`, que es la capability
+con la que ya se elige un cliente en la recepción — saber si se le puede
+escribir es parte de atenderlo, no autoridad administrativa.
+
+### Qué NO debe incluir
+
+El número de teléfono sin enmascarar, el historial completo de consentimientos,
+ni quién lo registró. El mostrador necesita la respuesta y su fecha; lo demás es
+auditoría y ya está en el registro del servidor.
+
+### Tests backend requeridos
+
+1. el campo aparece en la lectura para `service.customers.view`;
+2. sin esa capability la lectura sigue respondiendo lo que ya respondía;
+3. un cliente de otra empresa no aparece ni con el campo ni sin él;
+4. el valor leído coincide con `whatsapp_services.has_consent`;
+5. una ficha sin respuesta registrada se lee como `false`, no como ausente.
+
+### Trabajo Mobile que desbloquea
+
+Sustituir los dos actos explícitos por un estado visible con su fecha, y avisar
+antes de reenviar un aviso a alguien que se dio de baja.

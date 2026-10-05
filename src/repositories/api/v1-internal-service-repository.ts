@@ -62,6 +62,7 @@ import {
   lookupServiceDevices,
 } from '@/api/endpoints/internal-service-v1';
 import {
+  postCustomerAccountUnlink,
   postWhatsAppConsent,
   retryWhatsAppNotice,
 } from '@/api/endpoints/internal-service-v1';
@@ -538,6 +539,12 @@ export class V1InternalServiceRepository {
 
   async setWhatsAppConsent(customerId: number, optIn: boolean, signal?: AbortSignal) {
     return postWhatsAppConsent(customerId, optIn, this.deps, signal);
+  }
+
+
+  /** `service.customers.manage`. The way out of a wrong account link. */
+  async unlinkCustomerAccount(customerId: number, reason: string, signal?: AbortSignal) {
+    return postCustomerAccountUnlink(customerId, reason, this.deps, signal);
   }
 
 }
