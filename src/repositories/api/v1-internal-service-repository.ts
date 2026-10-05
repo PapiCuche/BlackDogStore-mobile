@@ -61,6 +61,10 @@ import {
   fetchServiceTechnicianCandidates,
   lookupServiceDevices,
 } from '@/api/endpoints/internal-service-v1';
+import {
+  postWhatsAppConsent,
+  retryWhatsAppNotice,
+} from '@/api/endpoints/internal-service-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type { StaffQuoteDecisionInput } from '@/domain/internal/service-types';
 import type {
@@ -522,6 +526,18 @@ export class V1InternalServiceRepository {
 
   async listTechnicianCandidates(branchId: number, signal?: AbortSignal) {
     return fetchServiceTechnicianCandidates(branchId, this.deps, signal);
+  }
+
+
+  // WHATSAPP-NOTIFY. Resend one failed notice, and record the consent that
+  // makes messaging allowed in the first place. Two capabilities:
+  // `service.orders.manage` and `service.customers.manage`.
+  async retryWhatsAppNotice(orderId: number, noticeId: number, signal?: AbortSignal) {
+    return retryWhatsAppNotice(orderId, noticeId, this.deps, signal);
+  }
+
+  async setWhatsAppConsent(customerId: number, optIn: boolean, signal?: AbortSignal) {
+    return postWhatsAppConsent(customerId, optIn, this.deps, signal);
   }
 
 }

@@ -725,3 +725,33 @@ export function useServiceTechnicianCandidates(
     retry: false,
   });
 }
+
+// ---------------------------------------------------------------------------
+// WHATSAPP-NOTIFY — what the customer was told, and whether we may tell them
+// ---------------------------------------------------------------------------
+
+/**
+ * Send one failed WhatsApp notice again.
+ *
+ * NOT RETRIED AUTOMATICALLY, which is the point: a message to somebody's phone
+ * is sent because a person decided to send it. The server scopes the notice to
+ * this order and this company, and answers with the notice as it now stands.
+ */
+export function useRetryWhatsAppNotice(orderId: number) {
+  return useServiceMutation<{ noticeId: number }, unknown>(({ noticeId }) =>
+    repository().retryWhatsAppNotice(orderId, noticeId),
+  );
+}
+
+/**
+ * Record whether the customer agreed to be messaged.
+ *
+ * `service.customers.manage`. A phone number on file is not consent, so this
+ * is a deliberate act with a date and an author — and withdrawing it is the
+ * same act with the other answer.
+ */
+export function useSetWhatsAppConsent() {
+  return useServiceMutation<{ customerId: number; optIn: boolean }, unknown>(
+    ({ customerId, optIn }) => repository().setWhatsAppConsent(customerId, optIn),
+  );
+}
