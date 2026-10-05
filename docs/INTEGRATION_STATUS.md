@@ -34,6 +34,10 @@ archivo discrepan, **el archivo tiene razón**.
 | Detalle de reparación | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Avisos del cliente (bandeja) | **IMPLEMENTADO** | **API_READY** (`/api/v1/customer/<slug>/notifications/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Avisos del personal (bandeja interna) | **IMPLEMENTADO** | **API_READY** (`/api/v1/internal/<slug>/notifications/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Interno · Fotos de reparación | **IMPLEMENTADO** | **API_READY** (`/api/v1/internal/<slug>/service/orders/<id>/evidence/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Interno · Comunicados (lectura) | **IMPLEMENTADO** | **API_READY** (`/api/v1/internal/<slug>/communications/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Interno · Enlace de seguimiento | **IMPLEMENTADO** | **API_READY** (`.../service/orders/<id>/tracking-link/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Interno · Decisión de cotización | **IMPLEMENTADO** | **API_READY** (`.../quotes/<id>/decision/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Autenticación (login) | IMPLEMENTADO | **API_READY** (`/api/v1/auth/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Refresh con rotación | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Logout | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |

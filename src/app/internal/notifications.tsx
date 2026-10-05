@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, View } from 'react-native';
 
@@ -36,10 +36,12 @@ import { useTheme } from '@/theme/theme-provider';
  * server gates it that way: an active membership is the whole requirement, and
  * your own notices are not administrative data about other people.
  *
- * Tapping marks read and nothing else. A notification carries
- * `target_type`/`target_id`, never a URL, and routing on it would mean this
- * screen deciding that a stale notice still opens an order the server may now
- * refuse.
+ * Tapping marks read. It also NAVIGATES, but only for the one target this app
+ * has a screen for: `announcement`, whose route re-checks that the message was
+ * addressed to this person in this company and answers 404 otherwise. Every
+ * other `target_type` still only marks read — a notification carries structured
+ * coordinates, never a URL, and opening a destination that cannot re-ask the
+ * server would be this screen deciding that a stale notice still grants access.
  */
 export default function InternalNotificationsScreen() {
   const theme = useTheme();
@@ -144,7 +146,12 @@ export default function InternalNotificationsScreen() {
           renderItem={({ item }) => (
             <NotificationCard
               notification={item}
-              onPress={item.readAt === null ? () => markRead.mutate(item.id) : undefined}
+              onPress={() => {
+                if (item.readAt === null) markRead.mutate(item.id);
+                if (item.targetType === 'announcement' && item.targetId !== null) {
+                  router.push(`/internal/announcements/${item.targetId}`);
+                }
+              }}
             />
           )}
           ItemSeparatorComponent={() => <View style={{ height: theme.spacing.sm }} />}

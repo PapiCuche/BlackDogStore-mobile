@@ -172,6 +172,28 @@ export const queryKeys = {
     [...internalPrefix(scope), 'notifications-unread'] as const,
   internalNotificationsRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'notifications'] as const,
+  // M12C — communiqués. The SENDER's list and ONE message a recipient opens are
+  // separate keys because they are separate questions with separate gates: the
+  // list needs `communications.manage`, and reading what was sent to you needs
+  // nothing. Sharing a slot would let the manager's view of a message decide
+  // what a recipient sees.
+  internalAnnouncements: (
+    scope: QueryScope,
+    params: { status?: string; page?: number } = {},
+  ) =>
+    [
+      ...internalPrefix(scope),
+      'communications',
+      params.status ?? 'all',
+      params.page ?? 1,
+    ] as const,
+  internalAnnouncement: (scope: QueryScope, id: number) =>
+    [...internalPrefix(scope), 'communications', 'detail', id] as const,
+  internalAnnouncementStats: (scope: QueryScope, id: number) =>
+    [...internalPrefix(scope), 'communications', 'stats', id] as const,
+  /** What was sent to ME. No capability, so never under the manager's key. */
+  internalAddressedAnnouncement: (scope: QueryScope, id: number) =>
+    [...internalPrefix(scope), 'announcement', id] as const,
   internalOrders: (scope: QueryScope, params: Record<string, unknown> = {}) =>
     [...internalPrefix(scope), 'orders', JSON.stringify(params)] as const,
   internalOrder: (scope: QueryScope, id: number) =>
