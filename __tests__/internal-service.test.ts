@@ -346,9 +346,11 @@ describe('capabilities decide what is DRAWN, never what is allowed', () => {
   it('shows the service module to somebody who holds service.orders.view', () => {
     const modules = visibleModules(context([CAP_SERVICE_ORDERS_VIEW]));
 
-    expect(modules.map((m) => m.key)).toEqual(['service']);
-    expect(modules[0]!.integration).toBe('ready');
-    expect(modules[0]!.route).toBe('/internal/service');
+    // Plus the inbox, which M12B gates on membership rather than a capability.
+    expect(modules.map((m) => m.key)).toEqual(['service', 'notifications']);
+    const service = modules.find((m) => m.key === 'service')!;
+    expect(service.integration).toBe('ready');
+    expect(service.route).toBe('/internal/service');
   });
 
   it('separates reading the board from receiving a device', () => {
@@ -370,9 +372,10 @@ describe('capabilities decide what is DRAWN, never what is allowed', () => {
   });
 
   it('does not draw the module for a coarse role', () => {
-    // `role` has never been authority. An empty capability list draws nothing,
-    // whatever the membership calls the person.
-    expect(visibleModules(context([]))).toEqual([]);
+    // `role` has never been authority. An empty capability list draws nothing
+    // that a capability gates, whatever the membership calls the person — the
+    // inbox is the one module the server itself does not gate.
+    expect(visibleModules(context([])).map((m) => m.key)).toEqual(['notifications']);
   });
 });
 

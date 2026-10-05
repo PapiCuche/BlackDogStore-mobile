@@ -154,6 +154,24 @@ export const queryKeys = {
 
   // ── tenant + user private, INTERNAL audience ─────────────────────────────
   internalContext: (scope: QueryScope) => [...internalPrefix(scope), 'context'] as const,
+  // M12B — the STAFF inbox, under the internal prefix. The customer inbox has
+  // its own keys under the customer prefix: the two audiences must never share
+  // a cache slot, and the dangerous direction is a colleague's notice landing
+  // in a customer screen.
+  internalNotifications: (
+    scope: QueryScope,
+    params: { unreadOnly?: boolean; page?: number } = {},
+  ) =>
+    [
+      ...internalPrefix(scope),
+      'notifications',
+      params.unreadOnly ? 'unread' : 'all',
+      params.page ?? 1,
+    ] as const,
+  internalNotificationsUnread: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'notifications-unread'] as const,
+  internalNotificationsRoot: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'notifications'] as const,
   internalOrders: (scope: QueryScope, params: Record<string, unknown> = {}) =>
     [...internalPrefix(scope), 'orders', JSON.stringify(params)] as const,
   internalOrder: (scope: QueryScope, id: number) =>
