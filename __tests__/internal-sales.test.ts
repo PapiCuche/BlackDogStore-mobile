@@ -210,12 +210,18 @@ describe('the module registry decides what to DRAW', () => {
   it('shows sales orders with the view capability', () => {
     const modules = visibleModules(context([CAP_SALES_ORDERS_VIEW]));
 
-    expect(modules.map((m) => m.key)).toEqual(['sales-orders']);
-    expect(modules[0]!.integration).toBe('ready');
+    expect(modules.map((m) => m.key)).toContain('sales-orders');
+    expect(modules.find((m) => m.key === 'sales-orders')!.integration).toBe('ready');
   });
 
-  it('shows NOTHING to a context with no capabilities', () => {
-    expect(visibleModules(context([]))).toEqual([]);
+  it('shows no CAPABILITY-GATED module to a context with no capabilities', () => {
+    // M12B added the first module the server does not gate on a permission:
+    // the staff inbox, which needs an active membership and nothing else.
+    // Everything that names a capability still disappears without it.
+    const modules = visibleModules(context([]));
+
+    expect(modules.map((m) => m.key)).toEqual(['notifications']);
+    expect(modules.every((m) => m.requires === null)).toBe(true);
   });
 
   it('shows nothing for a null context', () => {
@@ -236,7 +242,8 @@ describe('the module registry decides what to DRAW', () => {
     // than drawing a tile that led nowhere. M7A built the screen.
     const modules = visibleModules(context(['inventory.view']));
 
-    expect(modules.map((m) => m.key)).toEqual(['inventory']);
+    // Plus the inbox, which no capability gates — see the test above.
+    expect(modules.map((m) => m.key)).toEqual(['inventory', 'notifications']);
     expect(modules[0]!.integration).toBe('ready');
     expect(modules[0]!.route).toBe('/internal/inventory');
   });
@@ -245,8 +252,8 @@ describe('the module registry decides what to DRAW', () => {
     // The rule outlives the example. Customers is the current one.
     const modules = visibleModules(context(['service.customers.view']));
 
-    expect(modules.map((m) => m.key)).toEqual(['customers']);
-    expect(modules[0]!.integration).toBe('pending-mobile');
+    expect(modules.map((m) => m.key)).toEqual(['customers', 'notifications']);
+    expect(modules.find((m) => m.key === 'customers')!.integration).toBe('pending-mobile');
     expect(modules[0]!.route).toBeUndefined();
   });
 

@@ -472,9 +472,12 @@ describe('capabilities decide what is DRAWN, never what is allowed', () => {
   it('shows the inventory module to someone who holds inventory.view', () => {
     const modules = visibleModules(context([CAP_INVENTORY_VIEW]));
 
-    expect(modules.map((m) => m.key)).toEqual(['inventory']);
-    expect(modules[0]!.integration).toBe('ready');
-    expect(modules[0]!.route).toBe('/internal/inventory');
+    // The inbox rides along: M12B's staff notices need an active membership
+    // and no capability, so it is visible to every member.
+    expect(modules.map((m) => m.key)).toEqual(['inventory', 'notifications']);
+    const inventory = modules.find((m) => m.key === 'inventory')!;
+    expect(inventory.integration).toBe('ready');
+    expect(inventory.route).toBe('/internal/inventory');
   });
 
   it('separates seeing stock from moving it', () => {
