@@ -18,6 +18,7 @@ import type {
   ServiceTrackingLink,
   ServiceTrackingReveal,
   StaffQuoteDecisionInput,
+  WhatsAppConsent,
 } from '@/domain/internal/service-types';
 import { isDeviceLookupWorthAsking } from '@/domain/internal/service-types';
 import { queryKeys } from '@/providers/query-client';
@@ -751,7 +752,21 @@ export function useRetryWhatsAppNotice(orderId: number) {
  * same act with the other answer.
  */
 export function useSetWhatsAppConsent() {
-  return useServiceMutation<{ customerId: number; optIn: boolean }, unknown>(
+  return useServiceMutation<{ customerId: number; optIn: boolean }, WhatsAppConsent>(
     ({ customerId, optIn }) => repository().setWhatsAppConsent(customerId, optIn),
   );
+}
+
+/**
+ * Undo a wrong account link — `service.customers.manage`.
+ *
+ * No retry and no optimistic state: unlinking is how a real customer stops
+ * being told their record belongs to somebody else, and doing it twice on a
+ * flaky network is not something a client should decide.
+ */
+export function useUnlinkCustomerAccount() {
+  return useServiceMutation<
+    { customerId: number; reason: string },
+    { id: number; hasAccount: boolean }
+  >(({ customerId, reason }) => repository().unlinkCustomerAccount(customerId, reason));
 }
