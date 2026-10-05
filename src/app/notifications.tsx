@@ -59,13 +59,19 @@ export default function NotificationsScreen() {
   const items = data?.items ?? [];
   const hasUnread = items.some((notification) => notification.readAt === null);
 
+  // The filter and the bulk action are useless to somebody who cannot see the
+  // inbox at all, so the gated branch renders the heading alone.
+  const heading = (
+    <AppHeader
+      title="Avisos"
+      eyebrow="Tu cuenta"
+      subtitle="Lo que la tienda te ha comunicado."
+    />
+  );
+
   const header = (
     <View>
-      <AppHeader
-        title="Avisos"
-        eyebrow="Tu cuenta"
-        subtitle="Lo que la tienda te ha comunicado."
-      />
+      {heading}
       <View style={{ marginBottom: theme.spacing.md, gap: theme.spacing.sm }}>
         {isOffline && items.length > 0 ? <StaleDataNotice /> : null}
         <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
@@ -94,8 +100,14 @@ export default function NotificationsScreen() {
       <>
         <Stack.Screen options={{ title: 'Avisos' }} />
         <Screen scrollable contentContainerStyle={{ flexGrow: 1 }}>
-          {header}
-          <PrivateActionPrompt state={access} />
+          {heading}
+          {/* The default copy talks about pedidos, which is the wrong noun on
+              this screen: somebody arrives here from a notice about a repair as
+              often as from an order. */}
+          <PrivateActionPrompt
+            state={access}
+            message="Tus avisos son privados. Entra con tu cuenta para verlos."
+          />
         </Screen>
       </>
     );
