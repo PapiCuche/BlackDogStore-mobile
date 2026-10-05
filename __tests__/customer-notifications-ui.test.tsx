@@ -45,10 +45,16 @@ jest.mock('@/providers/use-query-scope', () => {
 });
 
 // The private gate is exercised by its own suite. Here the screen is asked
-// what it draws for somebody who IS signed in.
+// what it draws for somebody who IS signed in — except in the one test below
+// that checks the wording it hands the gate.
+let mockAccess: 'ready' | 'anonymous' = 'ready';
+
 jest.mock('@/features/auth/private-action-gate', () => ({
-  usePrivateActionState: () => 'ready',
-  PrivateActionPrompt: () => null,
+  usePrivateActionState: () => mockAccess,
+  PrivateActionPrompt: ({ message }: { message?: string }) => {
+    const { Text } = jest.requireActual('react-native');
+    return <Text>{message ?? 'default gate copy'}</Text>;
+  },
 }));
 
 const mockList = jest.fn();
@@ -92,6 +98,7 @@ function page(items: AppNotification[]): NotificationPage {
 }
 
 beforeEach(() => {
+  mockAccess = 'ready';
   jest.clearAllMocks();
   mockList.mockResolvedValue(page([notification()]));
   mockUnread.mockResolvedValue(1);
@@ -164,6 +171,17 @@ describe('the inbox screen', () => {
     await screen.findByText('Tu equipo está listo');
 
     expect(screen.queryByText('Marcar todo leído')).toBeNull();
+  });
+
+  it('asks to sign in with words about AVISOS, not about pedidos', async () => {
+    // The gate's default copy says "tus pedidos son privados", which is the
+    // wrong noun here: people arrive from a notice about a repair as often as
+    // from one about an order.
+    mockAccess = 'anonymous';
+    await renderScreen();
+
+    expect(await screen.findByText(/Tus avisos son privados/)).toBeTruthy();
+    expect(screen.queryByText(/pedidos son privados/)).toBeNull();
   });
 
   it('says the inbox is empty rather than showing a blank page', async () => {
