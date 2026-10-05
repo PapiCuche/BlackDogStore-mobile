@@ -17,6 +17,7 @@ import type {
   ServiceQuoteItemInput,
   ServiceTrackingLink,
   ServiceTrackingReveal,
+  StaffQuoteDecisionInput,
 } from '@/domain/internal/service-types';
 import { queryKeys } from '@/providers/query-client';
 import { useQueryScope } from '@/providers/use-query-scope';
@@ -266,6 +267,34 @@ export function useRemoveQuoteItem(orderId: number) {
 export function usePublishQuote(orderId: number) {
   return useServiceMutation<{ quoteId: number }, unknown>(({ quoteId }) =>
     repository().publishQuote(orderId, quoteId),
+  );
+}
+
+/**
+ * Write down the answer the customer gave a person — SERVICE-TRACKING.
+ *
+ * `service.quotes.record_decision`, which the server demands on top of
+ * `service.orders.view`. No retry: an approval starts a repair, and a client
+ * that resent one on a flaky network would be deciding on somebody's behalf.
+ * A 409 means the quote already has an answer, and the screen shows the
+ * server's sentence.
+ */
+export function useRecordQuoteDecision(orderId: number) {
+  return useServiceMutation<
+    { quoteId: number; input: StaffQuoteDecisionInput },
+    unknown
+  >(({ quoteId, input }) => repository().recordQuoteDecision(orderId, quoteId, input));
+}
+
+/**
+ * Void an approval and quote again — `service.diagnostic.manage`.
+ *
+ * The answer is the NEW draft. The approved quote stays `superseded` with its
+ * decision, so what was agreed before remains answerable.
+ */
+export function useReopenQuote(orderId: number) {
+  return useServiceMutation<{ quoteId: number; reason: string }, unknown>(
+    ({ quoteId, reason }) => repository().reopenQuote(orderId, quoteId, reason),
   );
 }
 

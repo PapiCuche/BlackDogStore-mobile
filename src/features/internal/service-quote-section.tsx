@@ -13,8 +13,12 @@ import {
 } from '@/design-system';
 import {
   SERVICE_QUOTE_ITEM_TYPES,
+  STAFF_DECISION_CHANNELS,
+  STAFF_DECISION_NOTE_MAX_LENGTH,
   type ServiceQuote,
   type ServiceQuoteItemInput,
+  type StaffDecisionChannel,
+  type StaffQuoteDecisionInput,
 } from '@/domain/internal/service-types';
 import { useTheme } from '@/theme/theme-provider';
 import { formatCurrency, formatDate } from '@/utils/format';
@@ -22,6 +26,13 @@ import { formatCurrency, formatDate } from '@/utils/format';
 export type ServiceQuoteSectionProps = {
   quotes: readonly ServiceQuote[];
   canManage: boolean;
+  /**
+   * `service.quotes.record_decision`, as the server resolved it.
+   *
+   * SEPARATE FROM `canManage` on purpose: whoever writes a quote must not, by
+   * that alone, be the person who says the customer accepted it.
+   */
+  canRecordDecision?: boolean;
   isBusy: boolean;
   error: unknown;
   onCreate: () => void;
@@ -29,6 +40,10 @@ export type ServiceQuoteSectionProps = {
   onRemoveItem: (quoteId: number, itemId: number) => void;
   onPublish: (quoteId: number) => void;
   onCancel: (quoteId: number) => void;
+  /** SERVICE-TRACKING. The answer the customer gave a person. */
+  onRecordDecision?: (quoteId: number, input: StaffQuoteDecisionInput) => void;
+  /** Void an approval and open a new draft. `service.diagnostic.manage`. */
+  onReopen?: (quoteId: number, reason: string) => void;
 };
 
 /**
@@ -59,6 +74,9 @@ export function ServiceQuoteSection({
   onRemoveItem,
   onPublish,
   onCancel,
+  canRecordDecision = false,
+  onRecordDecision,
+  onReopen,
 }: ServiceQuoteSectionProps) {
   const theme = useTheme();
   const current = quotes[0];
@@ -68,6 +86,11 @@ export function ServiceQuoteSection({
   const [quantity, setQuantity] = useState('1');
   const [unitPrice, setUnitPrice] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  // SERVICE-TRACKING. `in_person` is the default because that is the counter's
+  // normal case, and a channel is required by the server — there is no "unknown".
+  const [channel, setChannel] = useState<StaffDecisionChannel>('in_person');
+  const [decisionNote, setDecisionNote] = useState('');
+  const [reopenReason, setReopenReason] = useState('');
 
   const quantityError = submitted && !(Number(quantity) > 0)
     ? 'Cantidad mayor que cero.'
@@ -300,6 +323,95 @@ export function ServiceQuoteSection({
               loading={isBusy}
               onPress={confirmPublish}
             />
+          ) : null}
+
+          {/* ── The answer that arrived through a person ───────────────── */}
+          {/*
+            A customer who phones, or answers at the counter, is the normal case
+            in a workshop. Until this existed the shop could only wait for them
+            to open the app or the tracking link, so an approval given out loud
+            never got written down and the repair could not start.
+
+            Gated on `canRecordDecision`, which is the SERVER's answer about
+            this person, and offered only while the quote is actually waiting:
+            the server refuses a second answer with 409, and offering the form
+            after one exists would invite that.
+          */}
+          {canRecordDecision && onRecordDecision && current?.status === 'sent' && !current.decision ? (
+            <View style={{ gap: theme.spacing.xs }}>
+              <Divider />
+              <Text variant="footnote" color="textSecondary">
+                Si el cliente respondió por otro medio, anótalo aquí. Queda
+                registrado con tu nombre y el canal.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
+                {STAFF_DECISION_CHANNELS.map((option) => (
+                  <Button
+                    key={option.value}
+                    label={option.label}
+                    size="compact"
+                    variant={channel === option.value ? 'primary' : 'secondary'}
+                    onPress={() => setChannel(option.value)}
+                  />
+                ))}
+              </View>
+              <Input
+                label="Nota (opcional)"
+                value={decisionNote}
+                onChangeText={setDecisionNote}
+                maxLength={STAFF_DECISION_NOTE_MAX_LENGTH}
+                hint="Queda en el historial de la cotización."
+              />
+              <Button
+                label="El cliente aprobó"
+                fullWidth
+                loading={isBusy}
+                onPress={() =>
+                  onRecordDecision(current.id, {
+                    decision: 'approved',
+                    channel,
+                    note: decisionNote,
+                  })
+                }
+              />
+              <Button
+                label="El cliente rechazó"
+                variant="destructive"
+                fullWidth
+                loading={isBusy}
+                onPress={() =>
+                  onRecordDecision(current.id, {
+                    decision: 'rejected',
+                    channel,
+                    note: decisionNote,
+                  })
+                }
+              />
+            </View>
+          ) : null}
+
+          {/* ── When the approved work turns out to be different ────────── */}
+          {canManage && onReopen && current?.status === 'approved' ? (
+            <View style={{ gap: theme.spacing.xs }}>
+              <Divider />
+              <Text variant="footnote" color="textSecondary">
+                Si lo aprobado ya no es lo que hay que hacer, abre una revisión
+                nueva. La aprobación anterior queda registrada.
+              </Text>
+              <Input
+                label="Motivo"
+                value={reopenReason}
+                onChangeText={setReopenReason}
+                hint="Por qué cambia lo aprobado."
+              />
+              <Button
+                label="Reabrir y cotizar de nuevo"
+                variant="secondary"
+                fullWidth
+                loading={isBusy}
+                onPress={() => onReopen(current.id, reopenReason)}
+              />
+            </View>
           ) : null}
 
           {canManage && current?.status === 'sent' ? (
