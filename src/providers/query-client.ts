@@ -118,6 +118,20 @@ export const queryKeys = {
   // invalidation would show a customer a figure the shop no longer agrees with.
   repairPaymentSummary: (scope: QueryScope, repairId: number) =>
     [...customerPrefix(scope), 'repair', repairId, 'payment-summary'] as const,
+  // M12D. Nested under the repair like the quote and the balance: a photo
+  // shared or withdrawn by the shop changes what the repair shows, and a list
+  // that survived the repair's invalidation would keep displaying an image the
+  // content route now refuses.
+  repairEvidence: (scope: QueryScope, repairId: number) =>
+    [...customerPrefix(scope), 'repair', repairId, 'evidence'] as const,
+  /**
+   * The Bearer header an image request needs.
+   *
+   * Keyed by USER and not by repair: it is one session credential, and a copy
+   * per photo would refresh the token once per image on a cold screen.
+   */
+  evidenceAuthorization: (scope: QueryScope) =>
+    [...customerPrefix(scope), 'evidence-authorization'] as const,
   orders: (scope: QueryScope) => [...customerPrefix(scope), 'orders'] as const,
   // M12B — the inbox. The PAGE and the BADGE are separate keys because they
   // answer different questions: one is twenty rows, the other is the whole

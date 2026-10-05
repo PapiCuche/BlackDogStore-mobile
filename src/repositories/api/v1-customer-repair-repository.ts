@@ -1,4 +1,9 @@
 import {
+  customerEvidenceContentUrl,
+  fetchCustomerRepairEvidence,
+  resolveEvidenceAuthorization,
+} from '@/api/endpoints/customer-repair-evidence-v1';
+import {
   fetchCustomerRepair,
   fetchCustomerPaymentSummary,
   fetchCustomerRepairQuote,
@@ -8,6 +13,7 @@ import {
 } from '@/api/endpoints/customer-repairs-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type { CustomerPaymentSummary } from '@/domain/internal/service-types';
+import type { RepairEvidence } from '@/domain/repairs/evidence';
 import type { QuoteDecision, RepairQuote } from '@/domain/repairs/quote';
 import type { Repair } from '@/domain/repairs/types';
 import type { RepairRepository } from '@/repositories/types';
@@ -75,4 +81,18 @@ export class V1CustomerRepairRepository implements RepairRepository {
   ): Promise<RepairQuote> {
     return postQuoteDecision(input, this.deps, signal);
   }
+
+  /** M12D — the photos shared on one repair. Read only, like the server. */
+  async listEvidence(repairId: number, signal?: AbortSignal): Promise<RepairEvidence[]> {
+    return fetchCustomerRepairEvidence(repairId, this.deps, signal);
+  }
+
+  evidenceContentUrl(repairId: number, evidenceId: number): string {
+    return customerEvidenceContentUrl(repairId, evidenceId);
+  }
+
+  async evidenceAuthorization(): Promise<string> {
+    return resolveEvidenceAuthorization(this.deps);
+  }
+
 }

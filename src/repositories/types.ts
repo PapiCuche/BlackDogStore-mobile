@@ -2,6 +2,7 @@ import type { CompanyBrand } from '@/domain/company/types';
 import type { AppNotification, NotificationPage } from '@/domain/notifications/types';
 import type { Order } from '@/domain/orders/types';
 import type { Category, Product } from '@/domain/products/types';
+import type { RepairEvidence } from '@/domain/repairs/evidence';
 import type { QuoteDecision, RepairQuote } from '@/domain/repairs/quote';
 import type { CustomerPaymentSummary } from '@/domain/internal/service-types';
 import type { Repair } from '@/domain/repairs/types';
@@ -47,6 +48,13 @@ export type RepairRepository = {
     input: { repairId: number; quoteId: number; decision: QuoteDecision; reason?: string },
     signal?: AbortSignal,
   ): Promise<RepairQuote>;
+  // M12D. The photos the shop chose to share, and the two things an image
+  // loader needs to fetch one: an absolute URL and a Bearer header. The bytes
+  // are NOT handed over as a signed link — the content route re-checks company,
+  // ownership, visibility and voiding on every request.
+  listEvidence(repairId: number, signal?: AbortSignal): Promise<RepairEvidence[]>;
+  evidenceContentUrl(repairId: number, evidenceId: number): string;
+  evidenceAuthorization(): Promise<string>;
 };
 
 export type OrderRepository = {

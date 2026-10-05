@@ -18,12 +18,18 @@ import { describeRepairStatus } from '@/domain/repairs/status';
 import { RepairTimeline } from '@/features/repairs/repair-timeline';
 import { RepairPaymentCard } from '@/features/repairs/repair-payment-card';
 import { RepairQuoteCard } from '@/features/repairs/repair-quote-card';
+import { RepairEvidenceGallery } from '@/features/repairs/repair-evidence-gallery';
+import {
+  useEvidenceAuthorization,
+  useRepairEvidence,
+} from '@/hooks/use-repair-evidence';
 import {
   useDecideQuote,
   useRepair,
   useRepairPaymentSummary,
   useRepairQuote,
 } from '@/hooks/use-repairs';
+import { repositories } from '@/repositories';
 import { useTheme } from '@/theme/theme-provider';
 import { formatDate, formatRelativeTime } from '@/utils/format';
 
@@ -48,6 +54,12 @@ export default function RepairDetailScreen() {
   // failed to load would be worse than the absence.
   const quote = useRepairQuote(resolvedId);
   const payment = useRepairPaymentSummary(resolvedId);
+  // M12D. Two secondary queries, neither of which gates the page: the photos
+  // the shop shared, and the Bearer header their content route demands.
+  const evidence = useRepairEvidence(resolvedId);
+  const evidenceAuth = useEvidenceAuthorization({
+    enabled: (evidence.data?.length ?? 0) > 0,
+  });
   const decide = useDecideQuote(resolvedId);
 
   if (isPending) {
@@ -153,6 +165,26 @@ export default function RepairDetailScreen() {
               <SectionHeader title="Pago" />
               <Card>
                 <RepairPaymentCard summary={payment.data} />
+              </Card>
+            </View>
+          ) : null}
+
+          {/* M12D. Below the money and above the history: a photo is evidence
+              about what already happened, and it must not outrank the decision
+              the customer is being asked to make. The section disappears
+              entirely when the shop has shared nothing — an empty gallery would
+              suggest the workshop forgot to document the repair. */}
+          {(evidence.data?.length ?? 0) > 0 ? (
+            <View>
+              <SectionHeader title="Fotos" />
+              <Card>
+                <RepairEvidenceGallery
+                  evidence={evidence.data ?? []}
+                  authorization={evidenceAuth.data ?? null}
+                  contentUrl={(evidenceId) =>
+                    repositories.repairs?.evidenceContentUrl(resolvedId!, evidenceId) ?? ''
+                  }
+                />
               </Card>
             </View>
           ) : null}
