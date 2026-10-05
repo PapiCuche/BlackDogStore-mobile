@@ -42,6 +42,7 @@ export type FeatureKey =
   | 'customerPayment'
   | 'orders'
   | 'repairs'
+  | 'repairEvidence'
   | 'auth'
   | 'accountLifecycle'
   | 'companyBrand'
@@ -108,6 +109,12 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
     // shipped in M9 and M10; the customer side reads the whole lifecycle.
     note: 'Integrado con /api/v1/customer/<empresa>/repairs/ — estado, cotización, decisión del cliente y resumen de pagos.',
     source: 'api/endpoints/customer-repairs-v1.ts',
+  },
+  repairEvidence: {
+    label: 'Fotos de la reparación',
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/customer/<empresa>/repairs/<id>/evidence/ — solo lectura, solo las fotos que el taller compartió. Los bytes llegan por una ruta de contenido que vuelve a comprobar empresa, propiedad, visibilidad y anulación; la app nunca recibe una clave de almacenamiento ni un enlace firmado.',
+    source: 'api/endpoints/customer-repair-evidence-v1.ts',
   },
   auth: {
     label: 'Autenticación',

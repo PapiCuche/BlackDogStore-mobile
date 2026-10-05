@@ -1,6 +1,7 @@
 import type { CustomerPaymentSummary } from '@/domain/internal/service-types';
 import type { QuoteDecision, RepairQuote } from '@/domain/repairs/quote';
 import type { Repair } from '@/domain/repairs/types';
+import type { RepairEvidence } from '@/domain/repairs/evidence';
 import type { RepairRepository } from '@/repositories/types';
 
 import { mockRepairQuotes, mockRepairs } from './fixtures';
@@ -111,4 +112,25 @@ export class MockRepairRepository implements RepairRepository {
     this.quotes.set(input.repairId, decided);
     return decided;
   }
+
+  /**
+   * M12D — no fixture photos, deliberately.
+   *
+   * Every other mock answer here is a plausible row of text. An invented photo
+   * of somebody's phone is a different kind of claim: it would look like the
+   * workshop's own record of their device. The demo build shows the empty
+   * state, which is honest.
+   */
+  async listEvidence(): Promise<RepairEvidence[]> {
+    return [];
+  }
+
+  evidenceContentUrl(): string {
+    return '';
+  }
+
+  async evidenceAuthorization(): Promise<string> {
+    return '';
+  }
+
 }
