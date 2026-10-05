@@ -52,6 +52,7 @@ export type FeatureKey =
   | 'internalNotifications'
 
   | 'internalCommunications'
+  | 'internalMessaging'
   | 'internalServiceEvidence'
   | 'internalPos'
   | 'internalInventory'
@@ -167,6 +168,12 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
     status: 'TESTED',
     note: 'Integrado con /api/v1/internal/<empresa>/notifications/ — bandeja del personal, contador de no leídos y marcado como leído. Sin capability: el servidor sólo exige ser miembro activo, porque los avisos propios no son datos administrativos sobre terceros.',
     source: 'api/endpoints/internal-notifications-v1.ts',
+  },
+  internalMessaging: {
+    label: 'Interno · Avisos por WhatsApp',
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/internal/<empresa>/messaging/whatsapp/ — lectura con settings.view y cambios con settings.manage sobre la lista cerrada que el servidor acepta (activación, código de país, idioma y plantillas). Las credenciales del proveedor llegan como booleanos y las fija quien administra la instalación.',
+    source: 'api/endpoints/internal-messaging-v1.ts',
   },
   internalCommunications: {
     label: 'Interno · Comunicados',

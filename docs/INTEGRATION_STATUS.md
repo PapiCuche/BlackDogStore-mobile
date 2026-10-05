@@ -38,6 +38,9 @@ archivo discrepan, **el archivo tiene razón**.
 | Interno · Comunicados (lectura) | **IMPLEMENTADO** | **API_READY** (`/api/v1/internal/<slug>/communications/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Interno · Enlace de seguimiento | **IMPLEMENTADO** | **API_READY** (`.../service/orders/<id>/tracking-link/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Interno · Decisión de cotización | **IMPLEMENTADO** | **API_READY** (`.../quotes/<id>/decision/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Interno · Avisos por WhatsApp | **IMPLEMENTADO** | **API_READY** (`/api/v1/internal/<slug>/messaging/whatsapp/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Interno · Avisos enviados al cliente | **IMPLEMENTADO** | **API_READY** (`.../notifications/<id>/whatsapp/retry/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Interno · Equipo visto antes (serie/IMEI) | **IMPLEMENTADO** | **API_READY** (`.../service/devices/lookup/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Autenticación (login) | IMPLEMENTADO | **API_READY** (`/api/v1/auth/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Refresh con rotación | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Logout | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
