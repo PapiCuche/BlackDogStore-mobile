@@ -32,6 +32,7 @@ import { displayName, initials } from '@/domain/customers/types';
 import { authRuntimePolicy } from '@/auth/auth-policy';
 import { useConnectivity } from '@/connectivity/connectivity-provider';
 import { useCompanyBrand } from '@/hooks/use-company-brand';
+import { useUnreadNotificationCount } from '@/hooks/use-notifications';
 import { useQueryScope } from '@/providers/use-query-scope';
 import { useAppTheme, THEME_PREFERENCES, type ThemePreference } from '@/theme/theme-provider';
 import { useTheme } from '@/theme/theme-provider';
@@ -65,6 +66,13 @@ export default function ProfileScreen() {
 
   const profile = session?.user ?? null;
   const name = displayName(profile);
+
+  // Disabled without a session: the inbox is private, and asking anonymously
+  // can only come back 401. `undefined` while it loads or fails, so the row
+  // stays silent rather than claiming zero.
+  const unread = useUnreadNotificationCount({ enabled: session !== null });
+  const unreadBadge =
+    unread.data !== undefined && unread.data > 0 ? String(unread.data) : undefined;
 
   const openExternal = (url: string) => {
     void Linking.openURL(url).catch(() => undefined);
@@ -126,6 +134,26 @@ export default function ProfileScreen() {
             </Card>
           </View>
         ) : null}
+
+        {/* ── Inbox ─────────────────────────────────────────────────────── */}
+        {/*
+          M12B. The row is shown to everyone and the COUNT only when the server
+          answered one: a badge that defaulted to zero would tell somebody they
+          have nothing waiting at the exact moment the request failed.
+        */}
+        <View>
+          <SectionHeader title="Tu cuenta" />
+          <Card padded={false}>
+            <ListRow
+              label="Avisos"
+              description="Lo que la tienda te ha comunicado"
+              icon={icons.info}
+              value={unreadBadge}
+              onPress={() => router.push('/notifications')}
+              accessibilityHint="Abre tu bandeja de avisos"
+            />
+          </Card>
+        </View>
 
         {/* ── Appearance ────────────────────────────────────────────────── */}
         <View>

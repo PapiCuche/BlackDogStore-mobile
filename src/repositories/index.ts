@@ -6,6 +6,7 @@ import {
 
 import { V1ApiCatalogRepository } from './api/v1-api-catalog-repository';
 import { V1CompanyRepository } from './api/v1-company-repository';
+import { V1CustomerNotificationRepository } from './api/v1-customer-notification-repository';
 import { V1CustomerOrderRepository } from './api/v1-customer-order-repository';
 import { V1CustomerRepairRepository } from './api/v1-customer-repair-repository';
 import { MockCatalogRepository } from './mock/mock-catalog-repository';
@@ -15,6 +16,7 @@ import { MockRepairRepository } from './mock/mock-repair-repository';
 import type {
   CatalogRepository,
   CompanyRepository,
+  NotificationRepository,
   OrderRepository,
   RepairRepository,
 } from './types';
@@ -135,6 +137,22 @@ function resolveRepairRepository(): RepairRepository | null {
   }
 }
 
+/**
+ * Where a customer's own notices come from.
+ *
+ * M12B — backend only, with NO mock twin. A fabricated inbox would be the one
+ * fixture that looks like the platform speaking: somebody would read "su
+ * equipo está listo" in a demo build and go to the shop. An absent repository
+ * makes the screen say the feature is unavailable, which is true.
+ */
+function resolveNotificationRepository(): NotificationRepository | null {
+  return authRuntimePolicy.mode === 'backend'
+    ? new V1CustomerNotificationRepository({
+        refreshCoordinator: getAuthRuntime().coordinator,
+      })
+    : null;
+}
+
 function resolveCompanyRepository(): CompanyRepository | null {
   if (useMockData) {
     return isPilotTenant ? new MockCompanyRepository() : null;
@@ -147,17 +165,20 @@ export const repositories: {
   repairs: RepairRepository | null;
   orders: OrderRepository | null;
   company: CompanyRepository | null;
+  notifications: NotificationRepository | null;
 } = {
   catalog: resolveCatalogRepository(),
   repairs: resolveRepairRepository(),
   orders: resolveOrderRepository(),
   company: resolveCompanyRepository(),
+  notifications: resolveNotificationRepository(),
 };
 
 export { FeatureUnavailableError, featureUnavailable } from './errors';
 export type {
   CatalogRepository,
   CompanyRepository,
+  NotificationRepository,
   OrderRepository,
   RepairRepository,
 } from './types';

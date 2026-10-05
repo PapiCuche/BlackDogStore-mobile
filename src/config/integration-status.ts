@@ -41,6 +41,7 @@ export type FeatureKey =
   | 'checkout'
   | 'customerPayment'
   | 'orders'
+  | 'customerNotifications'
   | 'repairs'
   | 'auth'
   | 'accountLifecycle'
@@ -100,6 +101,12 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
     // BR-003 shipped, so `fulfillment_status` arrives with the order.
     note: 'Integrado con /api/v1/customer/<empresa>/orders/ — sesión nativa Bearer, sin cookies. Incluye fulfillment_status (BR-003).',
     source: 'api/endpoints/customer-orders-v1.ts',
+  },
+  customerNotifications: {
+    label: 'Avisos',
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/customer/<empresa>/notifications/ — bandeja propia, contador de no leídos y marcado como leído. El servidor acota la bandeja al cliente que pregunta; un aviso de otra persona responde 404, no 403.',
+    source: 'api/endpoints/customer-notifications-v1.ts',
   },
   repairs: {
     label: 'Reparaciones',

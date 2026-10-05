@@ -32,6 +32,7 @@ archivo discrepan, **el archivo tiene razón**.
 | Detalle de pedido | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Reparaciones | **IMPLEMENTADO** | **API_READY** (`/api/v1/customer/<slug>/repairs/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Detalle de reparación | **IMPLEMENTADO** | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
+| Avisos del cliente (bandeja) | **IMPLEMENTADO** | **API_READY** (`/api/v1/customer/<slug>/notifications/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Autenticación (login) | IMPLEMENTADO | **API_READY** (`/api/v1/auth/`) | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Refresh con rotación | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
 | Logout | IMPLEMENTADO | **API_READY** | **INTEGRATED** | **TESTED** | **INTEGRADO** |
