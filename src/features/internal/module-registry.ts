@@ -1,4 +1,5 @@
 import { CAP_COMMUNICATIONS_MANAGE } from '@/domain/internal/announcement-types';
+import { CAP_SETTINGS_VIEW } from '@/domain/internal/messaging-types';
 import { CAP_INVENTORY_VIEW } from '@/domain/internal/inventory-types';
 import { CAP_SALES_POS_USE } from '@/domain/internal/pos-types';
 import { CAP_SERVICE_ORDERS_VIEW } from '@/domain/internal/service-types';
@@ -115,6 +116,17 @@ export const INTERNAL_MODULES: readonly InternalModule[] = [
     requires: CAP_COMMUNICATIONS_MANAGE,
     integration: 'ready',
     route: '/internal/communications',
+  },
+  {
+    key: 'messaging',
+    title: 'Avisos por WhatsApp',
+    description: 'Plantillas, idioma y si los avisos están activos.',
+    // WHATSAPP-NOTIFY. `settings.view` reads it; changing it needs
+    // `settings.manage`, and the screen asks for that separately — somebody
+    // may be allowed to see the setup without being allowed to alter it.
+    requires: CAP_SETTINGS_VIEW,
+    integration: 'ready',
+    route: '/internal/settings/messaging',
   },
   {
     key: 'settings',

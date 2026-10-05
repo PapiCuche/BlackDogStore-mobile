@@ -154,6 +154,9 @@ export const queryKeys = {
 
   // ── tenant + user private, INTERNAL audience ─────────────────────────────
   internalContext: (scope: QueryScope) => [...internalPrefix(scope), 'context'] as const,
+  /** WHATSAPP-NOTIFY. One per tenant: it is the company's setup, not a person's. */
+  internalMessagingSettings: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'messaging', 'whatsapp'] as const,
   // M12B — the STAFF inbox, under the internal prefix. The customer inbox has
   // its own keys under the customer prefix: the two audiences must never share
   // a cache slot, and the dangerous direction is a colleague's notice landing
