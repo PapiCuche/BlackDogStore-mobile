@@ -49,6 +49,7 @@ export type FeatureKey =
   | 'companyBrand'
   // ── Internal audience ────────────────────────────────────────────────────
   | 'internalSales'
+  | 'internalServiceEvidence'
   | 'internalPos'
   | 'internalInventory'
   | 'inventoryCounts'
@@ -157,6 +158,12 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
     status: 'TESTED',
     note: 'Integrado con /api/v1/internal/<empresa>/sales/orders/ — listado, detalle y fulfillment. Capabilities resueltas por el servidor en cada petición.',
     source: 'api/endpoints/internal-v1.ts',
+  },
+  internalServiceEvidence: {
+    label: 'Interno · Fotos de reparación',
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/internal/<empresa>/service/orders/<id>/evidence/ — listado, bytes por ruta de contenido, compartir con el cliente, dejar de compartir y anular. Cada acto exige la capability de la ETAPA de la foto más acceso a la sucursal; subir fotos sigue siendo de la consola web (falta selector de imágenes nativo).',
+    source: 'api/endpoints/internal-service-evidence-v1.ts',
   },
   internalPos: {
     label: 'Interno · Punto de venta',

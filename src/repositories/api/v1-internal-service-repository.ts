@@ -43,6 +43,14 @@ import {
   searchServiceCustomers,
   type ServiceOrderQuery,
 } from '@/api/endpoints/internal-service-v1';
+import {
+  fetchInternalEvidence,
+  hideInternalEvidence,
+  internalEvidenceContentUrl,
+  publishInternalEvidence,
+  resolveInternalEvidenceAuthorization,
+  voidInternalEvidence,
+} from '@/api/endpoints/internal-service-evidence-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type {
   ServiceDeliveryInput,
@@ -422,4 +430,37 @@ export class V1InternalServiceRepository {
   ) {
     return postServicePaymentReverse(orderId, paymentId, reason, this.deps, signal);
   }
+
+  // M12D — repair photos, staff side. Reading takes `service.orders.view`;
+  // acting on one takes the capability ITS STAGE demands plus branch access,
+  // which the server checks on every write.
+  async listEvidence(orderId: number, signal?: AbortSignal) {
+    return fetchInternalEvidence(orderId, this.deps, signal);
+  }
+
+  evidenceContentUrl(orderId: number, evidenceId: number): string {
+    return internalEvidenceContentUrl(orderId, evidenceId);
+  }
+
+  async evidenceAuthorization(): Promise<string> {
+    return resolveInternalEvidenceAuthorization(this.deps);
+  }
+
+  async publishEvidence(orderId: number, evidenceId: number, signal?: AbortSignal) {
+    return publishInternalEvidence(orderId, evidenceId, this.deps, signal);
+  }
+
+  async hideEvidence(orderId: number, evidenceId: number, signal?: AbortSignal) {
+    return hideInternalEvidence(orderId, evidenceId, this.deps, signal);
+  }
+
+  async voidEvidence(
+    orderId: number,
+    evidenceId: number,
+    reason: string,
+    signal?: AbortSignal,
+  ) {
+    return voidInternalEvidence(orderId, evidenceId, reason, this.deps, signal);
+  }
+
 }

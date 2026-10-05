@@ -537,3 +537,67 @@ export function useReverseServicePayment(orderId: number) {
       repository().reversePayment(orderId, paymentId, reason ?? ''),
   );
 }
+
+// ---------------------------------------------------------------------------
+// M12D — repair photos, staff side
+// ---------------------------------------------------------------------------
+
+/** Every photo on the order. `service.orders.view`, like the order itself. */
+export function useServiceEvidence(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceEvidence(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().listEvidence(orderId!, signal),
+    enabled: (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+/**
+ * The Bearer header the image loader needs.
+ *
+ * A query because resolving it can require a refresh, and short-lived because
+ * the cost of being wrong is a broken thumbnail rather than a wrong decision.
+ */
+const IMAGE_AUTHORIZATION_FRESHNESS = 30_000;
+
+export function useServiceEvidenceAuthorization(options: { enabled?: boolean } = {}) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalEvidenceAuthorization(scope),
+    queryFn: () => repository().evidenceAuthorization(),
+    enabled: options.enabled ?? true,
+    staleTime: IMAGE_AUTHORIZATION_FRESHNESS,
+    gcTime: IMAGE_AUTHORIZATION_FRESHNESS,
+    retry: false,
+  });
+}
+
+/**
+ * Share one photo with the customer, stop sharing it, or retire it.
+ *
+ * Each write is gated by the capability the photo's STAGE demands plus access
+ * to the order's branch — the server asks for both on every request, and these
+ * do not retry: sharing somebody's device photo is not something to repeat on a
+ * flaky network.
+ */
+export function usePublishEvidence(orderId: number) {
+  return useServiceMutation<{ evidenceId: number }, unknown>(({ evidenceId }) =>
+    repository().publishEvidence(orderId, evidenceId),
+  );
+}
+
+export function useHideEvidence(orderId: number) {
+  return useServiceMutation<{ evidenceId: number }, unknown>(({ evidenceId }) =>
+    repository().hideEvidence(orderId, evidenceId),
+  );
+}
+
+export function useVoidEvidence(orderId: number) {
+  return useServiceMutation<{ evidenceId: number; reason: string }, unknown>(
+    ({ evidenceId, reason }) => repository().voidEvidence(orderId, evidenceId, reason),
+  );
+}

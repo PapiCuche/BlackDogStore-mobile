@@ -254,6 +254,14 @@ export const queryKeys = {
   // M12B. The ledger and the balance hang off the same order. A payment or a
   // reversal changes BOTH — and the order's deliverability with them — so every
   // write invalidates the service root rather than one of these.
+  // M12D. Under the order, like everything else about it: sharing or retiring
+  // a photo changes what the customer can see, and a stale list would keep
+  // offering a button the content route now refuses.
+  internalServiceEvidence: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'evidence'] as const,
+  /** One Bearer header per user, not one per photo. */
+  internalEvidenceAuthorization: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'service', 'evidence-authorization'] as const,
   internalServicePayments: (scope: QueryScope, orderId: number) =>
     [...internalPrefix(scope), 'service', 'order', orderId, 'payments'] as const,
   internalServicePaymentSummary: (scope: QueryScope, orderId: number) =>
