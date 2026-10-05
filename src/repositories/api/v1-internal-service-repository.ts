@@ -1,4 +1,8 @@
 import {
+  fetchServiceTrackingLink,
+  revealServiceTrackingLink,
+  revokeServiceTrackingLink,
+  rotateServiceTrackingLink,
   fetchServiceDelivery,
   postServiceDelivery,
   fetchServicePayments,
@@ -422,4 +426,22 @@ export class V1InternalServiceRepository {
   ) {
     return postServicePaymentReverse(orderId, paymentId, reason, this.deps, signal);
   }
+
+  // SERVICE-TRACKING. Four acts, three capabilities — see the endpoint module.
+  async getTrackingLink(orderId: number, signal?: AbortSignal) {
+    return fetchServiceTrackingLink(orderId, this.deps, signal);
+  }
+
+  async revealTrackingLink(orderId: number, signal?: AbortSignal) {
+    return revealServiceTrackingLink(orderId, this.deps, signal);
+  }
+
+  async rotateTrackingLink(orderId: number, signal?: AbortSignal) {
+    return rotateServiceTrackingLink(orderId, this.deps, signal);
+  }
+
+  async revokeTrackingLink(orderId: number, signal?: AbortSignal) {
+    return revokeServiceTrackingLink(orderId, this.deps, signal);
+  }
+
 }
