@@ -19,6 +19,7 @@ import type {
   ServiceTrackingReveal,
   StaffQuoteDecisionInput,
 } from '@/domain/internal/service-types';
+import { isDeviceLookupWorthAsking } from '@/domain/internal/service-types';
 import { queryKeys } from '@/providers/query-client';
 import { useQueryScope } from '@/providers/use-query-scope';
 import { V1InternalServiceRepository } from '@/repositories/api/v1-internal-service-repository';
@@ -684,4 +685,43 @@ export function useVoidEvidence(orderId: number) {
   return useServiceMutation<{ evidenceId: number; reason: string }, unknown>(
     ({ evidenceId, reason }) => repository().voidEvidence(orderId, evidenceId, reason),
   );
+}
+
+// ---------------------------------------------------------------------------
+// DEVICE-IDENTITY / POS-SVC-01 — the two questions asked before an order exists
+// ---------------------------------------------------------------------------
+
+/**
+ * Has this device been here before?
+ *
+ * The caller decides when to ask, through `enabled`: the server ignores a
+ * serial under four characters and an IMEI that is not fifteen digits, so
+ * firing on every keystroke would spend requests that cannot match.
+ * `isDeviceLookupWorthAsking` is the same rule, mirrored to stay quiet.
+ */
+export function useServiceDeviceLookup(
+  query: { serialNumber?: string; imei?: string },
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceDeviceLookup(scope, query),
+    queryFn: ({ signal }) => repository().lookupDevices(query, signal),
+    enabled: (options.enabled ?? true) && isDeviceLookupWorthAsking(query),
+    retry: false,
+  });
+}
+
+/** Who may be handed a repair received at one branch. */
+export function useServiceTechnicianCandidates(
+  branchId: number | null,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalServiceTechnicians(scope, branchId ?? -1),
+    queryFn: ({ signal }) => repository().listTechnicianCandidates(branchId!, signal),
+    enabled: (options.enabled ?? true) && branchId !== null,
+    retry: false,
+  });
 }

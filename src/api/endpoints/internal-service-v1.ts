@@ -36,6 +36,7 @@ import type {
   ServiceOrder,
   ServiceOrderDetail,
   ServiceOrderInput,
+  ServiceDeviceMatch,
   ServiceOrderPage,
   ServiceTrackingLink,
   ServiceTrackingReveal,
@@ -168,6 +169,28 @@ function str(value: unknown, fallback = ''): string {
 function num(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/**
+ * A device the shop may already know, with the history that makes the answer
+ * useful: how many times it has been in, and how the last visit ended.
+ */
+export function toServiceDeviceMatch(raw: unknown): ServiceDeviceMatch {
+  const row = (raw ?? {}) as Row;
+  const last = (row.last_repair_order ?? null) as Row | null;
+  const count = Number(row.repair_orders_count);
+  return {
+    ...toServiceDevice(row),
+    repairOrdersCount: Number.isFinite(count) && count > 0 ? Math.trunc(count) : 0,
+    lastRepairOrder: last
+      ? {
+          id: Number(last.id),
+          status: str(last.status),
+          statusLabel: str(last.status_label),
+          createdAt: str(last.created_at),
+        }
+      : null,
+  };
 }
 
 export function toServiceDevice(raw: unknown): ServiceDevice {
@@ -416,6 +439,76 @@ export async function fetchServiceDevices(
     );
   } catch (error) {
     return translate(error, query.customerId !== undefined);
+  }
+}
+
+/**
+ * Has this device been here before? — DEVICE-IDENTITY.
+ *
+ * Asked at the counter BEFORE registering, so a phone that came in last March
+ * is re-used with its history rather than entered twice. The server normalises
+ * (serial upper-cased without spaces, IMEI digits only) and then ignores a
+ * value too short to mean anything, matching EXACTLY and only inside this
+ * company: what another company holds is not found.
+ *
+ * `translate(error, true)` because 404 here means the company is closed to the
+ * caller, not "no such device" — an empty `results` is how "never seen it"
+ * arrives, and that is the normal answer.
+ */
+export async function lookupServiceDevices(
+  query: { serialNumber?: string; imei?: string; imei2?: string },
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceDeviceMatch[]> {
+  const params: Record<string, string> = {};
+  // Sent as typed. Normalising here as well would be a second answer to a
+  // question the server already answers, and the lookup is deliberately
+  // forgiving of a half-typed number.
+  if (query.serialNumber?.trim()) params.serial_number = query.serialNumber.trim();
+  if (query.imei?.trim()) params.imei = query.imei.trim();
+  if (query.imei2?.trim()) params.imei2 = query.imei2.trim();
+
+  try {
+    const body = await authenticatedRequest<Row>(
+      `${servicePath(requireTenant())}/devices/lookup/`,
+      { scope: 'authenticated-v1', query: params, signal },
+      deps,
+    );
+    const rows = Array.isArray(body?.results) ? body.results : [];
+    return rows.map(toServiceDeviceMatch);
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Who may be handed a repair received at one branch — POS-SVC-01.
+ *
+ * The same list the assignment route gives for an existing order, for the
+ * moment BEFORE the order exists: the counter picks the technician while it is
+ * still taking the device in. The branch is required and resolved against the
+ * caller's own set, so one they do not reach is not found.
+ */
+export async function fetchServiceTechnicianCandidates(
+  branchId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceAssignmentOptions['candidates']> {
+  try {
+    const body = await authenticatedRequest<Row>(
+      `${servicePath(requireTenant())}/technicians/`,
+      { scope: 'authenticated-v1', query: { branch_id: branchId }, signal },
+      deps,
+    );
+    const rows = Array.isArray(body?.candidates) ? body.candidates : [];
+    // The same two fields the assignment route returns, mapped the same way:
+    // the server builds both lists from `eligible_technicians`.
+    return rows.map((entry) => {
+      const row = entry as Row;
+      return { id: Number(row.id), name: str(row.name) };
+    });
+  } catch (error) {
+    return translate(error, true);
   }
 }
 

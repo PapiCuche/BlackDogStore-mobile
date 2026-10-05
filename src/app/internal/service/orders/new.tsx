@@ -31,6 +31,7 @@ import {
   useReceiveDevice,
   useServiceContext,
   useServiceCustomerSearch,
+  useServiceDeviceLookup,
   useServiceDevices,
 } from '@/hooks/use-internal-service';
 import { useInternalContext } from '@/hooks/use-internal-sales';
@@ -131,6 +132,12 @@ export default function ServiceIntakeScreen() {
   const customers = useServiceCustomerSearch(searchTerm, {
     enabled: mayCreate && mayFindCustomers && customer === null,
   });
+  // DEVICE-IDENTITY. Runs only while registering and only once the typed
+  // number can match; `useServiceDeviceLookup` holds itself back otherwise.
+  const deviceMatches = useServiceDeviceLookup(
+    { serialNumber, imei },
+    { enabled: registering },
+  );
   const devices = useServiceDevices(
     { customerId: customer?.id },
     { enabled: mayCreate && customer !== null && device === null },
@@ -366,6 +373,60 @@ export default function ServiceIntakeScreen() {
                       onChangeText={setImei}
                       keyboardType="number-pad"
                     />
+
+                    {/* DEVICE-IDENTITY. Asked as the number is typed, and only
+                        once there is enough of it to match: the server ignores a
+                        serial under four characters and an IMEI that is not
+                        fifteen digits. A device that has been here before is
+                        re-used WITH its history instead of entered twice, which
+                        is the whole point of asking before saving. */}
+                    {deviceMatches.data && deviceMatches.data.length > 0 ? (
+                      <View style={{ gap: theme.spacing.xs }}>
+                        <Text variant="footnote" color="statusWarning">
+                          {deviceMatches.data.length === 1
+                            ? 'Este equipo ya está registrado:'
+                            : 'Estos equipos coinciden con lo que escribiste:'}
+                        </Text>
+                        {deviceMatches.data.map((match) => (
+                          <Card key={match.id} variant="outlined">
+                            <View style={{ gap: 2 }}>
+                              <Text variant="headline">{match.displayName}</Text>
+                              <Text variant="subhead" color="textSecondary">
+                                {match.customerName}
+                                {match.serialNumber ? ` · ${match.serialNumber}` : ''}
+                              </Text>
+                              <Text variant="caption" color="textTertiary">
+                                {match.repairOrdersCount === 0
+                                  ? 'Sin reparaciones previas'
+                                  : `${match.repairOrdersCount} reparación(es)`}
+                                {match.lastRepairOrder
+                                  ? ` · última: ${match.lastRepairOrder.statusLabel}`
+                                  : ''}
+                              </Text>
+                              {/* Only offered for THIS customer's device: the
+                                  lookup is company-wide, and attaching somebody
+                                  else's device to this order would be the app
+                                  deciding who owns it. */}
+                              {match.customer === customer.id ? (
+                                <Button
+                                  label="Usar este equipo"
+                                  size="compact"
+                                  onPress={() => {
+                                    setDevice(match);
+                                    setRegistering(false);
+                                  }}
+                                />
+                              ) : (
+                                <Text variant="caption" color="textTertiary">
+                                  Está a nombre de otro cliente. Verifica con quien
+                                  lo trae antes de continuar.
+                                </Text>
+                              )}
+                            </View>
+                          </Card>
+                        ))}
+                      </View>
+                    ) : null}
 
                     {createDevice.isError ? (
                       <Text variant="subhead" color="danger">

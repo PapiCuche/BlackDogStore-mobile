@@ -57,6 +57,10 @@ import {
   resolveInternalEvidenceAuthorization,
   voidInternalEvidence,
 } from '@/api/endpoints/internal-service-evidence-v1';
+import {
+  fetchServiceTechnicianCandidates,
+  lookupServiceDevices,
+} from '@/api/endpoints/internal-service-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type { StaffQuoteDecisionInput } from '@/domain/internal/service-types';
 import type {
@@ -504,6 +508,20 @@ export class V1InternalServiceRepository {
     signal?: AbortSignal,
   ) {
     return voidInternalEvidence(orderId, evidenceId, reason, this.deps, signal);
+  }
+
+
+  // DEVICE-IDENTITY / POS-SVC-01. Two questions the counter asks BEFORE an
+  // order exists: is this device already ours, and who can take it.
+  async lookupDevices(
+    query: { serialNumber?: string; imei?: string; imei2?: string },
+    signal?: AbortSignal,
+  ) {
+    return lookupServiceDevices(query, this.deps, signal);
+  }
+
+  async listTechnicianCandidates(branchId: number, signal?: AbortSignal) {
+    return fetchServiceTechnicianCandidates(branchId, this.deps, signal);
   }
 
 }
