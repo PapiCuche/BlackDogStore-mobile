@@ -223,6 +223,12 @@ export const queryKeys = {
   // M12B. The ledger and the balance hang off the same order. A payment or a
   // reversal changes BOTH — and the order's deliverability with them — so every
   // write invalidates the service root rather than one of these.
+  // SERVICE-TRACKING. Under the order: rotating or revoking the link changes
+  // who can see that repair, and the status shown next to it must move with it.
+  // The REVEALED link is never a query key — it is handed over once, held in
+  // memory by the screen, and not cached.
+  internalServiceTrackingLink: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'tracking-link'] as const,
   internalServicePayments: (scope: QueryScope, orderId: number) =>
     [...internalPrefix(scope), 'service', 'order', orderId, 'payments'] as const,
   internalServicePaymentSummary: (scope: QueryScope, orderId: number) =>
