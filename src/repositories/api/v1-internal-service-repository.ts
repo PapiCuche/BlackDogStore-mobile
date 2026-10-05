@@ -1,4 +1,6 @@
 import {
+  postServiceQuoteReopen,
+  postServiceQuoteStaffDecision,
   fetchServiceDelivery,
   postServiceDelivery,
   fetchServicePayments,
@@ -44,6 +46,7 @@ import {
   type ServiceOrderQuery,
 } from '@/api/endpoints/internal-service-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
+import type { StaffQuoteDecisionInput } from '@/domain/internal/service-types';
 import type {
   ServiceDeliveryInput,
   ServicePaymentInput,
@@ -422,4 +425,23 @@ export class V1InternalServiceRepository {
   ) {
     return postServicePaymentReverse(orderId, paymentId, reason, this.deps, signal);
   }
+
+  /**
+   * SERVICE-TRACKING. The answer a customer gave a person, and reopening an
+   * approval when the work turns out to be different. Two capabilities, not
+   * one: recording a decision is not quoting.
+   */
+  async recordQuoteDecision(
+    orderId: number,
+    quoteId: number,
+    input: StaffQuoteDecisionInput,
+    signal?: AbortSignal,
+  ) {
+    return postServiceQuoteStaffDecision(orderId, quoteId, input, this.deps, signal);
+  }
+
+  async reopenQuote(orderId: number, quoteId: number, reason: string, signal?: AbortSignal) {
+    return postServiceQuoteReopen(orderId, quoteId, reason, this.deps, signal);
+  }
+
 }

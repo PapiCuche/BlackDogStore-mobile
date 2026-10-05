@@ -708,3 +708,43 @@ export type CustomerPaymentSummary = {
   outstanding: string | null;
   status: PaymentStatus;
 };
+
+/**
+ * Recording what the customer answered — SERVICE-TRACKING.
+ *
+ * ITS OWN CAPABILITY on the server, on top of `service.orders.view`. Writing
+ * down an approval starts a repair and commits the customer to a price, so the
+ * person who composed the quote is not, by that alone, the person who may say
+ * it was accepted.
+ */
+export const CAP_SERVICE_QUOTE_RECORD_DECISION = 'service.quotes.record_decision';
+
+/**
+ * How a customer's answer reached the shop, when it reached a PERSON.
+ *
+ * `RepairQuoteDecision.STAFF_CHANNELS` on the server, and deliberately short:
+ * the customer's OWN channels (the app, the tracking link) are not in this
+ * list, because a staff member must not be able to record an answer as if the
+ * customer had given it themselves.
+ */
+export type StaffDecisionChannel = 'in_person' | 'phone' | 'whatsapp' | 'other';
+
+export const STAFF_DECISION_CHANNELS: readonly {
+  value: StaffDecisionChannel;
+  label: string;
+}[] = [
+  { value: 'in_person', label: 'En persona' },
+  { value: 'phone', label: 'Por teléfono' },
+  { value: 'whatsapp', label: 'Por WhatsApp' },
+  { value: 'other', label: 'Otro medio' },
+];
+
+/** What a staff member writes down. The actor comes from the session. */
+export type StaffQuoteDecisionInput = {
+  decision: 'approved' | 'rejected';
+  channel: StaffDecisionChannel;
+  /** Free text; the server collapses whitespace and refuses over 300 chars. */
+  note?: string;
+};
+
+export const STAFF_DECISION_NOTE_MAX_LENGTH = 300;

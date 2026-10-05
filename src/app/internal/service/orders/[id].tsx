@@ -28,6 +28,7 @@ import {
   CAP_SERVICE_QUALITY_MANAGE,
   CAP_SERVICE_REPAIR_MANAGE,
   CAP_SERVICE_ORDERS_MANAGE,
+  CAP_SERVICE_QUOTE_RECORD_DECISION,
   CAP_SERVICE_ORDERS_VIEW,
 } from '@/domain/internal/service-types';
 import { hasUxCapability } from '@/domain/internal/types';
@@ -45,6 +46,8 @@ import {
   useCreateDiagnostic,
   useCreateQuote,
   usePublishQuote,
+  useRecordQuoteDecision,
+  useReopenQuote,
   useRemoveQuoteItem,
   useServiceAssignmentOptions,
   useServiceDiagnostics,
@@ -128,6 +131,15 @@ export default function ServiceOrderDetailScreen() {
   const removeItem = useRemoveQuoteItem(orderId);
   const publishQuote = usePublishQuote(orderId);
   const cancelQuote = useCancelQuote(orderId);
+  // SERVICE-TRACKING. Recording the answer is its OWN capability: the person
+  // who wrote the quote is not, by that alone, the person who may say it was
+  // accepted. Reopening is quoting again, so it rides with `mayQuote`.
+  const mayRecordDecision = hasUxCapability(
+    context ?? null,
+    CAP_SERVICE_QUOTE_RECORD_DECISION,
+  );
+  const recordDecision = useRecordQuoteDecision(orderId);
+  const reopenQuote = useReopenQuote(orderId);
 
   // M10. Working the bench is its OWN capability, separate from moving the
   // order and separate from quoting. A shop can hand the counter one without
@@ -321,13 +333,16 @@ export default function ServiceOrderDetailScreen() {
           <ServiceQuoteSection
             quotes={quotes.data?.results ?? []}
             canManage={mayQuote}
+            canRecordDecision={mayRecordDecision}
             isBusy={
               createQuote.isPending || addItem.isPending || removeItem.isPending
               || publishQuote.isPending || cancelQuote.isPending
+              || recordDecision.isPending || reopenQuote.isPending
             }
             error={
               createQuote.error ?? addItem.error ?? removeItem.error
               ?? publishQuote.error ?? cancelQuote.error
+              ?? recordDecision.error ?? reopenQuote.error
             }
             onCreate={() =>
               createQuote.mutate({
@@ -338,6 +353,8 @@ export default function ServiceOrderDetailScreen() {
             onRemoveItem={(quoteId, itemId) => removeItem.mutate({ quoteId, itemId })}
             onPublish={(quoteId) => publishQuote.mutate({ quoteId })}
             onCancel={(quoteId) => cancelQuote.mutate({ quoteId })}
+            onRecordDecision={(quoteId, input) => recordDecision.mutate({ quoteId, input })}
+            onReopen={(quoteId, reason) => reopenQuote.mutate({ quoteId, reason })}
           />
 
           {/* M10 / BR-005C. These two are the FORWARD PATH from `approved`.

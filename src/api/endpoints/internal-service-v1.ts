@@ -37,6 +37,7 @@ import type {
   ServiceOrderDetail,
   ServiceOrderInput,
   ServiceOrderPage,
+  StaffQuoteDecisionInput,
 } from '@/domain/internal/service-types';
 
 import { authenticatedRequest } from '../authenticated-request';
@@ -947,6 +948,79 @@ export async function postServiceQuotePublish(
         deps,
       ),
     );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Write down the answer the customer gave a PERSON — SERVICE-TRACKING.
+ *
+ * ITS OWN CAPABILITY, `service.quotes.record_decision`, on top of
+ * `service.orders.view`. Recording an approval starts a repair and commits the
+ * customer to a price, so the person who wrote the quote is not, by that
+ * alone, the person who may say it was accepted.
+ *
+ * The body names the answer, the channel it arrived by and an optional note.
+ * It cannot name who is recording it — the session does — and it cannot claim
+ * one of the customer's own channels: the server's `STAFF_CHANNELS` has four
+ * values and none of them is the app or the tracking link.
+ *
+ * A 409 means the quote already has an answer. That is a domain outcome, and
+ * the server's sentence is what the operator needs to read.
+ */
+export async function postServiceQuoteStaffDecision(
+  orderId: number,
+  quoteId: number,
+  input: StaffQuoteDecisionInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQuote> {
+  const body: Record<string, unknown> = {
+    decision: input.decision,
+    channel: input.channel,
+  };
+  // Omitted rather than sent empty: an absent note and a blank one are the
+  // same to the server, and sending `''` suggests the operator wrote nothing
+  // on purpose.
+  if (input.note && input.note.trim()) body.note = input.note.trim();
+
+  try {
+    const raw = await authenticatedRequest<unknown>(
+      `${orderPath(orderId)}/quotes/${encodeURIComponent(String(quoteId))}/decision/`,
+      { method: 'POST', body, scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return toServiceQuote((raw as Row)?.quote ?? raw);
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * The approved work changed: void the approval and quote again.
+ *
+ * `service.diagnostic.manage`, because this is quoting, not deciding. The
+ * answer is the NEW draft revision; the approved quote is left `superseded`
+ * WITH its decision, so what was agreed before is still answerable.
+ */
+export async function postServiceQuoteReopen(
+  orderId: number,
+  quoteId: number,
+  reason: string,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceQuote> {
+  const body: Record<string, unknown> = {};
+  if (reason.trim()) body.reason = reason.trim();
+
+  try {
+    const raw = await authenticatedRequest<unknown>(
+      `${orderPath(orderId)}/quotes/${encodeURIComponent(String(quoteId))}/reopen/`,
+      { method: 'POST', body, scope: 'authenticated-v1', signal },
+      deps,
+    );
+    return toServiceQuote((raw as Row)?.quote ?? raw);
   } catch (error) {
     return translate(error, true);
   }
