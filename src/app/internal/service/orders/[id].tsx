@@ -41,6 +41,7 @@ import { ServiceExecutionSection } from '@/features/internal/service-execution-s
 import { ServicePartsSection } from '@/features/internal/service-parts-section';
 import { ServiceQualitySection } from '@/features/internal/service-quality-section';
 import { ServiceEvidenceSection } from '@/features/internal/service-evidence-section';
+import { ServiceNoticesSection } from '@/features/internal/service-notices-section';
 import { EVIDENCE_STAGE_CAPABILITY } from '@/domain/internal/evidence-types';
 import { internalEvidenceContentUrl } from '@/api/endpoints/internal-service-evidence-v1';
 import { ServiceQuoteSection } from '@/features/internal/service-quote-section';
@@ -59,6 +60,7 @@ import {
   useServiceEvidence,
   useServiceEvidenceAuthorization,
   usePublishEvidence,
+  useRetryWhatsAppNotice,
   useHideEvidence,
   useVoidEvidence,
   useServiceOrder,
@@ -154,6 +156,9 @@ export default function ServiceOrderDetailScreen() {
   const evidenceAuth = useServiceEvidenceAuthorization({
     enabled: (evidence.data?.length ?? 0) > 0,
   });
+  // WHATSAPP-NOTIFY. Resending takes `service.orders.manage`, which `mayManage`
+  // already carries; the server re-checks and scopes the notice to this order.
+  const retryNotice = useRetryWhatsAppNotice(orderId);
   const publishEvidence = usePublishEvidence(orderId);
   const hideEvidence = useHideEvidence(orderId);
   const voidEvidence = useVoidEvidence(orderId);
@@ -667,6 +672,23 @@ export default function ServiceOrderDetailScreen() {
           {/* M12D. After the work and before the history: a photo is evidence
               about what was done, and it belongs next to the record rather than
               above the decisions. */}
+          {/* WHATSAPP-NOTIFY. Between the work and the photos: "was the
+              customer told?" is the question somebody asks right after moving
+              an order, and before looking at evidence. The statuses were
+              already in the order payload and the app simply never read them. */}
+          <View>
+            <SectionHeader title="Avisos al cliente" />
+            <Card variant="outlined">
+              <ServiceNoticesSection
+                notices={order.customerNotices}
+                mayRetry={mayManage}
+                isRetrying={retryNotice.isPending}
+                error={retryNotice.error}
+                onRetry={(noticeId) => retryNotice.mutate({ noticeId })}
+              />
+            </Card>
+          </View>
+
           <View>
             <SectionHeader title="Fotos" />
             <Card variant="outlined">

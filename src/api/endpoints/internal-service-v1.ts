@@ -36,7 +36,10 @@ import type {
   ServiceOrder,
   ServiceOrderDetail,
   ServiceOrderInput,
+  CustomerNotice,
+  NotificationDeliveryStatus,
   ServiceDeviceMatch,
+  WhatsAppConsent,
   ServiceOrderPage,
   ServiceTrackingLink,
   ServiceTrackingReveal,
@@ -175,6 +178,44 @@ function num(value: unknown, fallback = 0): number {
  * A device the shop may already know, with the history that makes the answer
  * useful: how many times it has been in, and how the last visit ended.
  */
+const DELIVERY_STATUSES: readonly string[] = [
+  'pending', 'sent', 'delivered', 'read', 'failed', 'skipped', 'not_applicable',
+];
+
+function toDeliveryStatus(raw: unknown): NotificationDeliveryStatus {
+  const value = str(raw);
+  // An unknown word reads as `not_applicable`, never as `delivered`: telling an
+  // operator a message arrived is a claim about the customer having been told.
+  return (DELIVERY_STATUSES.includes(value)
+    ? value
+    : 'not_applicable') as NotificationDeliveryStatus;
+}
+
+/**
+ * One notice the shop sent about a repair, and what became of it.
+ *
+ * Read straight from the server's `customer_notification_payload`, which reads
+ * it from the delivery rows. Nothing here infers a status from another one.
+ */
+export function toCustomerNotice(raw: unknown): CustomerNotice {
+  const row = (raw ?? {}) as Row;
+  return {
+    id: Number(row.id),
+    title: str(row.title),
+    createdAt: str(row.created_at),
+    emailStatus: toDeliveryStatus(row.email_status),
+    whatsappStatus: toDeliveryStatus(row.whatsapp_status),
+    whatsappDetail:
+      row.whatsapp_detail === null || row.whatsapp_detail === undefined
+        ? null
+        : str(row.whatsapp_detail),
+    whatsappRecipient:
+      row.whatsapp_recipient === null || row.whatsapp_recipient === undefined
+        ? null
+        : str(row.whatsapp_recipient),
+  };
+}
+
 export function toServiceDeviceMatch(raw: unknown): ServiceDeviceMatch {
   const row = (raw ?? {}) as Row;
   const last = (row.last_repair_order ?? null) as Row | null;
@@ -280,6 +321,11 @@ export function toServiceOrderDetail(raw: unknown): ServiceOrderDetail {
           const option = entry as Row;
           return { code: str(option.code), label: str(option.label) };
         })
+      : [],
+    // WHATSAPP-NOTIFY. Already in the order payload; the app simply never read
+    // it, so the counter could not tell whether the customer had been told.
+    customerNotices: Array.isArray(row.customer_notifications)
+      ? row.customer_notifications.map(toCustomerNotice)
       : [],
   };
 }
@@ -507,6 +553,86 @@ export async function fetchServiceTechnicianCandidates(
       const row = entry as Row;
       return { id: Number(row.id), name: str(row.name) };
     });
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Send a failed WhatsApp notice again — WHATSAPP-NOTIFY.
+ *
+ * `service.orders.manage`, and scoped hard by the server: the delivery must
+ * belong to a CUSTOMER notice whose target is THIS repair order in THIS
+ * company, so a notification id from elsewhere is 404.
+ *
+ * The answer is the notice as it now stands, which is what the list redraws
+ * from — never an assumption that the retry worked.
+ */
+export async function retryWhatsAppNotice(
+  orderId: number,
+  noticeId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<CustomerNotice> {
+  try {
+    return toCustomerNotice(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/notifications/${encodeURIComponent(
+          String(noticeId),
+        )}/whatsapp/retry/`,
+        { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+export function toWhatsAppConsent(raw: unknown): WhatsAppConsent {
+  const row = (raw ?? {}) as Row;
+  return {
+    // Absent reads as NO consent. A phone number on file is not permission,
+    // and defaulting the other way would message somebody who never agreed.
+    optIn: row.whatsapp_opt_in === true,
+    optInAt:
+      row.whatsapp_opt_in_at === null || row.whatsapp_opt_in_at === undefined
+        ? null
+        : str(row.whatsapp_opt_in_at),
+    optInSource:
+      row.whatsapp_opt_in_source === null || row.whatsapp_opt_in_source === undefined
+        ? null
+        : str(row.whatsapp_opt_in_source),
+    optOutAt:
+      row.whatsapp_opt_out_at === null || row.whatsapp_opt_out_at === undefined
+        ? null
+        : str(row.whatsapp_opt_out_at),
+  };
+}
+
+/**
+ * Record that the customer agreed to be messaged, or no longer does.
+ *
+ * `service.customers.manage`. The server demands a real boolean — it refuses
+ * anything else with 400 — and writes who recorded it, when, and that it came
+ * from the counter. The app sends the answer and nothing about the actor.
+ */
+export async function postWhatsAppConsent(
+  customerId: number,
+  optIn: boolean,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<WhatsAppConsent> {
+  try {
+    return toWhatsAppConsent(
+      await authenticatedRequest<unknown>(
+        `${servicePath(requireTenant())}/customers/${encodeURIComponent(
+          String(customerId),
+        )}/whatsapp-consent/`,
+        { method: 'POST', body: { opt_in: optIn }, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
   } catch (error) {
     return translate(error, true);
   }

@@ -1,3 +1,4 @@
+import type { StatusTone } from '@/domain/orders/status';
 /**
  * The INTERNAL audience's view of the workshop.
  *
@@ -123,6 +124,8 @@ export type ServiceTransitionOption = {
 };
 
 export type ServiceOrderDetail = ServiceOrder & {
+  /** WHATSAPP-NOTIFY. What the shop told the customer, and what became of it. */
+  customerNotices: readonly CustomerNotice[];
   reportedIssue: string;
   physicalCondition: string;
   receivedAccessories: string;
@@ -835,3 +838,81 @@ export function isDeviceLookupWorthAsking(input: {
   const imei = normaliseDeviceImei(input.imei ?? '');
   return serial.length >= DEVICE_SERIAL_MIN_LENGTH || imei.length === DEVICE_IMEI_LENGTH;
 }
+
+
+/**
+ * One notice the shop sent the customer about a repair — WHATSAPP-NOTIFY.
+ *
+ * WHAT HAPPENED IS READ, NEVER ASSUMED. The server builds each status from the
+ * delivery rows, so `sent` means a provider took the message — not that the
+ * app asked for it. `not_applicable` is its own answer: this channel was never
+ * part of this notice.
+ *
+ * The recipient arrives MASKED and the failure reason is the short stored one.
+ * No payload, no template, no credential: a screen that showed the message body
+ * would be showing what the provider was handed, which nobody at the counter
+ * needs.
+ */
+export type NotificationDeliveryStatus =
+  | 'pending'
+  | 'sent'
+  | 'delivered'
+  | 'read'
+  | 'failed'
+  | 'skipped'
+  | 'not_applicable';
+
+export type CustomerNotice = {
+  id: number;
+  title: string;
+  createdAt: string;
+  emailStatus: NotificationDeliveryStatus;
+  whatsappStatus: NotificationDeliveryStatus;
+  /** The short failure reason the server stored, or null. */
+  whatsappDetail: string | null;
+  /** Masked by the server, e.g. `+51 9•• ••• 123`. Null when not applicable. */
+  whatsappRecipient: string | null;
+};
+
+export function describeDeliveryStatus(
+  status: NotificationDeliveryStatus,
+): { label: string; tone: StatusTone } {
+  switch (status) {
+    case 'read':
+      return { label: 'Leída', tone: 'success' };
+    case 'delivered':
+      return { label: 'Entregada', tone: 'success' };
+    case 'sent':
+      return { label: 'Enviada', tone: 'info' };
+    case 'pending':
+      return { label: 'Pendiente', tone: 'progress' };
+    case 'failed':
+      return { label: 'Falló', tone: 'danger' };
+    case 'skipped':
+      return { label: 'Omitida', tone: 'neutral' };
+    case 'not_applicable':
+      return { label: 'No aplica', tone: 'neutral' };
+  }
+}
+
+/** Only a failed WhatsApp message can be sent again. */
+export function mayRetryWhatsApp(notice: CustomerNotice): boolean {
+  return notice.whatsappStatus === 'failed';
+}
+
+/**
+ * Whether the customer agreed to be messaged, and when — WHATSAPP-NOTIFY.
+ *
+ * A PHONE NUMBER ON FILE IS NOT CONSENT. The shop records the answer the
+ * customer gave a person, with the date and who recorded it, and this is the
+ * only place that answer is written from a panel.
+ */
+export type WhatsAppConsent = {
+  optIn: boolean;
+  optInAt: string | null;
+  /** How the answer arrived, e.g. `counter`. */
+  optInSource: string | null;
+  optOutAt: string | null;
+};
+
+export const CAP_SERVICE_CUSTOMERS_MANAGE = 'service.customers.manage';
