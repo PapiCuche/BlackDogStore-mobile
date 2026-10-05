@@ -1,3 +1,4 @@
+import { CAP_COMMUNICATIONS_MANAGE } from '@/domain/internal/announcement-types';
 import { CAP_INVENTORY_VIEW } from '@/domain/internal/inventory-types';
 import { CAP_SALES_POS_USE } from '@/domain/internal/pos-types';
 import { CAP_SERVICE_ORDERS_VIEW } from '@/domain/internal/service-types';
@@ -103,6 +104,17 @@ export const INTERNAL_MODULES: readonly InternalModule[] = [
     requires: null,
     integration: 'ready',
     route: '/internal/notifications',
+  },
+  {
+    key: 'communications',
+    title: 'Comunicados',
+    description: 'Lo que la empresa comunicó, y cuántos lo leyeron.',
+    // M12C. The SENDER's view: it lists drafts and discarded messages, so it
+    // asks for the capability that administers them. Reading a communiqué
+    // addressed to you needs none and lives in the inbox.
+    requires: CAP_COMMUNICATIONS_MANAGE,
+    integration: 'ready',
+    route: '/internal/communications',
   },
   {
     key: 'settings',
