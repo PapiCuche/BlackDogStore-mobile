@@ -32,6 +32,8 @@ import {
   CAP_SERVICE_ORDERS_VIEW,
 } from '@/domain/internal/service-types';
 import { hasUxCapability } from '@/domain/internal/types';
+import { ServiceTrackingLinkSection } from '@/features/internal/service-tracking-link-section';
+import type { ServiceTrackingReveal } from '@/domain/internal/service-types';
 import { ServiceDeliverySection } from '@/features/internal/service-delivery-section';
 import { ServicePaymentSection } from '@/features/internal/service-payment-section';
 import { ServiceDiagnosticSection } from '@/features/internal/service-diagnostic-section';
@@ -75,6 +77,10 @@ import {
   useRecordPartUsage,
   useReversePartUsage,
   useServiceTransition,
+  useServiceTrackingLink,
+  useRevealTrackingLink,
+  useRotateTrackingLink,
+  useRevokeTrackingLink,
   useUpdateDiagnostic,
 } from '@/hooks/use-internal-service';
 import { useInternalContext } from '@/hooks/use-internal-sales';
@@ -114,6 +120,21 @@ export default function ServiceOrderDetailScreen() {
   );
   const transition = useServiceTransition();
   const assign = useAssignTechnician();
+
+  // SERVICE-TRACKING. The status rides along with `service.orders.view`; the
+  // link itself is handed over by an audited act the server gates on
+  // `service.quotes.record_decision` and reports back as `canReveal`.
+  const trackingLink = useServiceTrackingLink(
+    Number.isFinite(orderId) ? orderId : undefined,
+    { enabled: mayView },
+  );
+  const revealLink = useRevealTrackingLink(orderId);
+  const rotateLink = useRotateTrackingLink(orderId);
+  const revokeLink = useRevokeTrackingLink(orderId);
+  // Held here, never cached: the revealed link is a bearer credential for one
+  // customer's repair. It dies with the screen, and rotating or revoking drops
+  // it immediately because what it points at stopped being true.
+  const [revealedLink, setRevealedLink] = useState<ServiceTrackingReveal | null>(null);
 
   // BR-005B. Reading uses `service.orders.view` — the same capability that
   // opened this order — so these two load alongside it. Composing is gated on
@@ -473,6 +494,44 @@ export default function ServiceOrderDetailScreen() {
               })
             }
           />
+
+          {/* SERVICE-TRACKING. Below the lifecycle controls and above the
+              technician: handing a customer their link is part of running the
+              order, not part of diagnosing it. The whole section waits for the
+              status rather than guessing — a reveal button drawn before the
+              server said `canReveal` would be an offer it then refuses. */}
+          {trackingLink.data ? (
+            <View>
+              <SectionHeader title="Seguimiento del cliente" />
+              <Card variant="outlined">
+                <ServiceTrackingLinkSection
+                  link={trackingLink.data}
+                  mayManage={mayManage}
+                  revealed={revealedLink}
+                  isRevealing={revealLink.isPending}
+                  isChanging={rotateLink.isPending || revokeLink.isPending}
+                  error={revealLink.error ?? rotateLink.error ?? revokeLink.error}
+                  onReveal={() =>
+                    revealLink.mutate(undefined, {
+                      onSuccess: (result: ServiceTrackingReveal) => setRevealedLink(result),
+                    })
+                  }
+                  onRotate={() =>
+                    rotateLink.mutate(undefined, {
+                      // The old link stopped working, so showing it would be
+                      // handing out an address that now refuses the customer.
+                      onSuccess: () => setRevealedLink(null),
+                    })
+                  }
+                  onRevoke={() =>
+                    revokeLink.mutate(undefined, {
+                      onSuccess: () => setRevealedLink(null),
+                    })
+                  }
+                />
+              </Card>
+            </View>
+          ) : null}
 
           {/* Only with `service.orders.manage`. The server re-checks anyway, so
               a 403 here is a normal outcome — the permission may have been

@@ -37,6 +37,8 @@ import type {
   ServiceOrderDetail,
   ServiceOrderInput,
   ServiceOrderPage,
+  ServiceTrackingLink,
+  ServiceTrackingReveal,
   StaffQuoteDecisionInput,
 } from '@/domain/internal/service-types';
 
@@ -637,6 +639,120 @@ export function serviceErrorMessage(error: unknown): string {
 }
 
 export { InternalAccessDeniedError, InternalCapabilityMissingError, MissingTenantError };
+
+// ---------------------------------------------------------------------------
+// SERVICE-TRACKING — the customer's public link to one repair
+// ---------------------------------------------------------------------------
+
+/**
+ * Four routes, three capabilities, on purpose:
+ *
+ *   GET  tracking-link/          `service.orders.view`            — is it live?
+ *   POST tracking-link/reveal/   `service.quotes.record_decision` — the link
+ *   POST tracking-link/rotate/   `service.orders.manage`          — replace it
+ *   POST tracking-link/revoke/   `service.orders.manage`          — turn it off
+ *
+ * Revealing is gated harder than opening the order because whoever holds the
+ * link can answer the quote AS the customer. Rotate and revoke change who can
+ * see the order, and neither answers with the link.
+ */
+export function toServiceTrackingLink(raw: unknown): ServiceTrackingLink {
+  const row = (raw ?? {}) as Row;
+  const views = Number(row.view_count);
+  return {
+    active: row.active === true,
+    viewCount: Number.isFinite(views) && views > 0 ? views : 0,
+    lastViewedAt:
+      row.last_viewed_at === null || row.last_viewed_at === undefined
+        ? null
+        : str(row.last_viewed_at),
+    // Absent reads as NOT allowed. Drawing a reveal button the server would
+    // refuse is worse than hiding one it would have allowed.
+    canReveal: row.can_reveal === true,
+  };
+}
+
+export async function fetchServiceTrackingLink(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceTrackingLink> {
+  try {
+    return toServiceTrackingLink(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/tracking-link/`,
+        { scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/**
+ * Ask for the link itself.
+ *
+ * A 409 is a real domain answer, not a fault: the order's link was revoked, so
+ * there is nothing to hand over until somebody creates a new one. It arrives as
+ * `ServiceRejectedError` with the server's own sentence, which the screen
+ * shows unchanged.
+ */
+export async function revealServiceTrackingLink(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceTrackingReveal> {
+  try {
+    const raw = await authenticatedRequest<unknown>(
+      `${orderPath(orderId)}/tracking-link/reveal/`,
+      { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+      deps,
+    );
+    const row = (raw ?? {}) as Row;
+    return { url: str(row.url), path: str(row.path) };
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/** Replace the link. The old one stops working; the answer is the new status. */
+export async function rotateServiceTrackingLink(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceTrackingLink> {
+  try {
+    return toServiceTrackingLink(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/tracking-link/rotate/`,
+        { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
+
+/** Turn the link off. Nothing is handed back but the status. */
+export async function revokeServiceTrackingLink(
+  orderId: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<ServiceTrackingLink> {
+  try {
+    return toServiceTrackingLink(
+      await authenticatedRequest<unknown>(
+        `${orderPath(orderId)}/tracking-link/revoke/`,
+        { method: 'POST', body: {}, scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error, true);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // BR-005B — diagnosis and quotes

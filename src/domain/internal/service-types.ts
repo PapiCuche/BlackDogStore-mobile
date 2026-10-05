@@ -209,6 +209,16 @@ export type ServiceOrderInput = {
 export const CAP_SERVICE_ORDERS_VIEW = 'service.orders.view';
 export const CAP_SERVICE_ORDERS_CREATE = 'service.orders.create';
 export const CAP_SERVICE_ORDERS_MANAGE = 'service.orders.manage';
+/**
+ * SERVICE-TRACKING. Its own capability, and the gate on revealing a link.
+ *
+ * WHOEVER HOLDS THE LINK CAN ANSWER THE QUOTE AS THE CUSTOMER, so the server
+ * hands it only to somebody who may already record that decision. A person who
+ * can quote but cannot record decisions must not be able to fetch the link and
+ * approve their own quote with it — which is why reading the link is NOT part
+ * of what "may open the order" allows.
+ */
+export const CAP_SERVICE_QUOTE_RECORD_DECISION = 'service.quotes.record_decision';
 export const CAP_SERVICE_DEVICES_VIEW = 'service.devices.view';
 export const CAP_SERVICE_DEVICES_MANAGE = 'service.devices.manage';
 export const CAP_SERVICE_CUSTOMERS_VIEW = 'service.customers.view';
@@ -709,15 +719,38 @@ export type CustomerPaymentSummary = {
   status: PaymentStatus;
 };
 
+
 /**
- * Recording what the customer answered — SERVICE-TRACKING.
+ * Whether an order's public tracking link is live, and how it is being used —
+ * SERVICE-TRACKING.
  *
- * ITS OWN CAPABILITY on the server, on top of `service.orders.view`. Writing
- * down an approval starts a repair and commits the customer to a price, so the
- * person who composed the quote is not, by that alone, the person who may say
- * it was accepted.
+ * NOT THE LINK ITSELF. Every order has one from reception, and this payload is
+ * what anybody who may open the order can know about it: that it exists, how
+ * many times it was opened, and when. Revealing is a separate, audited act.
+ *
+ * `canReveal` is the SERVER's answer about the caller, not a role read locally.
+ * The app uses it to decide what to draw; the route re-checks regardless.
  */
-export const CAP_SERVICE_QUOTE_RECORD_DECISION = 'service.quotes.record_decision';
+export type ServiceTrackingLink = {
+  active: boolean;
+  viewCount: number;
+  lastViewedAt: string | null;
+  canReveal: boolean;
+};
+
+/**
+ * The link, handed over once so staff can give it to the customer.
+ *
+ * Held in memory and never cached to disk: this is a bearer credential for the
+ * customer view of one repair, and the audit entry deliberately does not store
+ * it either.
+ */
+export type ServiceTrackingReveal = {
+  /** Absolute URL, built by the server from its own `FRONTEND_URL`. */
+  url: string;
+  /** The same destination as a path, for display when the host is noise. */
+  path: string;
+};
 
 /**
  * How a customer's answer reached the shop, when it reached a PERSON.
