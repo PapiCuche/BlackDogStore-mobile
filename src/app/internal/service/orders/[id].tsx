@@ -40,6 +40,9 @@ import { ServiceDiagnosticSection } from '@/features/internal/service-diagnostic
 import { ServiceExecutionSection } from '@/features/internal/service-execution-section';
 import { ServicePartsSection } from '@/features/internal/service-parts-section';
 import { ServiceQualitySection } from '@/features/internal/service-quality-section';
+import { ServiceEvidenceSection } from '@/features/internal/service-evidence-section';
+import { EVIDENCE_STAGE_CAPABILITY } from '@/domain/internal/evidence-types';
+import { internalEvidenceContentUrl } from '@/api/endpoints/internal-service-evidence-v1';
 import { ServiceQuoteSection } from '@/features/internal/service-quote-section';
 import {
   useAddQuoteItem,
@@ -53,6 +56,11 @@ import {
   useRemoveQuoteItem,
   useServiceAssignmentOptions,
   useServiceDiagnostics,
+  useServiceEvidence,
+  useServiceEvidenceAuthorization,
+  usePublishEvidence,
+  useHideEvidence,
+  useVoidEvidence,
   useServiceOrder,
   useServiceExecution,
   useServicePartCandidates,
@@ -135,6 +143,20 @@ export default function ServiceOrderDetailScreen() {
   // customer's repair. It dies with the screen, and rotating or revoking drops
   // it immediately because what it points at stopped being true.
   const [revealedLink, setRevealedLink] = useState<ServiceTrackingReveal | null>(null);
+
+  // M12D. Reading the photos takes `service.orders.view`, the same capability
+  // that opened the order; acting on one takes the capability ITS STAGE demands
+  // plus branch access, which is asked per photo below and re-checked by the
+  // server on every write.
+  const evidence = useServiceEvidence(Number.isFinite(orderId) ? orderId : undefined, {
+    enabled: mayView,
+  });
+  const evidenceAuth = useServiceEvidenceAuthorization({
+    enabled: (evidence.data?.length ?? 0) > 0,
+  });
+  const publishEvidence = usePublishEvidence(orderId);
+  const hideEvidence = useHideEvidence(orderId);
+  const voidEvidence = useVoidEvidence(orderId);
 
   // BR-005B. Reading uses `service.orders.view` — the same capability that
   // opened this order — so these two load alongside it. Composing is gated on
@@ -641,6 +663,33 @@ export default function ServiceOrderDetailScreen() {
               </Card>
             </View>
           ) : null}
+
+          {/* M12D. After the work and before the history: a photo is evidence
+              about what was done, and it belongs next to the record rather than
+              above the decisions. */}
+          <View>
+            <SectionHeader title="Fotos" />
+            <Card variant="outlined">
+              <ServiceEvidenceSection
+                evidence={evidence.data ?? []}
+                authorization={evidenceAuth.data ?? null}
+                contentUrl={(evidenceId) => internalEvidenceContentUrl(orderId, evidenceId)}
+                canActOnStage={(item) =>
+                  hasUxCapability(
+                    context ?? null,
+                    EVIDENCE_STAGE_CAPABILITY[item.stage],
+                  )
+                }
+                isBusy={
+                  publishEvidence.isPending || hideEvidence.isPending || voidEvidence.isPending
+                }
+                error={publishEvidence.error ?? hideEvidence.error ?? voidEvidence.error}
+                onPublish={(evidenceId) => publishEvidence.mutate({ evidenceId })}
+                onHide={(evidenceId) => hideEvidence.mutate({ evidenceId })}
+                onVoid={(evidenceId, reason) => voidEvidence.mutate({ evidenceId, reason })}
+              />
+            </Card>
+          </View>
 
           <View>
             <SectionHeader title="Historial" />

@@ -278,6 +278,15 @@ export const queryKeys = {
   // memory by the screen, and not cached.
   internalServiceTrackingLink: (scope: QueryScope, orderId: number) =>
     [...internalPrefix(scope), 'service', 'order', orderId, 'tracking-link'] as const,
+
+  // M12D. Under the order, like everything else about it: sharing or retiring
+  // a photo changes what the customer can see, and a stale list would keep
+  // offering a button the content route now refuses.
+  internalServiceEvidence: (scope: QueryScope, orderId: number) =>
+    [...internalPrefix(scope), 'service', 'order', orderId, 'evidence'] as const,
+  /** One Bearer header per user, not one per photo. */
+  internalEvidenceAuthorization: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'service', 'evidence-authorization'] as const,
   internalServicePayments: (scope: QueryScope, orderId: number) =>
     [...internalPrefix(scope), 'service', 'order', orderId, 'payments'] as const,
   internalServicePaymentSummary: (scope: QueryScope, orderId: number) =>

@@ -1,9 +1,10 @@
 import { apiBaseUrl, companySlug } from '@/config/env';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
-import { accessTokenStore, type AccessTokenStore } from '@/auth/tokens/access-token-store';
+import type { AccessTokenStore } from '@/auth/tokens/access-token-store';
 import type { RepairEvidence, RepairEvidenceStage } from '@/domain/repairs/evidence';
 import { EVIDENCE_STAGES } from '@/domain/repairs/evidence';
 
+import { resolveImageAuthorization } from '../authenticated-image';
 import { authenticatedRequest } from '../authenticated-request';
 import { ApiError } from '../errors';
 
@@ -118,24 +119,12 @@ export function customerEvidenceContentUrl(repairId: number, evidenceId: number)
 /**
  * The Authorization header the image request needs.
  *
- * Refreshes first when the access token is missing or near expiry, the same
- * order `authenticatedRequest` uses — an image loader cannot retry on 401 the
- * way the JSON pipeline does, so the token is made good BEFORE the request
- * rather than after it fails.
- *
- * The token is never persisted anywhere by this module: it is read from the
- * in-memory store, handed to one `<Image>` source, and that is all.
+ * Delegates to `api/authenticated-image.ts`, which the INTERNAL evidence
+ * surface needs too: one place that knows how to make a token good before an
+ * `<Image>` request, rather than two that can drift.
  */
 export async function resolveEvidenceAuthorization(
   deps: { refreshCoordinator: RefreshCoordinator; accessTokens?: AccessTokenStore },
 ): Promise<string> {
-  const accessTokens = deps.accessTokens ?? accessTokenStore;
-  const existing = accessTokens.get();
-  if (existing) return `Bearer ${existing}`;
-
-  const outcome = await deps.refreshCoordinator.refresh();
-  if (outcome.status !== 'refreshed') {
-    throw new ApiError('unauthorized', 'La sesión expiró.', { status: 401 });
-  }
-  return `Bearer ${outcome.accessToken}`;
+  return resolveImageAuthorization(deps);
 }
