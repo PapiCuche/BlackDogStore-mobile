@@ -171,15 +171,29 @@ describe('the platform surface', () => {
   });
 
   it('exports no authoring path', () => {
-    // Publishing one of these writes a notification row for every recipient in
-    // every company it names. Not from a phone, and not without an audience
-    // editor that makes the blast legible.
+    // The tenant surface gained authoring because `all_company` names no
+    // identifier. Here the only composable audience is `ALL_ACTIVE_COMPANIES`
+    // crossed with `all_company` — a notification row for every person in every
+    // company — because no v1 route lists the companies. Offering that as the
+    // ONLY send available would make the broadest act the easy one. It waits
+    // for BR-012, so that sending to ONE company becomes possible at the same
+    // time.
     const { module } = load();
 
     const names = Object.keys(module).map((n) => n.toLowerCase());
     for (const forbidden of ['create', 'publish', 'patch', 'update', 'preview']) {
       expect(names.some((n) => n.includes(forbidden))).toBe(false);
     }
+  });
+
+  it('never names the all-companies literal anywhere', () => {
+    // `ALL_ACTIVE_COMPANIES` is the one string that turns a message into a
+    // platform-wide send. It does not appear in this app at all.
+    const fs = jest.requireActual('fs') as { readFileSync(p: string, e: 'utf8'): string };
+
+    expect(
+      fs.readFileSync('src/api/endpoints/platform-announcements-v1.ts', 'utf8'),
+    ).not.toContain("'ALL_ACTIVE_COMPANIES'");
   });
 });
 

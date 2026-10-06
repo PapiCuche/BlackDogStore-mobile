@@ -212,6 +212,15 @@ export const queryKeys = {
     [...internalPrefix(scope), 'communications', 'detail', id] as const,
   internalAnnouncementStats: (scope: QueryScope, id: number) =>
     [...internalPrefix(scope), 'communications', 'stats', id] as const,
+  /**
+   * Everything the SENDER sees about its own communiqués.
+   *
+   * Authoring invalidates this one prefix: publishing changes the message, its
+   * frozen recipient count, the list it appears in and the numbers underneath
+   * it, and a stale list would offer "publish" for something already sent.
+   */
+  internalAnnouncementsRoot: (scope: QueryScope) =>
+    [...internalPrefix(scope), 'communications'] as const,
   /** What was sent to ME. No capability, so never under the manager's key. */
   internalAddressedAnnouncement: (scope: QueryScope, id: number) =>
     [...internalPrefix(scope), 'announcement', id] as const,

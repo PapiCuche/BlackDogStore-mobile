@@ -64,7 +64,7 @@ function load(
     module = require('@/api/endpoints/internal-communications-v1');
   });
 
-  return { module, send };
+  return { module, send, deps: DEPS };
 }
 
 afterEach(() => {
@@ -277,16 +277,177 @@ describe('the two views never share a cache slot', () => {
   });
 });
 
-describe('what this module deliberately cannot do', () => {
-  it('exports no authoring path', () => {
-    // Create, edit, audience rules, preview, publish and cancel all exist on
-    // the server and all need an audience editor. Leaving them out keeps the
-    // gap visible instead of half-built.
-    const { module } = load();
+describe('authoring', () => {
+  const DRAFT = { ...SUMMARY, status: 'draft', published_at: null, recipient_count: 0,
+    body: 'El sábado cerramos para inventario.', audience: [] };
 
-    const names = Object.keys(module).map((n) => n.toLowerCase());
-    for (const forbidden of ['create', 'publish', 'cancel', 'preview', 'patch', 'update']) {
-      expect(names.some((n) => n.includes(forbidden))).toBe(false);
+  it('creates a draft with the text and nothing else', async () => {
+    const { module, send, deps } = load({ result: DRAFT });
+
+    await module.createAnnouncementDraft(
+      { title: 'Cierre', body: 'El sábado cerramos.', priority: 'action' },
+      deps,
+    );
+
+    const [path, options] = send.mock.calls[0]! as [string, Record<string, unknown>];
+    expect(path).toBe('/api/v1/internal/blackdog/communications/');
+    expect(options.method).toBe('POST');
+    // No audience and no status: the server makes it a draft addressed to
+    // nobody, and there is no field here that could publish it.
+    expect(options.body).toEqual({
+      title: 'Cierre',
+      body: 'El sábado cerramos.',
+      priority: 'action',
+    });
+  });
+
+  it('sends only the fields a caller actually changed', async () => {
+    const { module, send, deps } = load({ result: DRAFT });
+
+    await module.updateAnnouncementDraft(12, { title: 'Otro título' }, deps);
+
+    const options = send.mock.calls[0]![1] as Record<string, unknown>;
+    expect(options.method).toBe('PATCH');
+    expect(options.body).toEqual({ title: 'Otro título' });
+  });
+
+  it('never sends an audience unless asked', async () => {
+    // `set_audience` REPLACES the rules. A PATCH that carried an audience by
+    // habit would overwrite a list composed in the Web console out of branches
+    // and roles this app cannot even display.
+    const { module, send, deps } = load({ result: DRAFT });
+
+    await module.updateAnnouncementDraft(12, { body: 'Texto nuevo' }, deps);
+
+    expect(send.mock.calls[0]![1] as Record<string, unknown>).not.toHaveProperty(
+      'body.audience',
+    );
+    expect((send.mock.calls[0]![1] as { body: Record<string, unknown> }).body)
+      .not.toHaveProperty('audience');
+  });
+
+  it('addresses the whole company with the literal the server defines', async () => {
+    const { module, send, deps } = load({ result: DRAFT });
+
+    await module.updateAnnouncementDraft(12, { audienceAllCompany: true }, deps);
+
+    expect((send.mock.calls[0]![1] as { body: Record<string, unknown> }).body.audience)
+      .toEqual([{ kind: 'all_company' }]);
+  });
+
+  it('names no branch, role, capability or person in the rule it sends', async () => {
+    // Those four kinds need a `branch_id`, a `role_id`, a `capability_code`
+    // from the catalogue or a `user_id`, and no `/api/v1/` route lists any of
+    // them (BR-012). A guessed id would address a message to the wrong people,
+    // so the one rule this app sends carries nothing but its kind.
+    const { module, send, deps } = load({ result: DRAFT });
+
+    await module.updateAnnouncementDraft(12, { audienceAllCompany: true }, deps);
+
+    const audience = (send.mock.calls[0]![1] as { body: { audience: object[] } }).body.audience;
+    expect(audience).toHaveLength(1);
+    expect(Object.keys(audience[0]!)).toEqual(['kind']);
+  });
+
+  it('asks for the reach with a POST and maps what comes back', async () => {
+    const { module, send, deps } = load({
+      result: {
+        companies: [{ slug: 'blackdog', name: 'Black Dog', recipient_count: 40 }],
+        company_count: 1,
+        recipient_count: 40,
+      },
+    });
+
+    const reach = await module.previewAnnouncement(12, deps);
+
+    expect(send.mock.calls[0]![0]).toBe('/api/v1/internal/blackdog/communications/12/preview/');
+    expect((send.mock.calls[0]![1] as { method: string }).method).toBe('POST');
+    expect(reach).toEqual({
+      recipientCount: 40,
+      companyCount: 1,
+      companies: [{ slug: 'blackdog', name: 'Black Dog', recipientCount: 40 }],
+    });
+  });
+
+  it('publishes through the server route and reads the frozen count back', async () => {
+    // The audience is frozen at publication: one notification row per
+    // recipient, written inside the server's transaction.
+    const { module, send, deps } = load({
+      result: { ...SUMMARY, body: 'Texto', audience: [], recipient_count: 40 },
+    });
+
+    const published = await module.publishAnnouncement(12, deps);
+
+    expect(send.mock.calls[0]![0]).toBe('/api/v1/internal/blackdog/communications/12/publish/');
+    expect(published.recipientCount).toBe(40);
+    expect(published.status).toBe('published');
+  });
+
+  it('cancels through the server route', async () => {
+    const { module, send, deps } = load({
+      result: { ...DRAFT, status: 'cancelled' },
+    });
+
+    const cancelled = await module.cancelAnnouncementDraft(12, deps);
+
+    expect(send.mock.calls[0]![0]).toBe('/api/v1/internal/blackdog/communications/12/cancel/');
+    expect(cancelled.status).toBe('cancelled');
+  });
+
+  it('keeps the server refusal of a draft with no audience', async () => {
+    // «Elige a quién va dirigido el comunicado.» is the whole point: an
+    // omitted audience is a mistake, never a broadcast.
+    const { module, deps } = load({
+      makeError: (ApiError) =>
+        new ApiError('validation', 'Elige a quién va dirigido el comunicado.', {
+          status: 400,
+        }),
+    });
+
+    await expect(module.publishAnnouncement(12, deps)).rejects.toMatchObject({
+      message: 'Elige a quién va dirigido el comunicado.',
+    });
+  });
+
+  it('reads a 403 as the capability missing and a 404 as not ours', async () => {
+    const capability = load({
+      makeError: (ApiError) => new ApiError('unauthorized', 'No permitido.', { status: 403 }),
+    });
+    await expect(
+      capability.module.createAnnouncementDraft(
+        { title: 'T', body: 'B', priority: 'info' },
+        capability.deps,
+      ),
+    ).rejects.toMatchObject({ name: 'InternalCapabilityMissingError' });
+
+    const other = load({
+      makeError: (ApiError) => new ApiError('not_found', 'No encontrado.', { status: 404 }),
+    });
+    await expect(other.module.publishAnnouncement(99, other.deps)).rejects.toMatchObject({
+      name: 'InternalAccessDeniedError',
+    });
+  });
+
+  it('refuses to guess a tenant', async () => {
+    const { module, send, deps } = load({ slug: null });
+
+    await expect(module.previewAnnouncement(12, deps)).rejects.toMatchObject({
+      name: 'MissingTenantError',
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe('what this module deliberately cannot do', () => {
+  it('reaches no legacy surface and no invented route', () => {
+    const fs = jest.requireActual('fs') as { readFileSync(p: string, e: 'utf8'): string };
+    const source = fs.readFileSync('src/api/endpoints/internal-communications-v1.ts', 'utf8');
+
+    expect(source).not.toContain('/api/admin/');
+    // Those four do not exist on the server, and inventing one to fill the
+    // audience editor is exactly what BR-012 is filed instead of.
+    for (const invented of ['/branches', '/roles', '/members', '/capabilities']) {
+      expect(source).not.toContain(invented);
     }
   });
 });

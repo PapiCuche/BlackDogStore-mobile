@@ -1,8 +1,10 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { View } from 'react-native';
 
 import {
   AppHeader,
+  Button,
   Card,
   Divider,
   ErrorState,
@@ -16,7 +18,16 @@ import {
 import {
   describeAnnouncementStatus,
 } from '@/domain/internal/announcement-types';
-import { useAnnouncement, useAnnouncementStats } from '@/hooks/use-internal-communications';
+import type { AnnouncementPreview } from '@/domain/internal/announcement-types';
+import { announcementErrorMessage } from '@/features/internal/announcement-composer';
+import {
+  useAnnouncement,
+  useAnnouncementStats,
+  useCancelAnnouncementDraft,
+  usePreviewAnnouncement,
+  usePublishAnnouncement,
+  useUpdateAnnouncementDraft,
+} from '@/hooks/use-internal-communications';
 import { useTheme } from '@/theme/theme-provider';
 import { formatDate } from '@/utils/format';
 
@@ -31,6 +42,15 @@ import { formatDate } from '@/utils/format';
  * THE NUMBERS ARE AGGREGATES, BY DECISION. Eleven of forty read it is
  * management; which eleven is surveillance, and the server offers no per-person
  * list to ask for. `readPct` is the server's arithmetic, not this app's.
+ *
+ * A DRAFT CAN BE FINISHED HERE: addressed to the whole company, counted, sent
+ * or discarded. Each is its own button because each is its own act — the server
+ * refuses to publish a draft nobody was addressed to, and refuses to unsay a
+ * published one.
+ *
+ * THE COUNT IS NOT A PROMISE. `preview` resolves the audience to answer and
+ * publication resolves it again from scratch, so the number is shown as of the
+ * moment it was asked for and is cleared the moment anything changes.
  */
 export default function CommunicationDetailScreen() {
   const theme = useTheme();
@@ -44,6 +64,18 @@ export default function CommunicationDetailScreen() {
   const stats = useAnnouncementStats(announcementId, {
     enabled: announcement?.status === 'published',
   });
+
+  const address = useUpdateAnnouncementDraft();
+  const preview = usePreviewAnnouncement();
+  const publish = usePublishAnnouncement();
+  const cancel = useCancelAnnouncementDraft();
+  // Held in the screen, never cached: see the note above.
+  const [reach, setReach] = useState<AnnouncementPreview | null>(null);
+  const [confirmingPublish, setConfirmingPublish] = useState(false);
+
+  const draftBusy =
+    address.isPending || preview.isPending || publish.isPending || cancel.isPending;
+  const draftError = address.error ?? preview.error ?? publish.error ?? cancel.error;
 
   if (isPending) {
     return (
@@ -128,6 +160,109 @@ export default function CommunicationDetailScreen() {
                     </Text>
                   </View>
                 ) : null}
+              </Card>
+            </View>
+          ) : null}
+
+          {announcement.status === 'draft' ? (
+            <View>
+              <SectionHeader title="Terminar el borrador" />
+              <Card variant="outlined">
+                <View style={{ gap: theme.spacing.sm }}>
+                  <Text variant="subhead" color="textSecondary">
+                    {announcement.audience && announcement.audience.length > 0
+                      ? 'Ya tiene destinatarios. Publicarlo escribe un aviso por persona.'
+                      : 'Todavía no tiene destinatarios. El servidor no publica un comunicado sin ellos.'}
+                  </Text>
+
+                  {/* The only audience this app composes. The other four kinds
+                      name a branch, a role, a capability code or a person, and
+                      no v1 route lists any of them — BR-012. */}
+                  <Button
+                    label="Dirigirlo a toda la empresa"
+                    variant="secondary"
+                    loading={address.isPending}
+                    onPress={() => {
+                      setReach(null);
+                      setConfirmingPublish(false);
+                      address.mutate({ id: announcement.id, audienceAllCompany: true });
+                    }}
+                  />
+                  <Text variant="caption" color="textTertiary">
+                    Para enviarlo solo a una sucursal, a un rol o a personas
+                    concretas, usa la consola web: esta app no puede elegirlos.
+                  </Text>
+
+                  <Divider />
+
+                  <Button
+                    label="Ver a cuántas personas llegaría"
+                    variant="ghost"
+                    loading={preview.isPending}
+                    onPress={() =>
+                      preview.mutate(
+                        { id: announcement.id },
+                        { onSuccess: (result) => setReach(result) },
+                      )
+                    }
+                  />
+                  {reach ? (
+                    <View style={{ gap: theme.spacing.xs }}>
+                      <KeyValueRow
+                        label="Llegaría a"
+                        value={`${reach.recipientCount} personas`}
+                      />
+                      <Text variant="caption" color="textTertiary">
+                        Es una estimación de este momento: al publicar, el
+                        servidor vuelve a resolver la lista desde cero.
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  <Divider />
+
+                  {confirmingPublish ? (
+                    <View style={{ gap: theme.spacing.xs }}>
+                      <Text variant="subhead">
+                        Se enviará ahora y no se puede retirar.
+                      </Text>
+                      <Button
+                        label="Publicarlo"
+                        loading={publish.isPending}
+                        onPress={() => {
+                          setConfirmingPublish(false);
+                          publish.mutate({ id: announcement.id });
+                        }}
+                      />
+                      <Button
+                        label="Mejor no"
+                        variant="ghost"
+                        onPress={() => setConfirmingPublish(false)}
+                      />
+                    </View>
+                  ) : (
+                    // Publishing writes a row in every recipient's inbox and
+                    // the server will not unsay it, so it is asked twice.
+                    <Button
+                      label="Publicar el comunicado"
+                      disabled={draftBusy}
+                      onPress={() => setConfirmingPublish(true)}
+                    />
+                  )}
+
+                  <Button
+                    label="Descartar el borrador"
+                    variant="destructive"
+                    loading={cancel.isPending}
+                    onPress={() => cancel.mutate({ id: announcement.id })}
+                  />
+
+                  {draftError ? (
+                    <Text variant="caption" color="danger">
+                      {announcementErrorMessage(draftError)}
+                    </Text>
+                  ) : null}
+                </View>
               </Card>
             </View>
           ) : null}

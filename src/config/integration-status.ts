@@ -180,13 +180,13 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   platformAnnouncements: {
     label: 'Plataforma · Comunicados',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/platform/announcements/ — listado, detalle y cifras de los comunicados que cruzan empresas. La autoridad es la CUENTA (is_superuser), nunca un rol de empresa, y quien no lo es recibe 404. Redactar y publicar sigue en la consola web: publicar escribe un aviso por destinatario en cada empresa alcanzada.',
+    note: 'Integrado con /api/v1/platform/announcements/ — listado, detalle y cifras de los comunicados que cruzan empresas. La autoridad es la CUENTA (is_superuser), nunca un rol de empresa, y quien no lo es recibe 404. Redactar y publicar sigue en la consola web por decisión: ninguna ruta v1 lista las empresas, así que lo único componible aquí sería ALL_ACTIVE_COMPANIES —un aviso para cada persona de cada empresa— y ofrecer solo eso haría del envío más amplio el más fácil (BR-012).',
     source: 'api/endpoints/platform-announcements-v1.ts',
   },
   internalCommunications: {
     label: 'Interno · Comunicados',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/internal/<empresa>/communications/ y /announcements/<id>/ — lectura del comunicado propio (sin capability, el servidor prueba el envío) y, con communications.manage, el listado de lo enviado con sus cifras agregadas. Redactar y publicar sigue en la consola web: elegir audiencia pide un editor de reglas.',
+    note: 'Integrado con /api/v1/internal/<empresa>/communications/ y /announcements/<id>/ — lectura del comunicado propio (sin capability, el servidor prueba el envío) y, con communications.manage, el listado de lo enviado, sus cifras agregadas, redactar un borrador, dirigirlo a toda la empresa, estimar el alcance, publicarlo y descartarlo. Dirigirlo a una sucursal, un rol, una capacidad o personas concretas sigue en la consola web: esos cuatro tipos de regla piden identificadores que ninguna ruta v1 publica (BR-012).',
     source: 'api/endpoints/internal-communications-v1.ts',
   },
   internalServiceEvidence: {

@@ -1,13 +1,18 @@
 import { companySlug } from '@/config/env';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type {
+  AnnouncementDraftInput,
+  AnnouncementPreview,
   AnnouncementAudienceRule,
   AnnouncementDetail,
   AnnouncementStats,
   AnnouncementStatus,
   AnnouncementSummary,
 } from '@/domain/internal/announcement-types';
-import { ANNOUNCEMENT_STATUSES } from '@/domain/internal/announcement-types';
+import {
+  ANNOUNCEMENT_AUDIENCE_ALL_COMPANY,
+  ANNOUNCEMENT_STATUSES,
+} from '@/domain/internal/announcement-types';
 import type { NotificationPriority } from '@/domain/notifications/types';
 
 import { authenticatedRequest } from '../authenticated-request';
@@ -37,11 +42,31 @@ import {
  * the audience. Somebody who acquired a role last week cannot read last
  * month's message, because nothing was ever written to them.
  *
- * AUTHORING IS NOT HERE. Creating a draft, editing it, composing the audience
- * rules, previewing, publishing and cancelling all exist on the server and all
- * belong to a composer with a real audience editor — branches, roles,
- * capabilities and named people. Reading and monitoring are what a phone is
- * for, and leaving the rest out keeps the gap visible rather than half-built.
+ * AUTHORING, and the one part of it a phone can do:
+ *
+ *   POST  communications/              create a draft
+ *   PATCH communications/<id>/         title, body, priority, audience
+ *   POST  communications/<id>/preview/ how many it WOULD reach
+ *   POST  communications/<id>/publish/ send it
+ *   POST  communications/<id>/cancel/  retire a draft
+ *
+ * THE AUDIENCE IS WHERE THIS STOPS. `AnnouncementAudienceRule.Kind` offers
+ * `all_company`, `branch`, `role`, `capability` and `user`; the last four need
+ * a `branch_id`, a `role_id`, a `capability_code` from the catalogue or a
+ * `user_id`, and `/api/v1/` publishes no route that lists any of them —
+ * `internal/context/` deliberately answers "what may I see?" and nothing else.
+ * So this module composes `all_company` and refuses to fabricate the rest:
+ * guessing an id would address a message to the wrong people. See BR-012.
+ *
+ * NOTHING IS WIDENED BY OMISSION, on either side. The server refuses a draft
+ * with no audience rather than reading it as "everybody", and this client never
+ * sends `all_company` as a default — publishing to the whole company is an act
+ * the operator performs, not a fallback.
+ *
+ * PREVIEW IS INFORMATIVE, NEVER AUTHORITATIVE. The server says so itself:
+ * publication resolves the audience again from scratch, because somebody joins
+ * or leaves between the two calls. The count is shown as of the moment it was
+ * asked for and is never kept as the recipient list.
  */
 
 export class MissingTenantError extends Error {
@@ -254,6 +279,180 @@ export async function fetchAddressedAnnouncement(
       await authenticatedRequest<unknown>(
         `${internalPath(requireTenant())}/announcements/${encodeURIComponent(String(id))}/`,
         { scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+function communicationPath(id: number, action = ''): string {
+  return `${internalPath(requireTenant())}/communications/${encodeURIComponent(
+    String(id),
+  )}/${action}`;
+}
+
+export function toAnnouncementPreview(raw: unknown): AnnouncementPreview {
+  const row = (raw ?? {}) as Row;
+  const companies = row.companies;
+  return {
+    recipientCount: toCount(row.recipient_count),
+    companyCount: toCount(row.company_count),
+    companies: Array.isArray(companies)
+      ? companies.map((entry) => {
+          const company = (entry ?? {}) as Row;
+          return {
+            slug: str(company.slug),
+            name: str(company.name),
+            recipientCount: toCount(company.recipient_count),
+          };
+        })
+      : [],
+  };
+}
+
+/**
+ * Start a communiqué.
+ *
+ * It is born a DRAFT with no audience, and the server keeps it that way: there
+ * is no field here that would publish it, and `publish` refuses a draft nobody
+ * was addressed to. Writing the text and deciding who reads it are two acts.
+ */
+export async function createAnnouncementDraft(
+  input: AnnouncementDraftInput,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<AnnouncementDetail> {
+  try {
+    return toAnnouncementDetail(
+      await authenticatedRequest<unknown>(
+        `${internalPath(requireTenant())}/communications/`,
+        {
+          scope: 'authenticated-v1',
+          method: 'POST',
+          body: {
+            title: input.title,
+            body: input.body,
+            priority: input.priority,
+          },
+          signal,
+        },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+/**
+ * Edit a draft, and optionally say who it goes to.
+ *
+ * `audience` is sent only when the caller asks for it, because `set_audience`
+ * REPLACES the rules: a PATCH that carried it by habit would overwrite a
+ * distribution list the Web console had composed with branches and roles this
+ * app cannot even display.
+ *
+ * The one audience this app composes is the whole company — see BR-012 — and
+ * it is passed as an argument rather than defaulted, so sending a message to
+ * everybody is always something somebody chose.
+ */
+export async function updateAnnouncementDraft(
+  id: number,
+  changes: Partial<AnnouncementDraftInput> & { audienceAllCompany?: true },
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<AnnouncementDetail> {
+  const body: Record<string, unknown> = {};
+  if (changes.title !== undefined) body.title = changes.title;
+  if (changes.body !== undefined) body.body = changes.body;
+  if (changes.priority !== undefined) body.priority = changes.priority;
+  if (changes.audienceAllCompany) {
+    body.audience = [{ kind: ANNOUNCEMENT_AUDIENCE_ALL_COMPANY }];
+  }
+
+  try {
+    return toAnnouncementDetail(
+      await authenticatedRequest<unknown>(
+        communicationPath(id),
+        { scope: 'authenticated-v1', method: 'PATCH', body, signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+/**
+ * How many people it would reach right now.
+ *
+ * A POST because the server resolves the audience to answer, and the answer is
+ * NOT kept: publication resolves it again from scratch.
+ */
+export async function previewAnnouncement(
+  id: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<AnnouncementPreview> {
+  try {
+    return toAnnouncementPreview(
+      await authenticatedRequest<unknown>(
+        communicationPath(id, 'preview/'),
+        { scope: 'authenticated-v1', method: 'POST', body: {}, signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+/**
+ * Send it.
+ *
+ * ONE NOTIFICATION ROW PER RECIPIENT, written by the server inside its own
+ * transaction, and the audience is frozen at that moment. This cannot be
+ * retried blindly and is not: publishing twice is a second message in forty
+ * people's inboxes. The server answers the published communiqué, including the
+ * frozen `recipient_count`, and that is what the screen then shows.
+ */
+export async function publishAnnouncement(
+  id: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<AnnouncementDetail> {
+  try {
+    return toAnnouncementDetail(
+      await authenticatedRequest<unknown>(
+        communicationPath(id, 'publish/'),
+        { scope: 'authenticated-v1', method: 'POST', body: {}, signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+/**
+ * Retire a draft.
+ *
+ * Only a draft: a published communiqué is in people's inboxes and the server
+ * refuses to unsay it. Cancelling an already-cancelled one is not an error
+ * there either, so the client does not pretend it is.
+ */
+export async function cancelAnnouncementDraft(
+  id: number,
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<AnnouncementDetail> {
+  try {
+    return toAnnouncementDetail(
+      await authenticatedRequest<unknown>(
+        communicationPath(id, 'cancel/'),
+        { scope: 'authenticated-v1', method: 'POST', body: {}, signal },
         deps,
       ),
     );
