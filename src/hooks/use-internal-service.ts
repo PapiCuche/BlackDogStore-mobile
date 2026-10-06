@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { InternalCapabilityMissingError } from '@/api/endpoints/internal-v1';
+import type { EvidenceUpload } from '@/api/endpoints/internal-service-evidence-v1';
 import type { ServiceOrderQuery } from '@/api/endpoints/internal-service-v1';
 import * as Sharing from 'expo-sharing';
 
@@ -672,6 +673,21 @@ export function useServiceEvidenceAuthorization(options: { enabled?: boolean } =
  * do not retry: sharing somebody's device photo is not something to repeat on a
  * flaky network.
  */
+/**
+ * Upload one photo for a stage of the repair.
+ *
+ * The stage decides the authority, so a refusal here is a refusal about THAT
+ * stage, not about the order. Nothing retries: the server makes a repeat safe
+ * only when the caller carries the same `Idempotency-Key` with the same bytes,
+ * and the screen decides when that is true — an automatic retry would be the
+ * app deciding to write a second row on somebody's repair record.
+ */
+export function useUploadEvidence(orderId: number) {
+  return useServiceMutation<EvidenceUpload, unknown>((upload) =>
+    repository().uploadEvidence(orderId, upload),
+  );
+}
+
 export function usePublishEvidence(orderId: number) {
   return useServiceMutation<{ evidenceId: number }, unknown>(({ evidenceId }) =>
     repository().publishEvidence(orderId, evidenceId),

@@ -63,6 +63,7 @@ import {
   useServiceEvidence,
   useServiceEvidenceAuthorization,
   usePublishEvidence,
+  useUploadEvidence,
   useUpdateEvidenceCaption,
   useRetryWhatsAppNotice,
   useSetWhatsAppConsent,
@@ -160,7 +161,7 @@ export default function ServiceOrderDetailScreen() {
     enabled: mayView,
   });
   const evidenceAuth = useServiceEvidenceAuthorization({
-    enabled: (evidence.data?.length ?? 0) > 0,
+    enabled: (evidence.data?.items.length ?? 0) > 0,
   });
   // WHATSAPP-NOTIFY. Resending takes `service.orders.manage`, which `mayManage`
   // already carries; the server re-checks and scopes the notice to this order.
@@ -174,6 +175,7 @@ export default function ServiceOrderDetailScreen() {
   );
   const setConsent = useSetWhatsAppConsent();
   const unlinkAccount = useUnlinkCustomerAccount();
+  const uploadEvidence = useUploadEvidence(orderId);
   const publishEvidence = usePublishEvidence(orderId);
   const updateCaption = useUpdateEvidenceCaption(orderId);
   const hideEvidence = useHideEvidence(orderId);
@@ -735,7 +737,27 @@ export default function ServiceOrderDetailScreen() {
             <SectionHeader title="Fotos" />
             <Card variant="outlined">
               <ServiceEvidenceSection
-                evidence={evidence.data ?? []}
+                evidence={evidence.data?.items ?? []}
+                stages={evidence.data?.stages ?? []}
+                stageCounts={evidence.data?.stageCounts ?? {}}
+                // Per stage, like the acts on a photo: the server checks the
+                // capability the STAGE demands, and it sent which one that is.
+                canUseStage={(option) => hasUxCapability(context ?? null, option.capability)}
+                isUploading={uploadEvidence.isPending}
+                uploadError={uploadEvidence.error}
+                onUpload={({ stage, photo, caption }) =>
+                  uploadEvidence.mutate({
+                    stage,
+                    uri: photo.uri,
+                    name: photo.name,
+                    mimeType: photo.mimeType,
+                    caption,
+                    // One key per attempt of this photo. The server pairs it
+                    // with the bytes, so a repeat of the SAME photo returns the
+                    // row it already wrote instead of adding another.
+                    idempotencyKey: `${orderId}-${stage}-${photo.byteSize}-${photo.name}`,
+                  })
+                }
                 authorization={evidenceAuth.data ?? null}
                 contentUrl={(evidenceId) => internalEvidenceContentUrl(orderId, evidenceId)}
                 canActOnStage={(item) =>

@@ -52,6 +52,8 @@ import {
 import {
   updateInternalEvidenceCaption,
   fetchInternalEvidence,
+  uploadInternalEvidence,
+  type EvidenceUpload,
   hideInternalEvidence,
   internalEvidenceContentUrl,
   publishInternalEvidence,
@@ -499,6 +501,11 @@ export class V1InternalServiceRepository {
 
   async evidenceAuthorization(): Promise<string> {
     return resolveInternalEvidenceAuthorization(this.deps);
+  }
+
+  /** One photo, multipart. The stage it documents decides who may send it. */
+  async uploadEvidence(orderId: number, upload: EvidenceUpload, signal?: AbortSignal) {
+    return uploadInternalEvidence(orderId, upload, this.deps, signal);
   }
 
   async publishEvidence(orderId: number, evidenceId: number, signal?: AbortSignal) {
