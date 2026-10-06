@@ -248,6 +248,8 @@ export function toServiceDevice(raw: unknown): ServiceDevice {
     displayName: str(row.display_name),
     serialNumber: str(row.serial_number),
     imei: str(row.imei),
+    imei2: str(row.imei2),
+    identifiersPendingReason: str(row.identifiers_pending_reason),
     color: str(row.color),
     storageCapacity: str(row.storage_capacity),
     notes: str(row.notes),
@@ -727,6 +729,12 @@ export async function postServiceDevice(
   };
   if (input.serialNumber) body.serial_number = input.serialNumber;
   if (input.imei) body.imei = input.imei;
+  // DEVICE-IDENTITY. A dual-SIM phone has two, and an unreadable sticker is
+  // declared rather than filled with «N/A» — the server refuses placeholders.
+  if (input.imei2) body.imei2 = input.imei2;
+  if (input.identifiersPendingReason) {
+    body.identifiers_pending_reason = input.identifiersPendingReason;
+  }
   if (input.color) body.color = input.color;
   if (input.storageCapacity) body.storage_capacity = input.storageCapacity;
   if (input.notes) body.notes = input.notes;

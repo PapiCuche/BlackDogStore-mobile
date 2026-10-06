@@ -60,6 +60,10 @@ export type ServiceDevice = {
   displayName: string;
   serialNumber: string;
   imei: string;
+  /** Second SIM. Empty when the device has one or none. */
+  imei2: string;
+  /** Why a required identifier is missing. Empty when nothing is missing. */
+  identifiersPendingReason: string;
   color: string;
   storageCapacity: string;
   notes: string;
@@ -187,6 +191,16 @@ export type ServiceDeviceInput = {
   model: string;
   serialNumber?: string;
   imei?: string;
+  /** Dual-SIM phones carry a second one. Never required. */
+  imei2?: string;
+  /**
+   * Why a REQUIRED identifier is missing — DEVICE-IDENTITY.
+   *
+   * The escape hatch for a sticker nobody can read: the server would rather
+   * have an empty field and a sentence than «N/A» in a column that later looks
+   * like a duplicate of a real device.
+   */
+  identifiersPendingReason?: string;
   color?: string;
   storageCapacity?: string;
   notes?: string;
@@ -935,3 +949,71 @@ export type ServiceDeviceDetail = ServiceDeviceMatch & {
 };
 
 export const CAP_SERVICE_DEVICES_VIEW = 'service.devices.view';
+
+/**
+ * WHEN AN IDENTIFIER IS REQUIRED — DEVICE-IDENTITY, by TYPE.
+ *
+ * Not "IMEI always": a laptop, a Wi-Fi tablet or a GPS watch has none, and
+ * demanding one fills the database with placeholders. A phone has one, so a
+ * phone is asked.
+ *
+ * Mirrored from `device_identity.SERIAL_REQUIRED_TYPES` / `IMEI_REQUIRED_TYPES`
+ * to LABEL the form and to explain a refusal before it happens. The server
+ * still decides, and its message is what the operator reads when the two
+ * disagree.
+ */
+const SERIAL_REQUIRED_TYPES: readonly string[] = [
+  'phone', 'tablet', 'laptop', 'desktop', 'console', 'wearable',
+];
+const IMEI_REQUIRED_TYPES: readonly string[] = ['phone'];
+
+export function deviceRequiresSerial(deviceType: string): boolean {
+  return SERIAL_REQUIRED_TYPES.includes(deviceType);
+}
+
+export function deviceRequiresImei(deviceType: string): boolean {
+  return IMEI_REQUIRED_TYPES.includes(deviceType);
+}
+
+export const DEVICE_PENDING_REASON_MAX_LENGTH = 200;
+
+/**
+ * What people type when a field is mandatory and they do not have the data.
+ *
+ * The server refuses every one of these, because «N/A» in an identifier column
+ * is a fake number that later reads as a duplicate of a real device. Listed
+ * here so the form can say so BEFORE a round trip — and the comparison is made
+ * on the normalised value, as the server makes it.
+ */
+const IDENTIFIER_PLACEHOLDERS: readonly string[] = [
+  'NA', 'N/A', 'N.A', 'N.A.', 'NO', 'NONE', 'NULL', 'NINGUNO', 'NINGUNA', 'NOTIENE',
+  'NOAPLICA', 'SINSERIE', 'SINSERIAL', 'SINIMEI', 'SINNUMERO', 'S/N', 'SN', 'XXX', 'XXXX',
+  'DESCONOCIDO', 'PENDIENTE', 'ILEGIBLE', 'TEST', 'PRUEBA',
+];
+
+export function isIdentifierPlaceholder(raw: string): boolean {
+  const value = raw.trim().toUpperCase().replace(/\s+/g, '');
+  return value.length > 0 && IDENTIFIER_PLACEHOLDERS.includes(value);
+}
+
+/**
+ * Whether an IMEI could be real: fifteen digits whose last one is the Luhn
+ * check digit of the first fourteen. A typo caught here costs a keystroke; one
+ * that reaches the database is a device nobody can find again.
+ */
+export function isPlausibleImei(raw: string): boolean {
+  const digits = normaliseDeviceImei(raw);
+  if (digits.length !== DEVICE_IMEI_LENGTH) return false;
+  let total = 0;
+  const body = digits.slice(0, 14);
+  for (let index = body.length - 1, position = 0; index >= 0; index -= 1, position += 1) {
+    let digit = Number(body[index]);
+    if (position % 2 === 0) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    total += digit;
+  }
+  const check = (10 - (total % 10)) % 10;
+  return check === Number(digits[14]);
+}
