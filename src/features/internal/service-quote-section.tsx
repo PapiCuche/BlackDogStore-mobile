@@ -368,7 +368,7 @@ export function ServiceQuoteSection({
                 loading={isBusy}
                 onPress={() =>
                   onRecordDecision(current.id, {
-                    decision: 'approved',
+                    decision: 'approve',
                     channel,
                     note: decisionNote,
                   })
@@ -381,7 +381,7 @@ export function ServiceQuoteSection({
                 loading={isBusy}
                 onPress={() =>
                   onRecordDecision(current.id, {
-                    decision: 'rejected',
+                    decision: 'reject',
                     channel,
                     note: decisionNote,
                   })

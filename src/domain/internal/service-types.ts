@@ -1,3 +1,4 @@
+import type { QuoteDecision } from '@/domain/repairs/quote';
 import type { StatusTone } from '@/domain/orders/status';
 /**
  * The INTERNAL audience's view of the workshop.
@@ -787,9 +788,16 @@ export const STAFF_DECISION_CHANNELS: readonly {
   { value: 'other', label: 'Otro medio' },
 ];
 
-/** What a staff member writes down. The actor comes from the session. */
+/**
+ * What a staff member writes down. The actor comes from the session.
+ *
+ * `decision` is the SERVER's vocabulary — `approve` / `reject`, from
+ * `RepairQuoteDecision.DECISION_APPROVE` / `DECISION_REJECT`, the same two
+ * words the customer's own answer uses. Anything else is «Decisión
+ * desconocida.» (400), which is how this was caught.
+ */
 export type StaffQuoteDecisionInput = {
-  decision: 'approved' | 'rejected';
+  decision: QuoteDecision;
   channel: StaffDecisionChannel;
   /** Free text; the server collapses whitespace and refuses over 300 chars. */
   note?: string;
