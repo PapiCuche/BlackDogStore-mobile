@@ -39,7 +39,7 @@ const QUOTE = {
   total: '118.00',
   items: [],
   decision: {
-    decision: 'approved',
+    decision: 'approve',
     decided_at: '2026-10-04T09:00:00Z',
     channel: 'phone',
     recorded_by_name: 'Ana',
@@ -86,6 +86,33 @@ afterEach(() => {
   jest.dontMock('@/config/env');
 });
 
+describe('the words the server accepts', () => {
+  it('uses the SAME verb the customer answer uses', async () => {
+    // Caught against a live server: `approved` / `rejected` is answered with
+    // 400 «Decisión desconocida.». `record_quote_decision` compares against
+    // `RepairQuoteDecision.DECISION_APPROVE` / `DECISION_REJECT`, which are
+    // `approve` / `reject` — the two words the customer's own decision has
+    // always sent. A staff decision is the same domain act, recorded by
+    // somebody else, so it cannot have a vocabulary of its own.
+    const { module, send } = load();
+
+    await module.postServiceQuoteStaffDecision(
+      77, 5, { decision: 'approve', channel: 'phone' }, DEPS,
+    );
+    await module.postServiceQuoteStaffDecision(
+      77, 5, { decision: 'reject', channel: 'in_person' }, DEPS,
+    );
+
+    const sent = send.mock.calls.map(
+      (call) => (call[1] as { body: Record<string, unknown> }).body.decision,
+    );
+    expect(sent).toEqual(['approve', 'reject']);
+    for (const wrong of ['approved', 'rejected', 'accept', 'ok']) {
+      expect(sent).not.toContain(wrong);
+    }
+  });
+});
+
 describe('recording the answer', () => {
   it('posts to the quote decision route of that order', async () => {
     const { module, send } = load();
@@ -93,7 +120,7 @@ describe('recording the answer', () => {
     await module.postServiceQuoteStaffDecision(
       77,
       5,
-      { decision: 'approved', channel: 'phone' },
+      { decision: 'approve', channel: 'phone' },
       DEPS,
     );
 
@@ -111,12 +138,12 @@ describe('recording the answer', () => {
     await module.postServiceQuoteStaffDecision(
       77,
       5,
-      { decision: 'rejected', channel: 'in_person' },
+      { decision: 'reject', channel: 'in_person' },
       DEPS,
     );
 
     const body = (send.mock.calls[0]![1] as { body: Record<string, unknown> }).body;
-    expect(body).toEqual({ decision: 'rejected', channel: 'in_person' });
+    expect(body).toEqual({ decision: 'reject', channel: 'in_person' });
   });
 
   it('never names who recorded it: the session does', async () => {
@@ -125,7 +152,7 @@ describe('recording the answer', () => {
     await module.postServiceQuoteStaffDecision(
       77,
       5,
-      { decision: 'approved', channel: 'whatsapp', note: 'Confirmó por chat' },
+      { decision: 'approve', channel: 'whatsapp', note: 'Confirmó por chat' },
       DEPS,
     );
 
@@ -142,7 +169,7 @@ describe('recording the answer', () => {
     await module.postServiceQuoteStaffDecision(
       77,
       5,
-      { decision: 'approved', channel: 'other', note: '   ' },
+      { decision: 'approve', channel: 'other', note: '   ' },
       DEPS,
     );
 
@@ -175,13 +202,14 @@ describe('recording the answer', () => {
     const quote = await module.postServiceQuoteStaffDecision(
       77,
       5,
-      { decision: 'approved', channel: 'phone' },
+      { decision: 'approve', channel: 'phone' },
       DEPS,
     );
 
     expect(quote.id).toBe(5);
     expect(quote.status).toBe('approved');
-    expect(quote.decision?.decision).toBe('approved');
+    // The row echoes the stored verb, which is the same one it was sent.
+    expect(quote.decision?.decision).toBe('approve');
   });
 
   it('turns a 409 into the domain conflict, with the server sentence', async () => {
@@ -195,7 +223,7 @@ describe('recording the answer', () => {
     });
 
     await expect(
-      module.postServiceQuoteStaffDecision(77, 5, { decision: 'approved', channel: 'phone' }, DEPS),
+      module.postServiceQuoteStaffDecision(77, 5, { decision: 'approve', channel: 'phone' }, DEPS),
     ).rejects.toMatchObject({
       message: 'Esta cotización ya tiene una respuesta registrada.',
     });
@@ -207,7 +235,7 @@ describe('recording the answer', () => {
     });
 
     await expect(
-      module.postServiceQuoteStaffDecision(77, 5, { decision: 'approved', channel: 'phone' }, DEPS),
+      module.postServiceQuoteStaffDecision(77, 5, { decision: 'approve', channel: 'phone' }, DEPS),
     ).rejects.toMatchObject({ name: 'InternalCapabilityMissingError' });
   });
 
@@ -215,7 +243,7 @@ describe('recording the answer', () => {
     const { module, send } = load({ slug: null });
 
     await expect(
-      module.postServiceQuoteStaffDecision(77, 5, { decision: 'approved', channel: 'phone' }, DEPS),
+      module.postServiceQuoteStaffDecision(77, 5, { decision: 'approve', channel: 'phone' }, DEPS),
     ).rejects.toMatchObject({ name: 'MissingTenantError' });
     expect(send).not.toHaveBeenCalled();
   });
