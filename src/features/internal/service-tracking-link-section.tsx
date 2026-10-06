@@ -5,6 +5,7 @@ import { Button, KeyValueRow, StatusBadge, Text } from '@/design-system';
 import { serviceErrorMessage } from '@/api/endpoints/internal-service-v1';
 import type { ServiceTrackingLink, ServiceTrackingReveal } from '@/domain/internal/service-types';
 import { useTheme } from '@/theme/theme-provider';
+import { isOpenableLink, openExternalLink } from '@/utils/external-links';
 import { formatDate } from '@/utils/format';
 
 /**
@@ -81,6 +82,21 @@ export function ServiceTrackingLinkSection({
           <Text variant="mono" selectable>
             {revealed.url}
           </Text>
+          {/* The page belongs to the web storefront, which already renders the
+              repair for whoever holds the token. Opening it is a handoff, not a
+              second implementation: nothing about tracking is reproduced here.
+              Hidden when the server's URL is not something this app may open —
+              a build pointed at a host without a scheme, for instance. */}
+          {isOpenableLink(revealed.url) ? (
+            <Button
+              label="Abrir el enlace"
+              variant="ghost"
+              size="compact"
+              onPress={() => {
+                void openExternalLink(revealed.url);
+              }}
+            />
+          ) : null}
         </View>
       ) : null}
 

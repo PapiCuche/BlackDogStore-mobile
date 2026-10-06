@@ -19,6 +19,12 @@ jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
 }));
 
+const mockOpen = jest.fn();
+jest.mock('@/utils/external-links', () => ({
+  ...jest.requireActual('@/utils/external-links'),
+  openExternalLink: (url: unknown) => mockOpen(url),
+}));
+
 function link(overrides: Partial<ServiceTrackingLink> = {}): ServiceTrackingLink {
   return {
     active: true,
@@ -104,6 +110,30 @@ describe('the reveal gate', () => {
     });
 
     expect(screen.getByText('https://web.test/seguimiento/tok')).toBeTruthy();
+  });
+
+  it('hands the link to the browser instead of rendering tracking itself', async () => {
+    // The page is the web storefront's, and it already renders the repair for
+    // whoever holds the token. Opening it is a handoff; reimplementing it here
+    // would be a second source of truth for somebody else's screen.
+    await renderSection({
+      revealed: { url: 'https://web.test/seguimiento/tok', path: '/seguimiento/tok' },
+    });
+
+    fireEvent.press(screen.getByText('Abrir el enlace'));
+
+    expect(mockOpen).toHaveBeenCalledWith('https://web.test/seguimiento/tok');
+  });
+
+  it('offers no open action for a URL this app may not open', async () => {
+    // A build pointed at a host the link guard refuses: show the text, offer
+    // nothing. `openExternalLink` would refuse it anyway.
+    await renderSection({
+      revealed: { url: 'seguimiento/tok', path: '/seguimiento/tok' },
+    });
+
+    expect(screen.queryByText('Abrir el enlace')).toBeNull();
+    expect(screen.getByText('seguimiento/tok')).toBeTruthy();
   });
 
   it('warns what holding the link allows', async () => {
