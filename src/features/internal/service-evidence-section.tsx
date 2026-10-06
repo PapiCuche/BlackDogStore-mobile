@@ -4,13 +4,22 @@ import { ScrollView, View } from 'react-native';
 
 import { serviceErrorMessage } from '@/api/endpoints/internal-service-v1';
 import { Button, Divider, Input, StatusBadge, Text } from '@/design-system';
-import type { InternalEvidence } from '@/domain/internal/evidence-types';
+import type {
+  EvidenceStageOption,
+  InternalEvidence,
+  InternalEvidenceGallery,
+} from '@/domain/internal/evidence-types';
 import {
   EVIDENCE_CAPTION_MAX_LENGTH,
   EVIDENCE_VOID_REASON_MAX_LENGTH,
 } from '@/domain/internal/evidence-types';
 import { describeEvidenceStage } from '@/domain/repairs/evidence';
 import { useTheme } from '@/theme/theme-provider';
+import {
+  pickEvidencePhoto,
+  type PhotoSource,
+  type PickedPhoto,
+} from '@/utils/evidence-photo-picker';
 import { formatDate } from '@/utils/format';
 
 /**
@@ -32,9 +41,23 @@ import { formatDate } from '@/utils/format';
  * Every image is an authorised request: the content route re-checks company,
  * branch, capability, visibility and voiding, so nothing loads until the Bearer
  * header is resolved.
+ *
+ * UPLOADING ASKS FOR A STAGE FIRST, from the catalogue THE SERVER SENT with the
+ * gallery, and only the stages this person's capabilities cover are offered —
+ * the same per-stage rule as the three buttons, now before the photo exists. A
+ * photo is born internal; sharing it is still a separate act afterwards.
  */
 export type ServiceEvidenceSectionProps = {
   evidence: readonly InternalEvidence[];
+  /** The stages the server offers, in the order of the repair cycle. */
+  stages: readonly EvidenceStageOption[];
+  /** How many photos are IN FORCE per stage, as the server counted them. */
+  stageCounts: InternalEvidenceGallery['stageCounts'];
+  /** Whether this person holds one stage's capability. Asked per stage. */
+  canUseStage: (stage: EvidenceStageOption) => boolean;
+  isUploading: boolean;
+  uploadError: unknown;
+  onUpload: (input: { stage: EvidenceStageOption['value']; photo: PickedPhoto; caption: string }) => void;
   /** `Bearer …`, or null while it resolves. Nothing loads without it. */
   authorization: string | null;
   contentUrl: (evidenceId: number) => string;
@@ -53,6 +76,12 @@ const THUMBNAIL = 112;
 
 export function ServiceEvidenceSection({
   evidence,
+  stages,
+  stageCounts,
+  canUseStage,
+  isUploading,
+  uploadError,
+  onUpload,
   authorization,
   contentUrl,
   canActOnStage,
@@ -72,11 +101,25 @@ export function ServiceEvidenceSection({
 
   const open = evidence.find((item) => item.id === openId) ?? null;
 
+  const uploader = (
+    <EvidenceUploader
+      stages={stages}
+      stageCounts={stageCounts}
+      canUseStage={canUseStage}
+      isUploading={isUploading}
+      error={uploadError}
+      onUpload={onUpload}
+    />
+  );
+
   if (evidence.length === 0) {
     return (
-      <Text variant="subhead" color="textSecondary">
-        Esta orden todavía no tiene fotos. Se toman desde la consola web.
-      </Text>
+      <View style={{ gap: theme.spacing.sm }}>
+        <Text variant="subhead" color="textSecondary">
+          Esta orden todavía no tiene fotos.
+        </Text>
+        {uploader}
+      </View>
     );
   }
 
@@ -254,6 +297,155 @@ export function ServiceEvidenceSection({
             </View>
           ) : null}
         </View>
+      ) : null}
+
+      <Divider />
+      {uploader}
+    </View>
+  );
+}
+
+type EvidenceUploaderProps = {
+  stages: readonly EvidenceStageOption[];
+  stageCounts: InternalEvidenceGallery['stageCounts'];
+  canUseStage: (stage: EvidenceStageOption) => boolean;
+  isUploading: boolean;
+  error: unknown;
+  onUpload: ServiceEvidenceSectionProps['onUpload'];
+};
+
+/**
+ * Take a photo of one moment of the repair.
+ *
+ * THE STAGE COMES FIRST, and it comes from the server's own catalogue. Choosing
+ * it before the camera opens is not a formality: the stage is what the server
+ * checks the capability against, so asking afterwards would mean opening the
+ * camera for a photo that cannot be sent.
+ *
+ * Stages this person's capabilities do not cover are not listed. The server
+ * would refuse them anyway, and the refusal would arrive after the photo.
+ *
+ * WHAT THE PICKER REFUSES IS SAID PLAINLY, and a cancellation says nothing at
+ * all — closing the camera is not a failure.
+ */
+function EvidenceUploader({
+  stages,
+  stageCounts,
+  canUseStage,
+  isUploading,
+  error,
+  onUpload,
+}: EvidenceUploaderProps) {
+  const theme = useTheme();
+  const [stage, setStage] = useState<EvidenceStageOption | null>(null);
+  const [photo, setPhoto] = useState<PickedPhoto | null>(null);
+  const [note, setNote] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const allowed = stages.filter(canUseStage);
+
+  if (allowed.length === 0) {
+    return (
+      <Text variant="caption" color="textSecondary">
+        No tienes permiso para añadir fotos a esta orden.
+      </Text>
+    );
+  }
+
+  async function pick(source: PhotoSource) {
+    setNotice(null);
+    const result = await pickEvidencePhoto(source);
+    if (result.status === 'picked') {
+      setPhoto(result.photo);
+      return;
+    }
+    if (result.status === 'denied') {
+      setNotice(
+        source === 'camera'
+          ? 'La cámara está bloqueada para esta app. Se habilita en los ajustes del teléfono.'
+          : 'Las fotos están bloqueadas para esta app. Se habilitan en los ajustes del teléfono.',
+      );
+      return;
+    }
+    if (result.status === 'rejected') setNotice(result.reason);
+    // Cancelled: the person closed the picker, and that needs no message.
+  }
+
+  return (
+    <View style={{ gap: theme.spacing.xs }}>
+      <Text variant="subhead">Añadir una foto</Text>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: theme.spacing.xs }}
+      >
+        {allowed.map((option) => {
+          const count = stageCounts[option.value] ?? 0;
+          return (
+            <Button
+              key={option.value}
+              // The count is the server's: «Ingreso · 6» says what is on the
+              // record, not what this screen has drawn.
+              label={count > 0 ? `${option.label} · ${count}` : option.label}
+              variant={stage?.value === option.value ? 'primary' : 'ghost'}
+              size="compact"
+              onPress={() => {
+                setStage(option);
+                setNotice(null);
+              }}
+            />
+          );
+        })}
+      </ScrollView>
+
+      {stage ? (
+        <View style={{ gap: theme.spacing.xs }}>
+          <Text variant="caption" color="textSecondary">
+            {photo
+              ? `Foto lista: ${photo.name}`
+              : `La foto se guardará como «${stage.label}».`}
+          </Text>
+
+          <View style={{ flexDirection: 'row', gap: theme.spacing.xs }}>
+            <Button label="Cámara" variant="secondary" size="compact" onPress={() => void pick('camera')} />
+            <Button label="Galería" variant="secondary" size="compact" onPress={() => void pick('library')} />
+          </View>
+
+          {photo ? (
+            <>
+              <Input
+                label="Nota (opcional)"
+                value={note}
+                onChangeText={setNote}
+                maxLength={EVIDENCE_CAPTION_MAX_LENGTH}
+                hint="Qué muestra la foto."
+              />
+              <Button
+                label="Subir la foto"
+                loading={isUploading}
+                onPress={() => {
+                  onUpload({ stage: stage.value, photo, caption: note });
+                  // Cleared on dispatch: the mutation does not retry, so a
+                  // second press would be a second photo on the record.
+                  setPhoto(null);
+                  setNote('');
+                }}
+              />
+            </>
+          ) : null}
+        </View>
+      ) : null}
+
+      {notice ? (
+        <Text variant="caption" color="textSecondary">
+          {notice}
+        </Text>
+      ) : null}
+      {error ? (
+        <Text variant="caption" color="danger">
+          {serviceErrorMessage(error)}
+        </Text>
       ) : null}
     </View>
   );

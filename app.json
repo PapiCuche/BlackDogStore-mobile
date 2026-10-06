@@ -46,7 +46,15 @@
         }
       ],
       "expo-image",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Black Dog Store usa tus fotos para añadir evidencias a una orden de servicio.",
+          "cameraPermission": "Black Dog Store usa la cámara para fotografiar el equipo en cada etapa de la reparación.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

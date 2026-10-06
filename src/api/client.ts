@@ -27,6 +27,15 @@ export type RequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   /** Serialised as JSON. Omit for GET. */
   body?: unknown;
+  /**
+   * A multipart body, sent as given. Mutually exclusive with `body`.
+   *
+   * `Content-Type` is deliberately NOT set for it: the runtime has to add the
+   * boundary it generated, and a hand-written `multipart/form-data` header
+   * without that boundary makes Django parse zero fields and answer a 400 that
+   * blames the caller for an empty form.
+   */
+  multipart?: FormData;
   query?: Record<string, string | number | boolean | undefined>;
   /** Caller-supplied cancellation, composed with the internal timeout. */
   signal?: AbortSignal;
@@ -163,7 +172,11 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     );
   }
 
-  const { method = 'GET', body, query, headers, signal: callerSignal } = options;
+  const { method = 'GET', body, multipart, query, headers, signal: callerSignal } = options;
+
+  if (body !== undefined && multipart !== undefined) {
+    throw new ApiError('unknown', 'Una petición no puede llevar cuerpo JSON y multipart.');
+  }
 
   // Already cancelled before we started: don't open a socket, don't arm a
   // timer. Relying on `fetch` to notice the aborted signal works, but issuing a
@@ -184,7 +197,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...headers,
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: multipart ?? (body !== undefined ? JSON.stringify(body) : undefined),
       // Explicitly NOT 'include'. The web app authenticates with HttpOnly
       // cookies plus a CSRF header; replaying that from a native client would
       // mean managing a cookie jar we cannot inspect and a CSRF token we cannot

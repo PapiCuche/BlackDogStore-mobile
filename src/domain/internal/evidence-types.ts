@@ -67,3 +67,78 @@ export const EVIDENCE_VOID_REASON_MAX_LENGTH = 300;
  * evidence after the fact; editing visibility is its own audited act.
  */
 export const EVIDENCE_CAPTION_MAX_LENGTH = 300;
+
+/**
+ * One row of the stage catalogue the GALLERY RESPONSE carries.
+ *
+ * `InternalEvidenceListView` answers `stages`, built from
+ * `evidence_services.stage_catalogue()`: the value, the label and the
+ * capability, in the order of the repair cycle. The upload form is drawn from
+ * it rather than from the map above, so a stage the server adds or renames
+ * appears without a release, and a stage it removes stops being offered.
+ */
+export type EvidenceStageOption = {
+  value: RepairEvidenceStage;
+  label: string;
+  capability: string;
+};
+
+/**
+ * The gallery as the server hands it over: the photos, plus what it says about
+ * them.
+ *
+ * `stageCounts` counts only the photos IN FORCE — a voided photo is history,
+ * not evidence — and the server is the one that decides that, so the count is
+ * never recomputed from `items`.
+ */
+export type InternalEvidenceGallery = {
+  items: InternalEvidence[];
+  stages: EvidenceStageOption[];
+  /** Per stage, how many photos are in force. Absent keys mean none. */
+  stageCounts: Partial<Record<RepairEvidenceStage, number>>;
+  inForce: number;
+};
+
+export const EMPTY_EVIDENCE_GALLERY: InternalEvidenceGallery = {
+  items: [],
+  stages: [],
+  stageCounts: {},
+  inForce: 0,
+};
+
+/**
+ * WHAT THE PHONE CHECKS BEFORE UPLOADING, and why so little.
+ *
+ * `evidence_images.process` is the authority: it decodes the bytes, refuses a
+ * format it cannot read, re-encodes everything to WebP, strips metadata and
+ * compresses. None of that is repeated here.
+ *
+ * These two numbers exist only to avoid a pointless upload. A phone photo over
+ * the limit would travel for a while and come back a 413; asking the picker's
+ * own `fileSize` first costs nothing. The server still decides: a file that
+ * passes these checks can still be refused, and that refusal is what the user
+ * is shown.
+ */
+export const EVIDENCE_MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+/**
+ * What `ACCEPTED_INPUT_FORMATS` can decode, as MIME types.
+ *
+ * HEIC is on the list because it is what an iPhone on "High Efficiency" — the
+ * factory setting — hands over. The server needs `pillow-heif` for it and says
+ * so plainly when it is missing, so a HEIC is sent and that answer is shown
+ * rather than guessed at here.
+ */
+export const EVIDENCE_ACCEPTED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+] as const;
+
+/** The picker reports a MIME type; an unknown one is still sent. */
+export function isAcceptedEvidenceMimeType(mimeType: string | undefined): boolean {
+  if (!mimeType) return true;
+  return (EVIDENCE_ACCEPTED_MIME_TYPES as readonly string[]).includes(mimeType.toLowerCase());
+}
