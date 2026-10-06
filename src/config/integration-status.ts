@@ -180,7 +180,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   platformAnnouncements: {
     label: 'Plataforma · Comunicados',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/platform/announcements/ — listado, detalle y cifras de los comunicados que cruzan empresas. La autoridad es la CUENTA (is_superuser), nunca un rol de empresa, y quien no lo es recibe 404. Redactar y publicar sigue en la consola web: publicar escribe un aviso por destinatario en cada empresa alcanzada.',
+    note: 'Integrado con /api/v1/platform/announcements/ — listado, detalle y cifras de los comunicados que cruzan empresas. La autoridad es la CUENTA (is_superuser), nunca un rol de empresa, y quien no lo es recibe 404. Redactar y publicar sigue en la consola web por decisión: ninguna ruta v1 lista las empresas, así que lo único componible aquí sería ALL_ACTIVE_COMPANIES —un aviso para cada persona de cada empresa— y ofrecer solo eso haría del envío más amplio el más fácil (BR-012).',
     source: 'api/endpoints/platform-announcements-v1.ts',
   },
   internalCommunications: {

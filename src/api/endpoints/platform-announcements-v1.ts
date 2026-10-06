@@ -33,11 +33,22 @@ import {
  * NO TENANT IN THE PATH, deliberately: these messages cross companies, which is
  * exactly why only the platform account may read them.
  *
- * WRITING IS NOT HERE. Creating, editing, composing cross-tenant audience
- * rules, previewing and publishing all exist on the server. Publishing one of
- * these writes a notification row for every recipient in every company it
- * names, and that is not an act to expose on a phone before there is an
- * audience editor to make it legible.
+ * WRITING IS NOT HERE, and that is now a decision rather than a gap.
+ *
+ * The tenant surface gained authoring (M12C, `all_company`) because one of its
+ * five audience kinds names no identifier. The platform surface has no such
+ * option: `_parse_platform_rules` wants a list of company slugs or the literal
+ * `ALL_ACTIVE_COMPANIES`, and `/api/v1/` publishes no route that lists the
+ * companies — so the only audience composable from here is
+ * `ALL_ACTIVE_COMPANIES` crossed with `all_company`, which is a notification
+ * row for every person in every company on the platform.
+ *
+ * That single act is the broadest thing this system can do, and the server
+ * makes it spell its own name precisely to keep it from happening by accident.
+ * Offering it as the ONLY authoring this screen has — with no way to send to
+ * one company instead — would make the dangerous send the easy one. It stays on
+ * the console until BR-012 exposes the companies, and then both become
+ * possible together.
  */
 
 type Deps = { refreshCoordinator: RefreshCoordinator };

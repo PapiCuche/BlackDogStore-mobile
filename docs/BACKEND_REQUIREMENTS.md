@@ -1581,3 +1581,21 @@ dos cifras que se contradicen.
 El editor de audiencia completo: dirigir un comunicado a una sucursal, a un rol,
 a quien tenga una capacidad o a personas concretas, en lugar del único
 `all_company` que hoy se puede componer.
+
+### Addendum — la superficie de plataforma
+
+El mismo hueco cierra las dos puntas. `_parse_platform_rules` exige una lista
+de slugs de empresa o el literal `ALL_ACTIVE_COMPANIES`, y ninguna ruta v1
+lista las empresas. Así que lo único componible hoy desde la plataforma sería
+`ALL_ACTIVE_COMPANIES` cruzado con `all_company`: un aviso para cada persona de
+cada empresa.
+
+Mobile **no** lo ofrece. Es el acto más amplio del sistema, el servidor obliga a
+escribir su nombre completo justamente para que no ocurra por descuido, y
+exponerlo como la única forma de enviar —sin poder dirigirlo a una sola
+empresa— convertiría el envío más peligroso en el más fácil. Con la lectura de
+BR-012 ampliada a `companies` (slug y nombre de las activas), las dos cosas se
+vuelven posibles a la vez.
+
+Autoridad para esa parte: `user.is_superuser`, como el resto de la superficie de
+plataforma, y 404 —nunca 403— para quien no lo sea.
