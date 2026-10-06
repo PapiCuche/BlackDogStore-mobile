@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { InternalCapabilityMissingError } from '@/api/endpoints/internal-v1';
 import type { ServiceOrderQuery } from '@/api/endpoints/internal-service-v1';
+import * as Sharing from 'expo-sharing';
+
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import type {
   ServiceDeliveryInput,
@@ -796,4 +798,29 @@ export function useUpdateEvidenceCaption(orderId: number) {
     ({ evidenceId, caption }) =>
       repository().updateEvidenceCaption(orderId, evidenceId, caption),
   );
+}
+
+/**
+ * Fetch the approved quote's 80 mm ticket and hand it to the share sheet.
+ *
+ * A MUTATION although it reads: it writes a file, the server refuses it for a
+ * quote that is not approved, and a query would retry that refusal and cache a
+ * document. Nothing retries, and the file lands in the cache directory because
+ * the server can redraw it at any time.
+ *
+ * Sharing is the only thing this app can do with a PDF: there is no viewer, and
+ * the share sheet is where printing lives on both platforms.
+ */
+export function useQuoteTicket(orderId: number) {
+  return useServiceMutation<{ quoteId: number }, unknown>(async ({ quoteId }) => {
+    const ticket = await repository().downloadQuoteTicket(orderId, quoteId);
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(ticket.uri, {
+        mimeType: 'application/pdf',
+        UTI: 'com.adobe.pdf',
+        dialogTitle: 'Ticket de la cotización',
+      });
+    }
+    return ticket;
+  });
 }

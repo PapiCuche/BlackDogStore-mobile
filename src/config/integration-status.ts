@@ -55,6 +55,7 @@ export type FeatureKey =
   | 'internalMessaging'
   | 'platformAnnouncements'
   | 'internalServiceEvidence'
+  | 'internalQuoteTicket'
   | 'internalPos'
   | 'internalInventory'
   | 'inventoryCounts'
@@ -193,6 +194,12 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
     status: 'TESTED',
     note: 'Integrado con /api/v1/internal/<empresa>/service/orders/<id>/evidence/ — listado, bytes por ruta de contenido, compartir con el cliente, dejar de compartir y anular. Cada acto exige la capability de la ETAPA de la foto más acceso a la sucursal; subir fotos sigue siendo de la consola web (falta selector de imágenes nativo).',
     source: 'api/endpoints/internal-service-evidence-v1.ts',
+  },
+  internalQuoteTicket: {
+    label: 'Interno · Ticket de la cotización',
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/internal/<empresa>/service/orders/<id>/quotes/<id>/ticket/?formato=ticket80 — el servidor dibuja el PDF de 80 mm y la app solo lo descarga autenticado y lo abre con el diálogo de compartir del sistema. Exige service.orders.view más acceso a la sucursal, y el servidor solo lo emite cuando la cotización está aprobada.',
+    source: 'api/endpoints/internal-quote-ticket-v1.ts',
   },
   internalPos: {
     label: 'Interno · Punto de venta',
