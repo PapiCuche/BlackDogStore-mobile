@@ -20,6 +20,11 @@ import {
   CAP_SERVICE_CUSTOMERS_VIEW,
   CAP_SERVICE_DEVICES_MANAGE,
   CAP_SERVICE_ORDERS_CREATE,
+  DEVICE_PENDING_REASON_MAX_LENGTH,
+  deviceRequiresImei,
+  deviceRequiresSerial,
+  isIdentifierPlaceholder,
+  isPlausibleImei,
   SERVICE_DEVICE_TYPES,
   type ServiceCustomerSummary,
   type ServiceDevice,
@@ -104,6 +109,11 @@ export default function ServiceIntakeScreen() {
   const [model, setModel] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
   const [imei, setImei] = useState('');
+  const [imei2, setImei2] = useState('');
+  // DEVICE-IDENTITY. The escape hatch for a sticker nobody can read. The server
+  // would rather have an empty field and a sentence than «N/A» in a column that
+  // later reads as a duplicate of a real device.
+  const [pendingReason, setPendingReason] = useState('');
 
   // KEYSTROKES INSIDE THE WINDOW ARE COALESCED before they become a query term.
   // Every distinct term is a distinct query key, so typing «Rodriguez» would
@@ -134,6 +144,12 @@ export default function ServiceIntakeScreen() {
   });
   // DEVICE-IDENTITY. Runs only while registering and only once the typed
   // number can match; `useServiceDeviceLookup` holds itself back otherwise.
+  // What the server will demand for THIS type, so the form can say it before a
+  // round trip rather than after a 400.
+  const missingRequiredIdentifier =
+    (deviceRequiresSerial(deviceType) && serialNumber.trim() === '')
+    || (deviceRequiresImei(deviceType) && imei.trim() === '');
+
   const deviceMatches = useServiceDeviceLookup(
     { serialNumber, imei },
     { enabled: registering },
@@ -228,6 +244,8 @@ export default function ServiceIntakeScreen() {
         model: model.trim(),
         serialNumber: serialNumber.trim() || undefined,
         imei: imei.trim() || undefined,
+        imei2: imei2.trim() || undefined,
+        identifiersPendingReason: pendingReason.trim() || undefined,
       },
       {
         onSuccess: (created) => {
@@ -237,6 +255,8 @@ export default function ServiceIntakeScreen() {
           setModel('');
           setSerialNumber('');
           setImei('');
+          setImei2('');
+          setPendingReason('');
         },
       },
     );
@@ -359,20 +379,67 @@ export default function ServiceIntakeScreen() {
 
                     <Input label="Marca" value={brand} onChangeText={setBrand} />
                     <Input label="Modelo" value={model} onChangeText={setModel} />
-                    {/* OPTIONAL, both. A serial is transcribed by hand from a
-                        sticker and many devices have none that can be read. */}
+                    {/* DEVICE-IDENTITY. The requirement is BY TYPE, not blanket:
+                        a laptop has no IMEI and demanding one would fill the
+                        database with placeholders. A phone has one, so a phone is
+                        asked. What cannot be read is left empty and explained. */}
                     <Input
-                      label="Número de serie (opcional)"
+                      label={
+                        deviceRequiresSerial(deviceType)
+                          ? 'Número de serie'
+                          : 'Número de serie (opcional)'
+                      }
                       value={serialNumber}
                       onChangeText={setSerialNumber}
                       autoCapitalize="characters"
+                      error={
+                        isIdentifierPlaceholder(serialNumber)
+                          ? 'Si no se puede leer, déjalo vacío y explica por qué.'
+                          : undefined
+                      }
                     />
-                    <Input
-                      label="IMEI (opcional)"
-                      value={imei}
-                      onChangeText={setImei}
-                      keyboardType="number-pad"
-                    />
+                    {deviceRequiresImei(deviceType) ? (
+                      <>
+                        <Input
+                          label="IMEI"
+                          value={imei}
+                          onChangeText={setImei}
+                          keyboardType="number-pad"
+                          hint="15 dígitos. Marca *#06# en el equipo si no está a la vista."
+                          error={
+                            imei.trim() === '' || isPlausibleImei(imei)
+                              ? undefined
+                              : 'Ese IMEI no supera su dígito de control.'
+                          }
+                        />
+                        <Input
+                          label="IMEI 2 (opcional)"
+                          value={imei2}
+                          onChangeText={setImei2}
+                          keyboardType="number-pad"
+                          hint="Sólo si el equipo es dual SIM."
+                          error={
+                            imei2.trim() === '' || isPlausibleImei(imei2)
+                              ? undefined
+                              : 'Ese IMEI no supera su dígito de control.'
+                          }
+                        />
+                      </>
+                    ) : null}
+
+                    {/* Shown only when something REQUIRED is still empty: the
+                        server accepts the omission with a reason, and refuses it
+                        without one. */}
+                    {missingRequiredIdentifier ? (
+                      <Input
+                        label="Motivo por el que falta"
+                        value={pendingReason}
+                        onChangeText={setPendingReason}
+                        maxLength={DEVICE_PENDING_REASON_MAX_LENGTH}
+                        multiline
+                        hint="Por ejemplo: la etiqueta está borrada, o el equipo no enciende."
+                      />
+                    ) : null}
 
                     {/* DEVICE-IDENTITY. Asked as the number is typed, and only
                         once there is enough of it to match: the server ignores a
