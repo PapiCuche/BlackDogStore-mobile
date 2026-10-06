@@ -55,6 +55,7 @@ import {
   useCreateQuote,
   usePublishQuote,
   useRecordQuoteDecision,
+  useQuoteTicket,
   useReopenQuote,
   useRemoveQuoteItem,
   useServiceAssignmentOptions,
@@ -203,6 +204,9 @@ export default function ServiceOrderDetailScreen() {
   );
   const recordDecision = useRecordQuoteDecision(orderId);
   const reopenQuote = useReopenQuote(orderId);
+  // QUOTE-TICKET. Downloads the server-drawn PDF and opens the share sheet,
+  // which is where printing lives on both platforms.
+  const quoteTicket = useQuoteTicket(orderId);
 
   // M10. Working the bench is its OWN capability, separate from moving the
   // order and separate from quoting. A shop can hand the counter one without
@@ -400,12 +404,12 @@ export default function ServiceOrderDetailScreen() {
             isBusy={
               createQuote.isPending || addItem.isPending || removeItem.isPending
               || publishQuote.isPending || cancelQuote.isPending
-              || recordDecision.isPending || reopenQuote.isPending
+              || recordDecision.isPending || reopenQuote.isPending || quoteTicket.isPending
             }
             error={
               createQuote.error ?? addItem.error ?? removeItem.error
               ?? publishQuote.error ?? cancelQuote.error
-              ?? recordDecision.error ?? reopenQuote.error
+              ?? recordDecision.error ?? reopenQuote.error ?? quoteTicket.error
             }
             onCreate={() =>
               createQuote.mutate({
@@ -418,6 +422,7 @@ export default function ServiceOrderDetailScreen() {
             onCancel={(quoteId) => cancelQuote.mutate({ quoteId })}
             onRecordDecision={(quoteId, input) => recordDecision.mutate({ quoteId, input })}
             onReopen={(quoteId, reason) => reopenQuote.mutate({ quoteId, reason })}
+            onTicket={(quoteId) => quoteTicket.mutate({ quoteId })}
           />
 
           {/* M10 / BR-005C. These two are the FORWARD PATH from `approved`.

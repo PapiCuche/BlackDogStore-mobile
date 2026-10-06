@@ -68,6 +68,7 @@ import {
   postWhatsAppConsent,
   retryWhatsAppNotice,
 } from '@/api/endpoints/internal-service-v1';
+import { downloadQuoteTicket } from '@/api/endpoints/internal-quote-ticket-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type { StaffQuoteDecisionInput } from '@/domain/internal/service-types';
 import type {
@@ -563,6 +564,12 @@ export class V1InternalServiceRepository {
     signal?: AbortSignal,
   ) {
     return updateInternalEvidenceCaption(orderId, evidenceId, caption, this.deps, signal);
+  }
+
+
+  /** QUOTE-TICKET. The server draws the PDF; this only fetches and saves it. */
+  async downloadQuoteTicket(orderId: number, quoteId: number, signal?: AbortSignal) {
+    return downloadQuoteTicket(orderId, quoteId, this.deps, signal);
   }
 
 }

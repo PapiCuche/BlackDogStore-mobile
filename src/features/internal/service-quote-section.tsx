@@ -44,6 +44,8 @@ export type ServiceQuoteSectionProps = {
   onRecordDecision?: (quoteId: number, input: StaffQuoteDecisionInput) => void;
   /** Void an approval and open a new draft. `service.diagnostic.manage`. */
   onReopen?: (quoteId: number, reason: string) => void;
+  /** QUOTE-TICKET. Fetch the server-drawn PDF and open the share sheet. */
+  onTicket?: (quoteId: number) => void;
 };
 
 /**
@@ -77,6 +79,7 @@ export function ServiceQuoteSection({
   canRecordDecision = false,
   onRecordDecision,
   onReopen,
+  onTicket,
 }: ServiceQuoteSectionProps) {
   const theme = useTheme();
   const current = quotes[0];
@@ -388,6 +391,21 @@ export function ServiceQuoteSection({
                 }
               />
             </View>
+          ) : null}
+
+          {/* QUOTE-TICKET. Whoever may open the order may print what was agreed
+              on it, so this rides with the section rather than with a write
+              capability. The server decides whether there is anything to print:
+              an unapproved — or superseded — quote answers 400, and that
+              sentence is what the operator reads. */}
+          {onTicket && current?.status === 'approved' ? (
+            <Button
+              label="Ticket de la cotización"
+              variant="secondary"
+              fullWidth
+              loading={isBusy}
+              onPress={() => onTicket(current.id)}
+            />
           ) : null}
 
           {/* ── When the approved work turns out to be different ────────── */}
