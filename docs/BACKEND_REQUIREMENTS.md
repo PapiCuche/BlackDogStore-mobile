@@ -1490,3 +1490,94 @@ auditoría y ya está en el registro del servidor.
 
 Sustituir los dos actos explícitos por un estado visible con su fecha, y avisar
 antes de reenviar un aviso a alguien que se dio de baja.
+
+---
+
+## BR-012 — Un padrón mínimo para dirigir un comunicado
+
+**Estado:** abierto. **Superficie:** `/api/v1/internal/<empresa>/…`.
+**Verificado contra** `PapiCuche/BlackDogStore-web` `origin/master` `5da4e99`
+(`store/announcement_views.py`, `store/announcement_services.py`,
+`store/models.py` → `AnnouncementAudienceRule.Kind`).
+
+### Lo que Mobile ya hace
+
+Redactar un comunicado, dirigirlo **a toda la empresa**, pedir el alcance
+estimado, publicarlo y descartarlo. Todo con `communications.manage`, por las
+rutas que ya existen:
+
+```
+POST  internal/<empresa>/communications/
+PATCH internal/<empresa>/communications/<id>/
+POST  internal/<empresa>/communications/<id>/preview/
+POST  internal/<empresa>/communications/<id>/publish/
+POST  internal/<empresa>/communications/<id>/cancel/
+```
+
+### Lo que no puede hacer, y por qué
+
+`AnnouncementAudienceRule.Kind` tiene cinco valores: `all_company`, `branch`,
+`role`, `capability` y `user`. El primero no nombra nada, así que Mobile lo
+compone completo. Los otros cuatro exigen un identificador —`branch_id`,
+`role_id`, `capability_code` del catálogo, `user_id`— y **ninguna ruta de
+`/api/v1/` publica esas listas**:
+
+- `internal/<empresa>/context/` responde a propósito «¿qué puedo ver yo?»: el
+  slug de la empresa, si hay membresía, las capabilities **del solicitante** y
+  si es master. No es un padrón, y usar las capabilities del remitente como si
+  fueran el catálogo dirigiría el comunicado por lo que puede hacer quien
+  escribe, no por lo que necesita quien lee.
+- No hay `internal/<empresa>/branches/`, ni `roles/`, ni `members/`, ni un
+  catálogo de capacidades.
+
+Adivinar un `branch_id` es dirigir un comunicado a la gente equivocada. Mobile
+no lo hace, y tampoco ensancha la audiencia por omisión: el servidor ya rechaza
+un borrador sin reglas en lugar de leerlo como «todos», y el cliente nunca envía
+`all_company` por defecto.
+
+### Contrato mínimo requerido
+
+Una sola lectura basta. Sugerencia de forma, no de implementación:
+
+```
+GET internal/<empresa>/communications/audience-options/
+→ {
+    "branches":     [{"id": 3, "name": "Centro"}],
+    "roles":        [{"id": 7, "name": "Técnico"}],
+    "capabilities": [{"code": "service.repair.manage", "label": "Reparación"}],
+    "members":      [{"id": 42, "name": "Ana Torres"}]
+  }
+```
+
+Debe estar **acotada a la empresa de la URL** y filtrada igual que
+`_one_rule`: una sucursal de otra empresa no existe aquí, un rol de otra empresa
+tampoco, y `members` solo con `Membership.is_active`.
+
+### Autoridad
+
+`communications.manage`, la misma de todas las rutas de comunicados. No es una
+lectura de personal para cualquiera: es la lista de destinatarios posibles de un
+mensaje, y solo la necesita quien compone uno.
+
+### Qué NO debe incluir
+
+Correos, teléfonos, direcciones ni el historial de nadie. Un nombre y un
+identificador son lo único que una regla de audiencia necesita. Tampoco cuántas
+personas caen en cada opción: eso ya lo responde `preview/`, y duplicarlo daría
+dos cifras que se contradicen.
+
+### Tests backend requeridos
+
+1. la lectura exige `communications.manage` (403 sin ella);
+2. una empresa ajena responde 404, no 403;
+3. `branches`, `roles` y `members` solo traen filas de esa empresa;
+4. `members` excluye las membresías inactivas;
+5. `capabilities` coincide con el catálogo que valida `_one_rule`, de modo que
+   todo código ofrecido es aceptado al guardar la audiencia;
+6. ningún campo de contacto aparece en la respuesta.
+
+### Trabajo Mobile que desbloquea
+
+El editor de audiencia completo: dirigir un comunicado a una sucursal, a un rol,
+a quien tenga una capacidad o a personas concretas, en lugar del único
+`all_company` que hoy se puede componer.

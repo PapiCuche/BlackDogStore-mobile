@@ -186,7 +186,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   internalCommunications: {
     label: 'Interno · Comunicados',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/internal/<empresa>/communications/ y /announcements/<id>/ — lectura del comunicado propio (sin capability, el servidor prueba el envío) y, con communications.manage, el listado de lo enviado con sus cifras agregadas. Redactar y publicar sigue en la consola web: elegir audiencia pide un editor de reglas.',
+    note: 'Integrado con /api/v1/internal/<empresa>/communications/ y /announcements/<id>/ — lectura del comunicado propio (sin capability, el servidor prueba el envío) y, con communications.manage, el listado de lo enviado, sus cifras agregadas, redactar un borrador, dirigirlo a toda la empresa, estimar el alcance, publicarlo y descartarlo. Dirigirlo a una sucursal, un rol, una capacidad o personas concretas sigue en la consola web: esos cuatro tipos de regla piden identificadores que ninguna ruta v1 publica (BR-012).',
     source: 'api/endpoints/internal-communications-v1.ts',
   },
   internalServiceEvidence: {

@@ -1,14 +1,20 @@
 import {
+  cancelAnnouncementDraft,
+  createAnnouncementDraft,
   fetchAddressedAnnouncement,
   fetchAnnouncement,
   fetchAnnouncements,
   fetchAnnouncementStats,
+  previewAnnouncement,
+  publishAnnouncement,
+  updateAnnouncementDraft,
   type AnnouncementQuery,
 } from '@/api/endpoints/internal-communications-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
+import type { AnnouncementDraftInput } from '@/domain/internal/announcement-types';
 
 /**
- * Communiqués — M12C, read side.
+ * Communiqués — M12C.
  *
  * Two audiences in one class because they are the same domain object seen from
  * two distances: `listAnnouncements` is the sender looking at what it sent,
@@ -33,5 +39,32 @@ export class V1InternalCommunicationsRepository {
 
   async getAddressedAnnouncement(id: number, signal?: AbortSignal) {
     return fetchAddressedAnnouncement(id, this.deps, signal);
+  }
+
+  // Authoring. Every one of these needs `communications.manage` in THIS
+  // company, and the audience this app can compose is the whole company — the
+  // other four kinds name identifiers no v1 route publishes (BR-012).
+  async createDraft(input: AnnouncementDraftInput, signal?: AbortSignal) {
+    return createAnnouncementDraft(input, this.deps, signal);
+  }
+
+  async updateDraft(
+    id: number,
+    changes: Partial<AnnouncementDraftInput> & { audienceAllCompany?: true },
+    signal?: AbortSignal,
+  ) {
+    return updateAnnouncementDraft(id, changes, this.deps, signal);
+  }
+
+  async previewDraft(id: number, signal?: AbortSignal) {
+    return previewAnnouncement(id, this.deps, signal);
+  }
+
+  async publishDraft(id: number, signal?: AbortSignal) {
+    return publishAnnouncement(id, this.deps, signal);
+  }
+
+  async cancelDraft(id: number, signal?: AbortSignal) {
+    return cancelAnnouncementDraft(id, this.deps, signal);
   }
 }

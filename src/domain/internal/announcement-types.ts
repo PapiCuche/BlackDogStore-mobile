@@ -88,3 +88,53 @@ export const ANNOUNCEMENT_STATUSES: readonly AnnouncementStatus[] = [
   'published',
   'cancelled',
 ];
+
+/**
+ * WHAT A COMMUNIQUÉ IS ALLOWED TO SAY — `announcement_services.TITLE_MAX` and
+ * `BODY_MAX`. Mirrored to stop a long text at the keyboard rather than after a
+ * round trip; the server validates it again and its refusal is what is shown.
+ */
+export const ANNOUNCEMENT_TITLE_MAX_LENGTH = 140;
+export const ANNOUNCEMENT_BODY_MAX_LENGTH = 4000;
+
+/**
+ * THE AUDIENCE KINDS, and the one this app can compose.
+ *
+ * `AnnouncementAudienceRule.Kind` has five. Four of them name something by id
+ * — a branch, a role, a capability code from the catalogue, a person — and
+ * `/api/v1/` publishes no route that lists any of those, so this app cannot
+ * offer them without inventing identifiers. Addressing a message to a guessed
+ * id would send it to the wrong people, which is worse than not sending it.
+ *
+ * `all_company` names nothing, so it is composable and complete: the server
+ * resolves it to the company's active members at publication.
+ *
+ * See BR-012 in docs/BACKEND_REQUIREMENTS.md for the roster that would unlock
+ * the other four.
+ */
+export const ANNOUNCEMENT_AUDIENCE_ALL_COMPANY = 'all_company';
+
+/** What this app sends as an audience. One rule, naming no identifiers. */
+export type AnnouncementAudienceInput = readonly [
+  { readonly kind: typeof ANNOUNCEMENT_AUDIENCE_ALL_COMPANY },
+];
+
+export type AnnouncementDraftInput = {
+  title: string;
+  body: string;
+  priority: NotificationPriority;
+};
+
+/**
+ * How many people a draft WOULD reach, asked just before publishing.
+ *
+ * INFORMATIVE, NEVER AUTHORITATIVE — the server says so in as many words:
+ * publication resolves the audience again from scratch, because somebody joins
+ * or leaves in between. It is shown as a number from a moment, never kept as
+ * the recipient list.
+ */
+export type AnnouncementPreview = {
+  recipientCount: number;
+  companyCount: number;
+  companies: readonly { slug: string; name: string; recipientCount: number }[];
+};

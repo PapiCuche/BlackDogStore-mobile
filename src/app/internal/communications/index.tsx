@@ -36,10 +36,14 @@ import { formatDate } from '@/utils/format';
  * business. Reading a message addressed to you lives at
  * `/internal/announcements/<id>` and asks for no capability at all.
  *
- * COMPOSING IS NOT HERE. Writing a communiqué means choosing an audience out of
- * branches, roles, capabilities and named people, and publishing freezes that
- * choice into one notification row per recipient. That editor belongs on the
- * console; this screen is for seeing what went out and how far it got.
+ * COMPOSING STARTS HERE and finishes on the draft's own screen. Writing the
+ * text is one act; addressing the message and publishing it are others, and
+ * publishing freezes the audience into one notification row per recipient.
+ *
+ * THE AUDIENCE THIS APP CAN COMPOSE IS THE WHOLE COMPANY. Targeting a branch, a
+ * role, a capability or named people needs identifiers no `/api/v1/` route
+ * publishes, so that targeting stays on the Web console — see BR-012 — and this
+ * app never guesses an id to address a message with.
  */
 export default function CommunicationsScreen() {
   const theme = useTheme();
@@ -81,6 +85,12 @@ export default function CommunicationsScreen() {
             onPress={() => setStatus(option)}
           />
         ))}
+      </View>
+      <View style={{ marginBottom: theme.spacing.md }}>
+        <Button
+          label="Redactar un comunicado"
+          onPress={() => router.push('/internal/communications/new')}
+        />
       </View>
     </View>
   );
@@ -193,7 +203,7 @@ export default function CommunicationsScreen() {
             <EmptyState
               icon={icons.info}
               title="Sin comunicados"
-              message="Todavía no hay comunicados en este estado. Se redactan desde la consola web."
+              message="Todavía no hay comunicados en este estado."
             />
           }
           contentContainerStyle={{

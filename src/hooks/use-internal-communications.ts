@@ -1,6 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { AnnouncementStatus } from '@/domain/internal/announcement-types';
+import type {
+  AnnouncementDetail,
+  AnnouncementDraftInput,
+  AnnouncementPreview,
+  AnnouncementStatus,
+} from '@/domain/internal/announcement-types';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import { queryKeys } from '@/providers/query-client';
 import { useQueryScope } from '@/providers/use-query-scope';
@@ -84,4 +89,83 @@ export function useAddressedAnnouncement(
     enabled: (options.enabled ?? true) && id !== undefined && Number.isFinite(id),
     retry: false,
   });
+}
+
+/**
+ * AUTHORING — M12C, write side.
+ *
+ * Every one of these invalidates the sender's whole `communications` prefix:
+ * publishing changes the message, the frozen recipient count, the list it
+ * appears in and the numbers underneath it at once.
+ *
+ * NOTHING RETRIES. Publishing writes one notification row per recipient, so a
+ * repeated POST is a second message in everybody's inbox; the server has no
+ * idempotency key for this route, which is itself the reason not to invent a
+ * retry policy for it.
+ *
+ * `internalAddressedAnnouncement` is deliberately NOT invalidated here. What a
+ * recipient was sent is a different question with a different gate, and the
+ * sender's act does not make the reader's copy stale.
+ */
+function useCommunicationsMutation<TInput, TResult>(
+  run: (input: TInput) => Promise<TResult>,
+) {
+  const client = useQueryClient();
+  const scope = useQueryScope();
+
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => {
+      void client.invalidateQueries({
+        queryKey: queryKeys.internalAnnouncementsRoot(scope),
+      });
+    },
+    retry: false,
+  });
+}
+
+/** A new draft: title, body, priority. No audience, and not published. */
+export function useCreateAnnouncementDraft() {
+  return useCommunicationsMutation<AnnouncementDraftInput, AnnouncementDetail>((input) =>
+    repository().createDraft(input),
+  );
+}
+
+/**
+ * Edit a draft, and optionally address it to the whole company.
+ *
+ * `audienceAllCompany` is opt-in per call because `set_audience` REPLACES the
+ * rules — a PATCH that sent it by habit would overwrite a distribution list
+ * composed in the Web console out of branches and roles this app cannot show.
+ */
+export function useUpdateAnnouncementDraft() {
+  return useCommunicationsMutation<
+    { id: number } & Partial<AnnouncementDraftInput> & { audienceAllCompany?: true },
+    AnnouncementDetail
+  >(({ id, ...changes }) => repository().updateDraft(id, changes));
+}
+
+/**
+ * How many people it would reach.
+ *
+ * A mutation rather than a query, and never cached: the server resolves the
+ * audience to answer and resolves it again at publication, so holding this
+ * number would be holding a recipient list that nobody promised.
+ */
+export function usePreviewAnnouncement() {
+  return useCommunicationsMutation<{ id: number }, AnnouncementPreview>(({ id }) =>
+    repository().previewDraft(id),
+  );
+}
+
+export function usePublishAnnouncement() {
+  return useCommunicationsMutation<{ id: number }, AnnouncementDetail>(({ id }) =>
+    repository().publishDraft(id),
+  );
+}
+
+export function useCancelAnnouncementDraft() {
+  return useCommunicationsMutation<{ id: number }, AnnouncementDetail>(({ id }) =>
+    repository().cancelDraft(id),
+  );
 }
