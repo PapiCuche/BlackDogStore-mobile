@@ -42,6 +42,14 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | BR-011 | Estado del consentimiento de WhatsApp **legible** en v1 | BAJA — hoy el consentimiento se escribe a ciegas: no hay payload que lo exponga |
 | H-02 | Cotización v1 del cupón **antes** de crear el pedido | MEDIA — sin ella Mobile no puede enseñar un descuento sin inventarlo; no reabre el checkout por sí sola |
 | H-06 | Cobertura de tests del `payload_fingerprint` del checkout v1 | BAJA — deuda de garantía sobre código que ya existe; no bloquea Mobile |
+| BR-012 | Padrón mínimo para **dirigir un comunicado** (sucursales, roles, capacidades, personas, empresas) | MEDIA — sin él solo se puede componer `all_company`; la autoría de plataforma sigue retenida |
+| BR-013 | Listado de **transportistas activos** de la empresa | MEDIA — la entrega de un pedido se corrige entera menos el transportista |
+| BR-014 | Variantes de un modelo y **equipos de una variante usada** | MEDIA — la ficha dice que se vende por unidad y remite a la tienda |
+| BR-015 | Recuperación de contraseña **bajo `/api/v1/`** | MEDIA — hoy vive en `/api/auth/`, que es la puerta del frontend web |
+| BR-016 | Consolas que **no tienen ninguna ruta v1** (catálogo, personas, ajustes, **devoluciones posventa**, alta de clientes) | INFORMATIVO — deja escrito por qué no están en la app |
+| BR-017 | **Documento impreso** de una venta de mostrador | ALTA — la app emite el comprobante y muestra su número, pero no puede entregarlo |
+| BR-018 | **Listado interno de productos** para `products.view` | ALTA — quien administra el catálogo no tiene ninguna pantalla de productos |
+| REPORTS-01 | Las **cifras que la empresa ya calcula** (stock bajo/alto, lo más vendido, sin rotación, comisiones) | ALTA — solo `inventory/summary/` cruzó a v1; el resto es `/api/admin/` |
 
 ---
 
@@ -1417,6 +1425,22 @@ código. Casos a fijar:
 5. empresas y usuarios distintos no reutilizan la intención entre ámbitos.
 
 El objetivo es probar la semántica que ya existe, no cambiarla desde Mobile.
+
+### Autoridad e idempotencia
+
+Ninguna capacidad nueva: es el mismo checkout v1 del cliente, con la misma
+clave de idempotencia. Lo que se fija es qué entra en la huella, que es
+precisamente lo que decide si dos escrituras son «la misma» o un `409`.
+
+### Trabajo Mobile que desbloquea
+
+Ninguno hoy, y por eso es BAJA: Mobile ya genera la clave y no vuelve a enviar
+una intención. Lo que desbloquea es **confianza para cambiar**: mientras la
+huella no tenga tests, cualquier ajuste del cupón o de la normalización puede
+alterar en silencio qué pares cuentan como la misma venta, y el primero en
+enterarse sería un cliente cobrado dos veces. Si la semántica cambiara, la
+implementación compartida de idempotencia de Mobile y sus tests se actualizan
+con ella — esa es la única integración que esta deuda toca.
 
 ---
 
