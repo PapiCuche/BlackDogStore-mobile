@@ -3,6 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import { InternalCapabilityMissingError } from '@/api/endpoints/internal-v1';
 import type { FulfillmentStatus } from '@/domain/internal/types';
+import type {
+  RiskDecision,
+  UnitMethodInput,
+} from '@/domain/internal/order-unit-types';
 import { queryKeys } from '@/providers/query-client';
 import { useQueryScope } from '@/providers/use-query-scope';
 import { V1InternalSalesRepository } from '@/repositories/api/v1-internal-sales-repository';
@@ -88,6 +92,94 @@ export function useSetFulfillmentStatus() {
         void client.removeQueries({ queryKey: queryKeys.internalContext(scope) });
         void client.removeQueries({ queryKey: queryKeys.internalOrder(scope, 0).slice(0, -2) });
       }
+    },
+    retry: false,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// SERIAL-PICK-01 — which device left with the order
+// ---------------------------------------------------------------------------
+
+/**
+ * Which device does this code name?
+ *
+ * A MUTATION, not a query, although it writes nothing: it is an act somebody
+ * performs with a device in hand, its answer is about one code typed once, and
+ * caching it would mean a screen showing a candidate for a code the person has
+ * already moved on from.
+ */
+export function useLookupOrderUnit(orderId: number) {
+  return useMutation({
+    mutationFn: ({ code, method }: { code: string; method: UnitMethodInput }) =>
+      repository().lookupUnit(orderId, code, method),
+    retry: false,
+  });
+}
+
+/**
+ * Commit the device being handed over, or take one back.
+ *
+ * Both answer with the WHOLE order — devices, remaining count, whether more
+ * can still be named — so the cache is written from that answer and the screen
+ * never computes any of it.
+ *
+ * Neither retries. Sending the same code twice is refused by the server (the
+ * device is already on the order), and an automatic retry would turn one clear
+ * refusal into a confusing second one.
+ */
+export function useIdentifyOrderUnit(orderId: number) {
+  const client = useQueryClient();
+  const scope = useQueryScope();
+
+  return useMutation({
+    mutationFn: ({ code, method }: { code: string; method: UnitMethodInput }) =>
+      repository().identifyUnit(orderId, code, method),
+    onSuccess: (detail) => {
+      client.setQueryData(queryKeys.internalOrder(scope, detail.id), detail);
+      void client.invalidateQueries({ queryKey: queryKeys.internalOrders(scope, {}) });
+    },
+    retry: false,
+  });
+}
+
+export function useForgetOrderUnit(orderId: number) {
+  const client = useQueryClient();
+  const scope = useQueryScope();
+
+  return useMutation({
+    mutationFn: ({ orderUnitId }: { orderUnitId: number }) =>
+      repository().forgetUnit(orderId, orderUnitId),
+    onSuccess: (detail) => {
+      client.setQueryData(queryKeys.internalOrder(scope, detail.id), detail);
+      void client.invalidateQueries({ queryKey: queryKeys.internalOrders(scope, {}) });
+    },
+    retry: false,
+  });
+}
+
+/**
+ * Decide the review an order was waiting for — CLIENT-SEC-01.
+ *
+ * The server answers the ASSESSMENT ALONE, because `manage` does not imply
+ * `view`: somebody who may only decide is not handed an order payload. So the
+ * order is INVALIDATED rather than written from the answer — the next read
+ * will carry the decided assessment, and it will carry it with whatever else
+ * the reader is entitled to.
+ *
+ * Once: a review that is not waiting answers 409, which is the server saying
+ * somebody else already looked. Nothing retries.
+ */
+export function useReviewOrderRisk(orderId: number) {
+  const client = useQueryClient();
+  const scope = useQueryScope();
+
+  return useMutation({
+    mutationFn: ({ decision, note }: { decision: RiskDecision; note: string }) =>
+      repository().reviewRisk(orderId, decision, note),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.internalOrder(scope, orderId) });
+      void client.invalidateQueries({ queryKey: queryKeys.internalOrders(scope, {}) });
     },
     retry: false,
   });

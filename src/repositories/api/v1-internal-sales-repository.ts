@@ -1,11 +1,21 @@
 import {
   fetchInternalContext,
+  forgetOrderUnit,
+  identifyOrderUnit,
+  lookupOrderUnit,
   fetchInternalOrder,
   fetchInternalOrders,
   patchInternalOrderFulfillment,
+  reviewOrderRisk,
   type InternalOrderQuery,
 } from '@/api/endpoints/internal-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
+import type {
+  OrderRisk,
+  RiskDecision,
+  UnitCandidate,
+  UnitMethodInput,
+} from '@/domain/internal/order-unit-types';
 import type {
   FulfillmentStatus,
   InternalContext,
@@ -48,5 +58,43 @@ export class V1InternalSalesRepository {
     signal?: AbortSignal,
   ): Promise<InternalSalesOrderDetail> {
     return patchInternalOrderFulfillment(input, this.deps, signal);
+  }
+
+  // SERIAL-PICK-01. The lookup writes nothing; the other two answer with the
+  // whole order again, devices and remaining count included.
+  async lookupUnit(
+    orderId: number,
+    code: string,
+    method: UnitMethodInput,
+    signal?: AbortSignal,
+  ): Promise<UnitCandidate> {
+    return lookupOrderUnit(orderId, code, method, this.deps, signal);
+  }
+
+  async identifyUnit(
+    orderId: number,
+    code: string,
+    method: UnitMethodInput,
+    signal?: AbortSignal,
+  ): Promise<InternalSalesOrderDetail> {
+    return identifyOrderUnit(orderId, code, method, this.deps, signal);
+  }
+
+  async forgetUnit(
+    orderId: number,
+    orderUnitId: number,
+    signal?: AbortSignal,
+  ): Promise<InternalSalesOrderDetail> {
+    return forgetOrderUnit(orderId, orderUnitId, this.deps, signal);
+  }
+
+  /** CLIENT-SEC-01. Answers the assessment alone: `manage` does not imply `view`. */
+  async reviewRisk(
+    orderId: number,
+    decision: RiskDecision,
+    note: string,
+    signal?: AbortSignal,
+  ): Promise<OrderRisk | null> {
+    return reviewOrderRisk(orderId, decision, note, this.deps, signal);
   }
 }

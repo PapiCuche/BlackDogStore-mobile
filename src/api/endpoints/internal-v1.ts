@@ -1,6 +1,13 @@
 import { companySlug } from '@/config/env';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type {
+  OrderRisk,
+  OrderUnitRecord,
+  RiskDecision,
+  UnitCandidate,
+  UnitMethodInput,
+} from '@/domain/internal/order-unit-types';
+import type {
   FulfillmentStatus,
   InternalContext,
   InternalSalesOrder,
@@ -109,6 +116,87 @@ function toItem(raw: unknown): InternalSalesOrderItem {
   };
 }
 
+// ---------------------------------------------------------------------------
+// SERIAL-PICK-01 — which device left with the order
+// ---------------------------------------------------------------------------
+
+function toUnitRecord(raw: unknown): OrderUnitRecord {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: Number(row.id),
+    productId: Number(row.product_id),
+    serialNumber: String(row.serial_number ?? ''),
+    imei: String(row.imei ?? ''),
+    imei2: String(row.imei2 ?? ''),
+    method: String(row.method ?? ''),
+    methodLabel: String(row.method_label ?? ''),
+    identifiedAt: String(row.identified_at ?? ''),
+    identifiedBy: String(row.identified_by ?? ''),
+    // Absent reads as "cannot": offering to take back a device that already
+    // left would be offering an act the server refuses.
+    canRemove: row.can_remove === true,
+  };
+}
+
+export function toUnitCandidate(raw: unknown): UnitCandidate {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    unitId: Number(row.unit_id),
+    productId: Number(row.product_id),
+    productName: String(row.product_name ?? ''),
+    serialNumber: String(row.serial_number ?? ''),
+    imei: String(row.imei ?? ''),
+    imei2: String(row.imei2 ?? ''),
+    condition: String(row.condition ?? ''),
+    conditionLabel: String(row.condition_label ?? ''),
+    requiresImei: row.requires_imei === true,
+  };
+}
+
+function toRisk(raw: unknown): OrderRisk | null {
+  // Null is a real answer: an order nobody assessed has no risk block, and an
+  // empty one would read as "assessed, nothing found".
+  if (typeof raw !== 'object' || raw === null) return null;
+  const row = raw as Record<string, unknown>;
+  const signals = row.signals;
+  return {
+    level: String(row.level ?? ''),
+    levelLabel: String(row.level_label ?? ''),
+    score: Number(row.score ?? 0),
+    signals: Array.isArray(signals)
+      ? signals.map((entry) => {
+          const signal = (entry ?? {}) as Record<string, unknown>;
+          return { code: String(signal.code ?? ''), label: String(signal.label ?? '') };
+        })
+      : [],
+    reviewStatus: String(row.review_status ?? ''),
+    reviewStatusLabel: String(row.review_status_label ?? ''),
+    reviewedBy: row.reviewed_by === null || row.reviewed_by === undefined
+      ? null
+      : String(row.reviewed_by),
+    reviewedAt: row.reviewed_at === null || row.reviewed_at === undefined
+      ? null
+      : String(row.reviewed_at),
+    reviewNote: String(row.review_note ?? ''),
+    assessedAt: row.assessed_at === null || row.assessed_at === undefined
+      ? null
+      : String(row.assessed_at),
+    // Absent reads as "may not decide". The server says who may, and only
+    // while the review is waiting.
+    canReview: row.can_review === true,
+  };
+}
+
+function toPendingByProduct(raw: unknown): Record<string, number> {
+  if (typeof raw !== 'object' || raw === null) return {};
+  const pending: Record<string, number> = {};
+  for (const [productId, count] of Object.entries(raw as Record<string, unknown>)) {
+    const value = Number(count);
+    if (Number.isFinite(value) && value > 0) pending[productId] = Math.trunc(value);
+  }
+  return pending;
+}
+
 export function toOrderDetail(raw: unknown): InternalSalesOrderDetail {
   const row = raw as Record<string, unknown>;
   const transitions = Array.isArray(row.available_fulfillment_transitions)
@@ -136,6 +224,16 @@ export function toOrderDetail(raw: unknown): InternalSalesOrderDetail {
     fulfillmentBranchName: String(row.fulfillment_branch_name ?? ''),
     items: Array.isArray(row.items) ? row.items.map(toItem) : [],
     availableFulfillmentTransitions: transitions,
+    // SERIAL-PICK-01, as the server reports it. `unitsPending` is the server's
+    // subtraction of what is accounted for from what the order owes — a count
+    // computed here would disagree the moment a device goes back to the shelf.
+    units: Array.isArray(row.units) ? row.units.map(toUnitRecord) : [],
+    unitsPending: Number(row.units_pending ?? 0),
+    unitsPendingByProduct: toPendingByProduct(row.units_pending_by_product),
+    // Absent reads as "cannot change": the order may have left the shop or be
+    // coming back, and the server is the one that knows.
+    unitsCanChange: row.units_can_change === true,
+    risk: toRisk(row.risk),
   };
 }
 
@@ -257,6 +355,134 @@ export async function patchInternalOrderFulfillment(
         deps,
       ),
     );
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SERIAL-PICK-01 — naming the devices of an order
+// ---------------------------------------------------------------------------
+
+function unitsPath(id: number): string {
+  return `${internalPath(requireTenant())}/orders/${encodeURIComponent(String(id))}/units`;
+}
+
+/**
+ * WHICH DEVICE DOES THIS CODE NAME — and is this order waiting for it?
+ *
+ * Writes nothing. The till reads a barcode, the person sees the model, the
+ * colour and the condition, and only then commits it: a serial typed one digit
+ * wrong would otherwise hand over somebody else's device.
+ *
+ * The refusals carry the server's `code` as well as its sentence, because the
+ * three shapes mean different things to the person holding the phone: a code
+ * that is not one (400), a device that does not exist (404), and a device that
+ * exists but cannot be used for this order (409).
+ */
+export async function lookupOrderUnit(
+  orderId: number,
+  code: string,
+  method: UnitMethodInput,
+  deps: { refreshCoordinator: RefreshCoordinator },
+  signal?: AbortSignal,
+): Promise<UnitCandidate> {
+  try {
+    const row = (await authenticatedRequest<unknown>(
+      `${unitsPath(orderId)}/lookup/`,
+      { scope: 'authenticated-v1', query: { code, method }, signal },
+      deps,
+    )) as Record<string, unknown>;
+    return toUnitCandidate(row.unit);
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+/**
+ * This is the device being handed over.
+ *
+ * NOT IDEMPOTENT and not retried: the same code sent twice is refused by the
+ * server (the device is already on the order), and a blind retry on a flaky
+ * network would turn one refusal into a confusing second one. The answer is
+ * the whole order again, with its devices and its remaining count, so the
+ * screen never computes either.
+ */
+export async function identifyOrderUnit(
+  orderId: number,
+  code: string,
+  method: UnitMethodInput,
+  deps: { refreshCoordinator: RefreshCoordinator },
+  signal?: AbortSignal,
+): Promise<InternalSalesOrderDetail> {
+  try {
+    return toOrderDetail(
+      await authenticatedRequest<unknown>(
+        `${unitsPath(orderId)}/`,
+        { scope: 'authenticated-v1', method: 'POST', body: { code, method }, signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+/**
+ * Take back a device identified by mistake, while it has not left the shop.
+ *
+ * `can_remove` on each record is the server's answer about whether this is
+ * still possible; the server refuses it again regardless of what the UI drew.
+ */
+export async function forgetOrderUnit(
+  orderId: number,
+  orderUnitId: number,
+  deps: { refreshCoordinator: RefreshCoordinator },
+  signal?: AbortSignal,
+): Promise<InternalSalesOrderDetail> {
+  try {
+    return toOrderDetail(
+      await authenticatedRequest<unknown>(
+        `${unitsPath(orderId)}/${encodeURIComponent(String(orderUnitId))}/`,
+        { scope: 'authenticated-v1', method: 'DELETE', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+/**
+ * Decide the review an order was waiting for — CLIENT-SEC-01.
+ *
+ * `approve` and `reject` are the server's own words (`ChoiceField`), not a
+ * vocabulary invented here. ONCE: a review that is not waiting answers 409,
+ * and the decision is advice — the order's payment and dispatch are exactly
+ * what they were.
+ *
+ * The answer is the ASSESSMENT ALONE, not the order: `manage` does not imply
+ * `view`, so the server does not hand over an order payload to somebody who
+ * may only decide.
+ */
+export async function reviewOrderRisk(
+  orderId: number,
+  decision: RiskDecision,
+  note: string,
+  deps: { refreshCoordinator: RefreshCoordinator },
+  signal?: AbortSignal,
+): Promise<OrderRisk | null> {
+  const body: Record<string, unknown> = { decision };
+  const trimmed = note.trim();
+  if (trimmed) body.note = trimmed;
+
+  try {
+    const row = (await authenticatedRequest<unknown>(
+      `${internalPath(requireTenant())}/orders/${encodeURIComponent(String(orderId))}/risk-review/`,
+      { scope: 'authenticated-v1', method: 'POST', body, signal },
+      deps,
+    )) as Record<string, unknown>;
+    return toRisk(row.risk);
   } catch (error) {
     return translate(error);
   }

@@ -164,7 +164,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   internalSales: {
     label: 'Interno · Pedidos',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/internal/<empresa>/sales/orders/ — listado, detalle y fulfillment. Capabilities resueltas por el servidor en cada petición.',
+    note: 'Integrado con /api/v1/internal/<empresa>/orders/ — listado, detalle, fulfillment, los equipos del pedido (buscar por serie o IMEI, identificar, quitar) y la decisión de la revisión del pedido. Capabilities resueltas por el servidor en cada petición: el conteo de equipos que faltan, quién puede cambiarlos y quién puede decidir la revisión los dice el servidor, nunca esta app.',
     source: 'api/endpoints/internal-v1.ts',
   },
   internalNotifications: {

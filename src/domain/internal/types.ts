@@ -15,6 +15,7 @@
  */
 
 import type { FulfillmentStatus, PaymentStatus } from '@/domain/orders/types';
+import type { OrderRisk, OrderUnitRecord } from '@/domain/internal/order-unit-types';
 
 export type { FulfillmentStatus, PaymentStatus };
 
@@ -67,6 +68,28 @@ export type InternalSalesOrderDetail = InternalSalesOrder & {
    * broken app rather than as a policy.
    */
   availableFulfillmentTransitions: readonly FulfillmentStatus[];
+
+  /**
+   * SERIAL-PICK-01 — the devices of this order, as the SERVER reports them.
+   *
+   * `unitsPending` is its subtraction of what is accounted for from what the
+   * order owes: a device that went back to the shelf stops counting, and a
+   * line still on order from a supplier never counted. Recomputing that here
+   * would produce a second number that disagrees.
+   *
+   * `unitsCanChange` is whether THIS caller may still say which device it is —
+   * false once the order left the shop or is coming back.
+   */
+  units: readonly OrderUnitRecord[];
+  unitsPending: number;
+  /** Product id (as a string, as the server keys it) to how many are missing. */
+  unitsPendingByProduct: Record<string, number>;
+  unitsCanChange: boolean;
+  /**
+   * CLIENT-SEC-01 — what was noticed about this order, or null when it was
+   * never assessed. Advice, never a state of the order.
+   */
+  risk: OrderRisk | null;
 };
 
 export type InternalSalesOrderPage = {
