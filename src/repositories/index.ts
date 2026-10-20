@@ -6,6 +6,7 @@ import {
 
 import { V1ApiCatalogRepository } from './api/v1-api-catalog-repository';
 import { V1CompanyRepository } from './api/v1-company-repository';
+import { V1CustomerAccountRepository } from './api/v1-customer-account-repository';
 import { V1CustomerNotificationRepository } from './api/v1-customer-notification-repository';
 import { V1CustomerOrderRepository } from './api/v1-customer-order-repository';
 import { V1CustomerRepairRepository } from './api/v1-customer-repair-repository';
@@ -16,6 +17,7 @@ import { MockRepairRepository } from './mock/mock-repair-repository';
 import type {
   CatalogRepository,
   CompanyRepository,
+  CustomerAccountRepository,
   NotificationRepository,
   OrderRepository,
   RepairRepository,
@@ -153,6 +155,19 @@ function resolveNotificationRepository(): NotificationRepository | null {
     : null;
 }
 
+/**
+ * «Mi cuenta» exists only where a real session can exist.
+ *
+ * The same rule as the inbox: with no backend auth mechanism there is nobody
+ * whose profile this would be, so the screen says the feature is unavailable
+ * instead of asking for a record that cannot be fetched.
+ */
+function resolveCustomerAccountRepository(): CustomerAccountRepository | null {
+  return authRuntimePolicy.mode === 'backend'
+    ? new V1CustomerAccountRepository({ refreshCoordinator: getAuthRuntime().coordinator })
+    : null;
+}
+
 function resolveCompanyRepository(): CompanyRepository | null {
   if (useMockData) {
     return isPilotTenant ? new MockCompanyRepository() : null;
@@ -166,18 +181,21 @@ export const repositories: {
   orders: OrderRepository | null;
   company: CompanyRepository | null;
   notifications: NotificationRepository | null;
+  customerAccount: CustomerAccountRepository | null;
 } = {
   catalog: resolveCatalogRepository(),
   repairs: resolveRepairRepository(),
   orders: resolveOrderRepository(),
   company: resolveCompanyRepository(),
   notifications: resolveNotificationRepository(),
+  customerAccount: resolveCustomerAccountRepository(),
 };
 
 export { FeatureUnavailableError, featureUnavailable } from './errors';
 export type {
   CatalogRepository,
   CompanyRepository,
+  CustomerAccountRepository,
   NotificationRepository,
   OrderRepository,
   RepairRepository,

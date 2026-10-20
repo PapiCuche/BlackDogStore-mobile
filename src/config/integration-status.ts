@@ -54,6 +54,8 @@ export type FeatureKey =
   | 'internalCommunications'
   | 'internalMessaging'
   | 'platformAnnouncements'
+  | 'customerAccount'
+  | 'customerAddresses'
   | 'internalServiceEvidence'
   | 'internalQuoteTicket'
   | 'internalPos'
@@ -188,6 +190,18 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
     status: 'TESTED',
     note: 'Integrado con /api/v1/internal/<empresa>/communications/ y /announcements/<id>/ — lectura del comunicado propio (sin capability, el servidor prueba el envío) y, con communications.manage, el listado de lo enviado, sus cifras agregadas, redactar un borrador, dirigirlo a toda la empresa, estimar el alcance, publicarlo y descartarlo. Dirigirlo a una sucursal, un rol, una capacidad o personas concretas sigue en la consola web: esos cuatro tipos de regla piden identificadores que ninguna ruta v1 publica (BR-012).',
     source: 'api/endpoints/internal-communications-v1.ts',
+  },
+  customerAccount: {
+    label: 'Cliente · Mi cuenta',
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/customer/<empresa>/profile/, /verify-email/send/, /verify-email/confirm/ y /addresses/ — los mismos cinco campos de la ficha, el mismo juez y las mismas negativas que «Mi cuenta» de la web. Sin capability: es el propio registro de quien pide. El documento lo bloquea el servidor cuando es de la tienda, el código de verificación va solo al correo de la sesión y la libreta acepta puerta o agencia con los transportistas que la tienda ofrezca.',
+    source: 'api/endpoints/customer-profile-v1.ts',
+  },
+  customerAddresses: {
+    label: 'Cliente · Mis direcciones',
+    status: 'TESTED',
+    note: 'Integrado con /api/v1/customer/<empresa>/addresses/ — listar, agregar, corregir, quitar y elegir la predeterminada, con el límite y las agencias que envía el servidor en cada lectura. Una entrada que no es de quien pide responde 404 en todos los verbos. Dirección o agencia no son la misma forma: el servidor descarta los campos del otro tipo en cada guardado.',
+    source: 'api/endpoints/customer-addresses-v1.ts',
   },
   internalServiceEvidence: {
     label: 'Interno · Fotos de reparación',

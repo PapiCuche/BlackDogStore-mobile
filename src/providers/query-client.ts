@@ -132,6 +132,12 @@ export const queryKeys = {
    */
   evidenceAuthorization: (scope: QueryScope) =>
     [...customerPrefix(scope), 'evidence-authorization'] as const,
+  // CLIENT-SEC-01 / DELIVERY-01 — my own record and my own book, in this shop.
+  // Under the CUSTOMER prefix, so signing out clears them with everything else
+  // private, and so the staff console's view of a customer can never land in
+  // the same slot as the buyer's view of themselves.
+  customerProfile: (scope: QueryScope) => [...customerPrefix(scope), 'profile'] as const,
+  customerAddresses: (scope: QueryScope) => [...customerPrefix(scope), 'addresses'] as const,
   orders: (scope: QueryScope) => [...customerPrefix(scope), 'orders'] as const,
   // M12B — the inbox. The PAGE and the BADGE are separate keys because they
   // answer different questions: one is twenty rows, the other is the whole

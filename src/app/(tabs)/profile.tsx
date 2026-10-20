@@ -145,6 +145,13 @@ export default function ProfileScreen() {
           <SectionHeader title="Tu cuenta" />
           <Card padded={false}>
             <ListRow
+              label="Mis datos y direcciones"
+              description="Tu ficha en la tienda y dónde recibes tus pedidos"
+              icon={icons.info}
+              onPress={() => router.push('/account')}
+              accessibilityHint="Abre tu cuenta"
+            />
+            <ListRow
               label="Avisos"
               description="Lo que la tienda te ha comunicado"
               icon={icons.info}

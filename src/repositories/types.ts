@@ -1,4 +1,14 @@
 import type { CompanyBrand } from '@/domain/company/types';
+import type {
+  CustomerAddress,
+  CustomerAddressBook,
+  CustomerAddressInput,
+} from '@/domain/customer/address-types';
+import type {
+  CustomerProfile,
+  CustomerProfileInput,
+  EmailCodeRequest,
+} from '@/domain/customer/profile-types';
 import type { AppNotification, NotificationPage } from '@/domain/notifications/types';
 import type { Order } from '@/domain/orders/types';
 import type { Category, Product } from '@/domain/products/types';
@@ -81,6 +91,32 @@ export type NotificationRepository = {
   getUnreadCount(signal?: AbortSignal): Promise<number>;
   markRead(id: number, signal?: AbortSignal): Promise<AppNotification>;
   markAllRead(signal?: AbortSignal): Promise<number>;
+};
+
+/**
+ * «Mi cuenta» — CLIENT-SEC-01 and DELIVERY-01.
+ *
+ * Nullable in the composition root like the rest of the private surface: with
+ * no backend auth mechanism there is no account to open, and a screen that
+ * says so beats a request that can only come back 401.
+ */
+export type CustomerAccountRepository = {
+  getProfile(signal?: AbortSignal): Promise<CustomerProfile>;
+  saveProfile(input: CustomerProfileInput, signal?: AbortSignal): Promise<CustomerProfile>;
+  sendEmailCode(signal?: AbortSignal): Promise<EmailCodeRequest>;
+  confirmEmailCode(
+    code: string,
+    signal?: AbortSignal,
+  ): Promise<{ detail: string; emailVerifiedAt: string | null }>;
+  listAddresses(signal?: AbortSignal): Promise<CustomerAddressBook>;
+  addAddress(input: CustomerAddressInput, signal?: AbortSignal): Promise<CustomerAddress>;
+  editAddress(
+    id: number,
+    input: CustomerAddressInput,
+    signal?: AbortSignal,
+  ): Promise<CustomerAddress>;
+  deleteAddress(id: number, signal?: AbortSignal): Promise<void>;
+  makeAddressDefault(id: number, signal?: AbortSignal): Promise<CustomerAddress>;
 };
 
 export type CompanyRepository = {
