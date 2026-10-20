@@ -106,6 +106,7 @@ const CABLE: PosProduct = {
   barcode: '0750123456789',
       isSerialized: false,
       requiresImei: false,
+      onOrder: null,
 };
 
 describe('what a scan means — the Web till, word for word', () => {

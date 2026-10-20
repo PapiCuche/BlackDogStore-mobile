@@ -102,11 +102,12 @@ const product = (id: number, serialized = false): PosProduct => ({
   barcode: '',
   isSerialized: serialized,
   requiresImei: false,
+  onOrder: null,
 });
 
 const CONDITIONS: PosConditions = {
   branch: 2,
-  lines: [{ product: product(4), quantity: 2, units: [] }],
+  lines: [{ product: product(4), quantity: 2, units: [], onOrder: false, supplyReason: '' }],
   couponCode: '',
   manualDiscountType: '',
   manualDiscountValue: '',
@@ -200,7 +201,7 @@ describe('the priced total and the payable total are the same thing', () => {
     const base = conditionsSignature(CONDITIONS);
     const variants: PosConditions[] = [
       { ...CONDITIONS, branch: 4 },
-      { ...CONDITIONS, lines: [{ product: product(4), quantity: 3, units: [] }] },
+      { ...CONDITIONS, lines: [{ product: product(4), quantity: 3, units: [], onOrder: false, supplyReason: '' }] },
       { ...CONDITIONS, lines: [] },
       { ...CONDITIONS, couponCode: 'BIENVENIDO10' },
       { ...CONDITIONS, manualDiscountType: 'percent' },
@@ -219,15 +220,15 @@ describe('the priced total and the payable total are the same thing', () => {
     const a = conditionsSignature({
       ...CONDITIONS,
       lines: [
-        { product: product(4), quantity: 1, units: [] },
-        { product: product(9), quantity: 2, units: [] },
+        { product: product(4), quantity: 1, units: [], onOrder: false, supplyReason: '' },
+        { product: product(9), quantity: 2, units: [], onOrder: false, supplyReason: '' },
       ],
     });
     const b = conditionsSignature({
       ...CONDITIONS,
       lines: [
-        { product: product(9), quantity: 2, units: [] },
-        { product: product(4), quantity: 1, units: [] },
+        { product: product(9), quantity: 2, units: [], onOrder: false, supplyReason: '' },
+        { product: product(4), quantity: 1, units: [], onOrder: false, supplyReason: '' },
       ],
     });
     expect(a).toBe(b);

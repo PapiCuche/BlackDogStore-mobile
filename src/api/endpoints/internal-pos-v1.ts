@@ -260,6 +260,21 @@ function toProduct(raw: unknown): PosProduct {
     // is refused by the server with its own sentence rather than silently sold.
     isSerialized: row.is_serialized === true,
     requiresImei: row.requires_imei === true,
+    // DC3. A half-written offer reads as no offer: «0 días» at «S/ 0» is a
+    // promise nobody made.
+    onOrder: (() => {
+      const offer = row.on_order;
+      if (typeof offer !== 'object' || offer === null) return null;
+      const payload = offer as Record<string, unknown>;
+      const days = Number(payload.lead_time_days);
+      const price = String(payload.price ?? '');
+      if (!Number.isFinite(days) || days < 0 || !price) return null;
+      return {
+        leadTimeDays: Math.trunc(days),
+        price,
+        overStock: payload.over_stock === true,
+      };
+    })(),
   };
 }
 
@@ -482,6 +497,8 @@ export async function previewPosSale(
       product: number;
       quantity: number;
       units?: readonly PosLineUnit[];
+      onOrder?: boolean;
+      supplyReason?: string;
     }[];
     customer?: number;
     seller?: number;
@@ -504,6 +521,13 @@ export async function previewPosSale(
       quantity: i.quantity,
       ...(i.units && i.units.length > 0
         ? { units: i.units.map((u) => ({ id: u.unitId, method: u.method })) }
+        : {}),
+      // DC3 — sent only when the line is ordered. A basket without it hashes
+      // exactly as it did before, which is what keeps an idempotency key
+      // meaning the same basket.
+      ...(i.onOrder ? { on_order: true } : {}),
+      ...(i.onOrder && i.supplyReason?.trim()
+        ? { supply_reason: i.supplyReason.trim() }
         : {}),
     })),
   };
@@ -559,6 +583,13 @@ export async function createPosSale(
       quantity: i.quantity,
       ...(i.units && i.units.length > 0
         ? { units: i.units.map((u) => ({ id: u.unitId, method: u.method })) }
+        : {}),
+      // DC3 — sent only when the line is ordered. A basket without it hashes
+      // exactly as it did before, which is what keeps an idempotency key
+      // meaning the same basket.
+      ...(i.onOrder ? { on_order: true } : {}),
+      ...(i.onOrder && i.supplyReason?.trim()
+        ? { supply_reason: i.supplyReason.trim() }
         : {}),
     })),
     payment_method: input.paymentMethod,
