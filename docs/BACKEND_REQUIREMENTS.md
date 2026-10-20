@@ -1760,3 +1760,126 @@ precio «desde»: si cada equipo tiene el suyo, la lista los dice uno por uno.
 
 Una pantalla de modelo con sus variantes, y elegir un equipo usado concreto —
 con su estado y su precio— en vez de remitir a la tienda.
+
+---
+
+## BR-015 — Recuperar la contraseña desde la app
+
+**Estado:** abierto. **Superficie pedida:** `/api/v1/auth/…`.
+**Verificado contra** `PapiCuche/BlackDogStore-web` `origin/master` `1448a5d`
+(`store/urls.py` líneas 214-215, `store/auth_views.py` →
+`PasswordResetRequestView`, `PasswordResetConfirmView`).
+
+### Función de la web de producción
+
+`/auth/forgot-password` pide el correo y `/auth/reset-password` consume el
+enlace que llega por correo. Las dos hablan con:
+
+```
+POST auth/password-reset/request/   {email, next?}   AllowAny, throttled
+POST auth/password-reset/confirm/   {token, password}
+```
+
+### Por qué Mobile no las consume
+
+No están bajo `/api/v1/`. La app solo consume ese prefijo, que es el contrato
+nativo acordado (BR-001); `/api/auth/` es la puerta del frontend web, y
+empezar a usarla desde la app convertiría en contrato lo que hoy es una ruta
+interna de otro cliente —sin versión, sin garantía de forma y sin que nadie
+haya aceptado que la app dependa de ella.
+
+Hoy la pantalla de la app dice la verdad: «Por ahora la contraseña se recupera
+desde la web.»
+
+### Contrato mínimo requerido
+
+Las dos mismas operaciones bajo el prefijo nativo, con el mismo comportamiento:
+
+```
+POST v1/auth/password-reset/request/  {email}
+→ 200 {"detail": "Si el correo existe, enviaremos instrucciones…"}   siempre
+
+POST v1/auth/password-reset/confirm/  {token, password}
+→ 200 {"detail": "…"} | 400 {campo: [mensaje]}
+```
+
+La respuesta genérica del primero es parte del contrato, no un detalle: es lo
+que evita que alguien averigüe qué correos existen. El throttle también.
+
+### Autoridad
+
+Ninguna: es anónimo por definición. Lo que lo hace seguro es el token con TTL
+de una hora y la respuesta genérica, no una capability.
+
+### Qué NO debe incluir
+
+Si el correo existe, si la cuenta está activa, cuándo se pidió el último
+enlace, ni el token en la respuesta.
+
+### Tests backend requeridos
+
+1. un correo que no existe responde lo mismo que uno que sí;
+2. el throttle responde 429 al pedir enlaces en ráfaga;
+3. un token caducado se rechaza con mensaje de campo;
+4. un token ya usado no sirve una segunda vez;
+5. la contraseña nueva pasa por los validadores de Django;
+6. confirmar NO inicia sesión por su cuenta.
+
+### Trabajo Mobile que desbloquea
+
+Pedir el enlace desde la app, y —si el enlace abre la app por deep link—
+terminar el cambio sin pasar por la web.
+
+---
+
+## BR-016 — Las consolas que no tienen ninguna ruta v1
+
+**Estado:** informativo. No pide trabajo inmediato: deja escrito POR QUÉ estas
+funciones de la web no están en la app, para que nadie las lea como olvidos.
+
+**Verificado contra** `PapiCuche/BlackDogStore-web` `origin/master` `1448a5d`:
+cada ruta de `frontend/app/admin/**` cruzada contra `store/v1_urls.py`.
+
+### Qué tiene la web y no existe en `/api/v1/`
+
+Estas páginas de la consola trabajan solo contra `/api/admin/`, que habla
+cookies de sesión y CSRF. Un Bearer no tiene nada que hacer ahí, así que no son
+«pantallas que faltan» en la app: son superficies sin contrato nativo.
+
+- **Catálogo y publicación:** `products` (alta, edición, importación),
+  `products/models`, `products/publication`, `products/register`,
+  `products/suppliers`, `products/suppliers/offers`, `products/categories`.
+- **Inventario más allá de lo integrado:** `inventory/bulk`, `inventory/costs`,
+  `inventory/counts` (ver BR-009), `inventory/import`,
+  `inventory/replenishment`, `inventory/reports`, `inventory/units`,
+  `inventory/units/import`, `inventory/used`.
+- **Ventas:** `sales/availability`, `sales/commissions`, `sales/notes`,
+  `sales/promotions`.
+- **Organización y personas:** `areas`, `branches`, `roles`, `staff`, `users`,
+  `customers` (alta y edición; la app lee clientes del servicio por su propia
+  ruta), `audit-logs`.
+- **Configuración:** `settings`, `settings/integrations`,
+  `settings/printing`, `settings/storefront` (la app lee la configuración
+  pública por `storefront/<empresa>/config/`, pero no la escribe).
+  `settings/messaging` SÍ tiene ruta v1 y está integrada.
+- **Devoluciones posventa (ORDER-RETURN-01, octubre 2026):** `order_returns`
+  vive entero en `admin_views.py`. No hay ni una ruta v1, así que pedir,
+  recibir, cerrar o retirar una devolución no es algo que la app pueda hacer.
+- **Invitaciones de personal:** `/invitacion` consume `auth/invitation/…`, fuera
+  de `/api/v1/`.
+
+### Qué haría falta para cada una
+
+Lo mismo en todos los casos: una ruta `/api/v1/internal/<empresa>/…` con su
+capability declarada, acotada por empresa y sucursal en el servidor, y una forma
+declarada (no el serializador de admin reexpuesto). Mientras no exista, la app
+no las representa: una pantalla que escribe por `/api/admin/` sería un cliente
+de cookies dentro de una app de Bearer, y una que invente la ruta sería una
+pantalla que falla.
+
+### Prioridad sugerida, si alguien la pide
+
+1. devoluciones posventa (el mostrador las necesita con el cliente delante);
+2. conteos de inventario (BR-009, ya pedido);
+3. notas de venta y disponibilidad;
+4. el resto, que es administración de escritorio.
