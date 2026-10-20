@@ -1599,3 +1599,82 @@ vuelven posibles a la vez.
 
 Autoridad para esa parte: `user.is_superuser`, como el resto de la superficie de
 plataforma, y 404 —nunca 403— para quien no lo sea.
+
+---
+
+## BR-013 — Los transportistas activos de la empresa, para elegir uno
+
+**Estado:** abierto. **Superficie:** `/api/v1/internal/<empresa>/…`.
+**Verificado contra** `PapiCuche/BlackDogStore-web` `origin/master` `1448a5d`
+(`store/delivery_services.py` → `_staff_values`, `STAFF_FIELDS`;
+`store/v1_internal_views.py` → `V1InternalOrderDeliveryView`).
+
+### Lo que Mobile ya hace
+
+Leer el registro de entrega de un pedido y escribir casi todo lo que el
+servidor admite: destinatario y su teléfono y documento, el modo cuando el
+servidor lo permite (`allowed_modes`), la agencia y su localidad, la guía, el
+código y el enlace de seguimiento, el flete y quién lo paga, y la fecha de
+envío.
+
+```
+GET   internal/<empresa>/orders/<id>/delivery/     sales.orders.view
+PATCH internal/<empresa>/orders/<id>/delivery/     sales.orders.manage
+```
+
+### Lo que no puede hacer, y por qué
+
+`carrier` está en `STAFF_FIELDS`, y el servidor lo acepta **por id**: uno de
+los transportistas activos de la empresa. Ninguna ruta de `/api/v1/` los lista.
+
+- `staff_payload` envía `carrier` y `carrier_name` —el transportista que el
+  pedido tiene— pero no los que podría tener.
+- `addresses/` del cliente sí envía `agency_carriers`, pero solo las AGENCIAS y
+  solo para la libreta del comprador: un envío a domicilio puede ir con un
+  courier que no aparece ahí.
+
+Escribir un id adivinado dirigiría un paquete por un transportista que la
+empresa no usa, así que Mobile deja el transportista como está y permite
+corregir todo lo demás.
+
+### Contrato mínimo requerido
+
+```
+GET internal/<empresa>/carriers/
+→ { "results": [
+      {"id": 3, "name": "Shalom", "kind": "agency", "has_tracking_page": true},
+      {"id": 5, "name": "Olva", "kind": "courier", "has_tracking_page": true}
+  ]}
+```
+
+Solo los de esa empresa y solo los activos, que es exactamente lo que
+`_staff_values` acepta. `kind` importa: un `agency_pickup` exige un
+transportista con agencias, y el servidor ya lo rechaza con «Para un recojo en
+agencia elige un transportista con agencias.» — con el `kind` a la vista, la app
+no ofrece la combinación que será rechazada. `has_tracking_page` permite decir
+por qué un enlace de seguimiento no se arma solo.
+
+### Autoridad
+
+`sales.orders.view` para leerla —es la lista con la que se lee una entrega— y
+nada más: no es configuración de la empresa, es el catálogo necesario para
+rellenar un campo que ya se puede escribir con `sales.orders.manage`.
+
+### Qué NO debe incluir
+
+Tarifas, contratos, contactos del transportista ni credenciales de su API. Un
+nombre, un id y el tipo es lo único que un campo de selección necesita.
+
+### Tests backend requeridos
+
+1. la lectura exige `sales.orders.view` (403 sin ella);
+2. una empresa ajena responde 404, no 403;
+3. solo aparecen transportistas de esa empresa;
+4. los inactivos no aparecen;
+5. todo id devuelto es aceptado por `PATCH .../delivery/` con `carrier`;
+6. ningún campo de tarifa o contacto aparece en la respuesta.
+
+### Trabajo Mobile que desbloquea
+
+Elegir el transportista de una entrega desde la app, con el aviso de que un
+recojo en agencia pide un transportista con agencias.

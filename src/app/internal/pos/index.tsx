@@ -28,6 +28,7 @@ import {
   type PosCartLine,
   type PosProduct,
 } from '@/domain/internal/pos-types';
+import { lineIsComplete } from '@/domain/internal/pos-types';
 import { hasUxCapability } from '@/domain/internal/types';
 import {
   conditionsSignature,
@@ -44,10 +45,12 @@ import {
   useCreatePosSale,
   usePosContext,
   usePosLookup,
+  usePosUnitLookup,
   usePosPreview,
   usePosProductSearch,
 } from '@/hooks/use-internal-pos';
 import { useInternalContext } from '@/hooks/use-internal-sales';
+import { PosLineDevices } from '@/features/internal/pos-line-devices';
 import { useTheme } from '@/theme/theme-provider';
 
 /**
@@ -115,6 +118,9 @@ export default function PosScreen() {
   // A scanned code, resolved on Enter. The notice answers the LAST scan and
   // nothing more: it is cleared the moment the next one starts.
   const lookup = usePosLookup();
+  // SERIAL-PICK-01. A barcode names an article; a serial or an IMEI names ONE
+  // device, and a serialised article cannot be charged without saying which.
+  const lookupUnit = usePosUnitLookup();
   const [scanNotice, setScanNotice] = useState<ScanNotice | null>(null);
 
   const conditions: PosConditions = {
@@ -129,7 +135,10 @@ export default function PosScreen() {
   const signature = conditionsSignature(conditions);
   const priced = pricedUnder === signature ? preview.data ?? null : null;
 
-  const canPrice = mayUse && branch !== null && lines.length > 0;
+  // A serialised line must name exactly as many devices as it sells: the
+  // server refuses the sale otherwise, so the total is not even asked for.
+  const devicesMissing = lines.some((line) => !lineIsComplete(line));
+  const canPrice = mayUse && branch !== null && lines.length > 0 && !devicesMissing;
   const canSell = canPrice && priced !== null;
 
   /** Anything that moves the price invalidates the figure on screen. */
@@ -156,7 +165,7 @@ export default function PosScreen() {
           l.product.id === product.id ? { ...l, quantity: l.quantity + 1 } : l,
         );
       }
-      return [...current, { product, quantity: 1 }];
+      return [...current, { product, quantity: 1, units: [] }];
     });
     setTerm('');
     repriceNeeded();
@@ -167,7 +176,12 @@ export default function PosScreen() {
       quantity <= 0
         ? current.filter((l) => l.product.id !== productId)
         : current.map((l) =>
-            l.product.id === productId ? { ...l, quantity } : l,
+            l.product.id === productId
+              // Devices beyond the new quantity are dropped: a line that sells
+              // one and names two is refused by the server, and keeping the
+              // extra device would hold a shelf item nobody is buying.
+              ? { ...l, quantity, units: l.units.slice(0, quantity) }
+              : l,
           ),
     );
     repriceNeeded();
@@ -191,7 +205,11 @@ export default function PosScreen() {
     preview.mutate(
       {
         branch,
-        items: lines.map((l) => ({ product: l.product.id, quantity: l.quantity })),
+        items: lines.map((l) => ({
+          product: l.product.id,
+          quantity: l.quantity,
+          units: l.units,
+        })),
         paymentMethod: method,
         couponCode: coupon.trim() || undefined,
         seller: seller ?? undefined,
@@ -254,6 +272,7 @@ export default function PosScreen() {
                 items: lines.map((l) => ({
                   product: l.product.id,
                   quantity: l.quantity,
+                  units: l.units,
                 })),
                 paymentMethod: method,
                 amountReceived: cash.trim() || undefined,
@@ -473,6 +492,37 @@ export default function PosScreen() {
                         disabled={busy}
                       />
                     </View>
+                    {/* SERIAL-PICK-01. Only for an article the server marked
+                        as sold device by device. */}
+                    {line.product.isSerialized ? (
+                      <PosLineDevices
+                        line={line}
+                        isLooking={busy}
+                        onLookup={(code, unitMethod) =>
+                          lookupUnit(branch!, code, unitMethod)
+                        }
+                        onAdd={(unit) => {
+                          setLines((current) =>
+                            current.map((l) =>
+                              l.product.id === line.product.id
+                                ? { ...l, units: [...l.units, unit] }
+                                : l,
+                            ),
+                          );
+                          repriceNeeded();
+                        }}
+                        onRemove={(unitId) => {
+                          setLines((current) =>
+                            current.map((l) =>
+                              l.product.id === line.product.id
+                                ? { ...l, units: l.units.filter((u) => u.unitId !== unitId) }
+                                : l,
+                            ),
+                          );
+                          repriceNeeded();
+                        }}
+                      />
+                    ) : null}
                     <Divider />
                   </View>
                 ))}

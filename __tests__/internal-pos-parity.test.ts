@@ -94,13 +94,19 @@ const WIRE_PREVIEW = {
   lines: [{ product: 5, name: 'Funda', quantity: 1, price: '30.00' }],
 };
 
-const product = (id: number): PosProduct => ({
-  id, name: `P${id}`, price: '10.00', available: 5, barcode: '',
+const product = (id: number, serialized = false): PosProduct => ({
+  id,
+  name: `P${id}`,
+  price: '10.00',
+  available: 5,
+  barcode: '',
+  isSerialized: serialized,
+  requiresImei: false,
 });
 
 const CONDITIONS: PosConditions = {
   branch: 2,
-  lines: [{ product: product(4), quantity: 2 }],
+  lines: [{ product: product(4), quantity: 2, units: [] }],
   couponCode: '',
   manualDiscountType: '',
   manualDiscountValue: '',
@@ -114,7 +120,10 @@ describe('the preview is the only source of a total', () => {
     await module.previewPosSale(
       {
         branch: 2,
-        items: [{ product: 5, quantity: 1 }],
+        // An ordinary line carries NO `units` key: a basket without it hashes
+      // exactly as it did before SERIAL-PICK-01, which is what keeps an
+      // idempotency key meaning the same basket across the change.
+      items: [{ product: 5, quantity: 1 }],
         couponCode: 'BIENVENIDO10',
         seller: 3,
         manualDiscountType: 'percent',
@@ -126,6 +135,9 @@ describe('the preview is the only source of a total', () => {
     const body = (send.mock.calls[0]![1] as { body: Record<string, unknown> }).body;
     expect(body).toMatchObject({
       branch: 2,
+      // An ordinary line carries NO `units` key: a basket without it hashes
+      // exactly as it did before SERIAL-PICK-01, which is what keeps an
+      // idempotency key meaning the same basket across the change.
       items: [{ product: 5, quantity: 1 }],
       coupon_code: 'BIENVENIDO10',
       seller: 3,
@@ -138,7 +150,7 @@ describe('the preview is the only source of a total', () => {
   it('asserts no price of its own when asking', async () => {
     const { module, send } = load({ result: WIRE_PREVIEW });
     await module.previewPosSale(
-      { branch: 2, items: [{ product: 5, quantity: 1 }] }, DEPS,
+      { branch: 2, items: [{ product: 5, quantity: 1, units: [] }] }, DEPS,
     );
     const body = (send.mock.calls[0]![1] as { body: Record<string, unknown> }).body;
     for (const forbidden of ['total', 'subtotal', 'price', 'discount', 'commission']) {
@@ -149,7 +161,7 @@ describe('the preview is the only source of a total', () => {
   it('reads the server figures through unchanged', async () => {
     const { module } = load({ result: WIRE_PREVIEW });
     const preview = await module.previewPosSale(
-      { branch: 2, items: [{ product: 5, quantity: 1 }] }, DEPS,
+      { branch: 2, items: [{ product: 5, quantity: 1, units: [] }] }, DEPS,
     );
     expect(preview.subtotal).toBe('50.00');
     expect(preview.total).toBe('25.00');
@@ -161,7 +173,7 @@ describe('the preview is the only source of a total', () => {
   it('carries the promotions the server applied on its own', async () => {
     const { module } = load({ result: WIRE_PREVIEW });
     const preview = await module.previewPosSale(
-      { branch: 2, items: [{ product: 5, quantity: 1 }] }, DEPS,
+      { branch: 2, items: [{ product: 5, quantity: 1, units: [] }] }, DEPS,
     );
     expect(preview.promotions).toHaveLength(1);
     expect(preview.promotions[0]).toMatchObject({
@@ -188,7 +200,7 @@ describe('the priced total and the payable total are the same thing', () => {
     const base = conditionsSignature(CONDITIONS);
     const variants: PosConditions[] = [
       { ...CONDITIONS, branch: 4 },
-      { ...CONDITIONS, lines: [{ product: product(4), quantity: 3 }] },
+      { ...CONDITIONS, lines: [{ product: product(4), quantity: 3, units: [] }] },
       { ...CONDITIONS, lines: [] },
       { ...CONDITIONS, couponCode: 'BIENVENIDO10' },
       { ...CONDITIONS, manualDiscountType: 'percent' },
@@ -207,15 +219,15 @@ describe('the priced total and the payable total are the same thing', () => {
     const a = conditionsSignature({
       ...CONDITIONS,
       lines: [
-        { product: product(4), quantity: 1 },
-        { product: product(9), quantity: 2 },
+        { product: product(4), quantity: 1, units: [] },
+        { product: product(9), quantity: 2, units: [] },
       ],
     });
     const b = conditionsSignature({
       ...CONDITIONS,
       lines: [
-        { product: product(9), quantity: 2 },
-        { product: product(4), quantity: 1 },
+        { product: product(9), quantity: 2, units: [] },
+        { product: product(4), quantity: 1, units: [] },
       ],
     });
     expect(a).toBe(b);
@@ -237,7 +249,7 @@ describe('a refusal carries what the operator needs to act on it', () => {
     await expect(
       module.createPosSale(
         {
-          branch: 2, items: [{ product: 4, quantity: 1 }], paymentMethod: 'cash',
+          branch: 2, items: [{ product: 4, quantity: 1, units: [] }], paymentMethod: 'cash',
           idempotencyKey: 'k'.repeat(12), termsConfirmed: true,
         },
         DEPS,
@@ -264,7 +276,7 @@ describe('a refusal carries what the operator needs to act on it', () => {
     await expect(
       module.createPosSale(
         {
-          branch: 2, items: [{ product: 4, quantity: 99 }], paymentMethod: 'cash',
+          branch: 2, items: [{ product: 4, quantity: 99, units: [] }], paymentMethod: 'cash',
           idempotencyKey: 'k'.repeat(12), termsConfirmed: true,
         },
         DEPS,
@@ -287,7 +299,7 @@ describe('a refusal carries what the operator needs to act on it', () => {
     await expect(
       module.createPosSale(
         {
-          branch: 2, items: [{ product: 4, quantity: 99 }], paymentMethod: 'cash',
+          branch: 2, items: [{ product: 4, quantity: 99, units: [] }], paymentMethod: 'cash',
           idempotencyKey: 'k'.repeat(12), termsConfirmed: true,
         },
         DEPS,
@@ -307,7 +319,7 @@ describe('a refusal carries what the operator needs to act on it', () => {
     const sale = load({ result: { order_id: 1, created: true, total: '10.00', items: [] } });
     await sale.module.createPosSale(
       {
-        branch: 2, items: [{ product: 4, quantity: 1 }], paymentMethod: 'cash',
+        branch: 2, items: [{ product: 4, quantity: 1, units: [] }], paymentMethod: 'cash',
         idempotencyKey: 'k'.repeat(12), termsConfirmed: true,
       },
       DEPS,

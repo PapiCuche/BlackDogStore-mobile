@@ -2,10 +2,12 @@ import {
   createPosSale,
   fetchPosContext,
   lookupPosProduct,
+  lookupPosUnit,
   previewPosSale,
   searchPosProducts,
 } from '@/api/endpoints/internal-pos-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
+import type { UnitMethodInput } from '@/domain/internal/order-unit-types';
 import type { PosSaleInput } from '@/domain/internal/pos-types';
 
 /**
@@ -32,6 +34,17 @@ export class V1InternalPosRepository {
 
   async lookupProduct(params: { code: string; branch: number }, signal?: AbortSignal) {
     return lookupPosProduct(params, this.deps, signal);
+  }
+
+  /**
+   * SERIAL-PICK-01 at the till: which device a serial or an IMEI names, if
+   * this branch can sell it. Reads only — it moves no stock.
+   */
+  async lookupUnit(
+    params: { code: string; branch: number; method?: UnitMethodInput },
+    signal?: AbortSignal,
+  ) {
+    return lookupPosUnit(params, this.deps, signal);
   }
 
   async preview(

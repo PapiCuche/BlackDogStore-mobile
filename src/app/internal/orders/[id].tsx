@@ -16,6 +16,7 @@ import {
   hasUxCapability,
   type FulfillmentStatus,
 } from '@/domain/internal/types';
+import { OrderDeliverySection } from '@/features/internal/order-delivery-section';
 import { OrderRiskSection } from '@/features/internal/order-risk-section';
 import { OrderUnitsSection } from '@/features/internal/order-units-section';
 import {
@@ -24,7 +25,9 @@ import {
   useInternalContext,
   useInternalOrder,
   useLookupOrderUnit,
+  useOrderDelivery,
   useReviewOrderRisk,
+  useSaveOrderDelivery,
   useSetFulfillmentStatus,
 } from '@/hooks/use-internal-sales';
 import { useTheme } from '@/theme/theme-provider';
@@ -65,6 +68,12 @@ export default function InternalOrderDetailScreen() {
   const identifyUnit = useIdentifyOrderUnit(orderId);
   const forgetUnit = useForgetOrderUnit(orderId);
   const reviewRisk = useReviewOrderRisk(orderId);
+  // DELIVERY-01. Its own read, because the server answers `can_edit` for the
+  // reader who asked; the order payload carries a copy for display only.
+  const delivery = useOrderDelivery(Number.isFinite(numericId) ? numericId : undefined, {
+    enabled: mayView,
+  });
+  const saveDelivery = useSaveOrderDelivery(orderId);
 
   if (!mayView) {
     return (
@@ -191,6 +200,19 @@ export default function InternalOrderDetailScreen() {
               onClearCandidate={() => lookupUnit.reset()}
             />
           </Card>
+
+          {/* DELIVERY-01. Absent for a sale at the till, which has no delivery
+              at all; the server says so with `exists` and `can_edit`. */}
+          {delivery.data ? (
+            <Card variant="outlined">
+              <OrderDeliverySection
+                record={delivery.data}
+                isSaving={saveDelivery.isPending}
+                error={saveDelivery.error}
+                onSave={(input) => saveDelivery.mutate(input)}
+              />
+            </Card>
+          ) : null}
 
           {/* CLIENT-SEC-01. `risk` is null for an order nobody assessed, and
               the decision controls appear only while the server says this

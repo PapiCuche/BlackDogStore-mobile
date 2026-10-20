@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import { InternalCapabilityMissingError } from '@/api/endpoints/internal-v1';
 import type { FulfillmentStatus } from '@/domain/internal/types';
+import type { OrderDeliveryInput } from '@/domain/internal/delivery-types';
 import type {
   RiskDecision,
   UnitMethodInput,
@@ -180,6 +181,57 @@ export function useReviewOrderRisk(orderId: number) {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.internalOrder(scope, orderId) });
       void client.invalidateQueries({ queryKey: queryKeys.internalOrders(scope, {}) });
+    },
+    retry: false,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// DELIVERY-01 — the order's delivery as staff keep it
+// ---------------------------------------------------------------------------
+
+/**
+ * The delivery record of one order.
+ *
+ * Its own query, although the order payload carries a copy: this is the one a
+ * save writes back, and the server answers `can_edit` here for the reader who
+ * asked. `sales.orders.view` reads it; a till sale simply has none.
+ */
+export function useOrderDelivery(
+  orderId: number | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const scope = useQueryScope();
+  return useQuery({
+    queryKey: queryKeys.internalOrderDelivery(scope, orderId ?? -1),
+    queryFn: ({ signal }) => repository().getDelivery(orderId!, signal),
+    enabled:
+      (options.enabled ?? true) && orderId !== undefined && Number.isFinite(orderId),
+    retry: false,
+  });
+}
+
+/**
+ * Write what the shop knows about the delivery.
+ *
+ * The answer is the record as it now stands — the server may derive a tracking
+ * link from the carrier and the waybill — so the cache is written from the
+ * answer, and the ORDER is invalidated too because its payload carries a copy
+ * of this same block.
+ *
+ * Nothing retries: a waybill written twice is harmless, but a 409 «this is not
+ * an online order» and a 400 about a field are both permanent answers, and
+ * repeating them only delays an honest screen.
+ */
+export function useSaveOrderDelivery(orderId: number) {
+  const client = useQueryClient();
+  const scope = useQueryScope();
+
+  return useMutation({
+    mutationFn: (input: OrderDeliveryInput) => repository().saveDelivery(orderId, input),
+    onSuccess: (record) => {
+      client.setQueryData(queryKeys.internalOrderDelivery(scope, orderId), record);
+      void client.invalidateQueries({ queryKey: queryKeys.internalOrder(scope, orderId) });
     },
     retry: false,
   });

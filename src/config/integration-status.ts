@@ -164,7 +164,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   internalSales: {
     label: 'Interno · Pedidos',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/internal/<empresa>/orders/ — listado, detalle, fulfillment, los equipos del pedido (buscar por serie o IMEI, identificar, quitar) y la decisión de la revisión del pedido. Capabilities resueltas por el servidor en cada petición: el conteo de equipos que faltan, quién puede cambiarlos y quién puede decidir la revisión los dice el servidor, nunca esta app.',
+    note: 'Integrado con /api/v1/internal/<empresa>/orders/ — listado, detalle, fulfillment, los equipos del pedido (buscar por serie o IMEI, identificar, quitar), la decisión de la revisión y el registro de entrega (destinatario, agencia, guía, código y enlace de seguimiento, flete y fecha de envío). Capabilities resueltas por el servidor en cada petición: el conteo de equipos que faltan, quién puede cambiarlos, quién puede decidir la revisión y quién puede escribir la entrega los dice el servidor, nunca esta app. Elegir el transportista sigue en la consola web: ninguna ruta v1 lista los transportistas activos de la empresa (BR-013).',
     source: 'api/endpoints/internal-v1.ts',
   },
   internalNotifications: {
@@ -218,7 +218,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   internalPos: {
     label: 'Interno · Punto de venta',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/internal/<empresa>/sales/pos/ — contexto, búsqueda, lectura de código (escáner tipo teclado o código + Enter; sin cámara), previsualización y venta. El total lo calcula siempre el servidor.',
+    note: 'Vende artículos con número de serie identificando cada equipo por serie o IMEI antes de cobrar (/sales/pos/units/lookup/). Integrado con /api/v1/internal/<empresa>/sales/pos/ — contexto, búsqueda, lectura de código (escáner tipo teclado o código + Enter; sin cámara), previsualización y venta. El total lo calcula siempre el servidor.',
     source: 'api/endpoints/internal-pos-v1.ts',
   },
   internalInventory: {

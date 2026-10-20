@@ -1,3 +1,5 @@
+import type { UnitMethodInput } from '@/domain/internal/order-unit-types';
+import type { UnitCandidate } from '@/domain/internal/order-unit-types';
 /**
  * The counter till, as the INTERNAL audience sees it. IP1A.
  *
@@ -85,6 +87,22 @@ export type PosProduct = {
   price: string;
   available: number;
   barcode: string;
+  /**
+   * SERIAL-PICK-01 — sold device by device.
+   *
+   * NOTHING WITH A SERIAL IS SOLD WITHOUT SAYING WHICH DEVICE: the server
+   * refuses a line that names fewer devices than it sells, so a till that
+   * ignored this flag would build baskets that cannot be charged.
+   */
+  isSerialized: boolean;
+  /** An IMEI rather than only a serial. The server refuses a typed code without it. */
+  requiresImei: boolean;
+};
+
+/** One device named on a line: the id the lookup gave, and how it was read. */
+export type PosLineUnit = {
+  unitId: number;
+  method: UnitMethodInput;
 };
 
 /** A promotion the SERVER applied, named so a till can explain the reduction. */
@@ -154,7 +172,20 @@ export type PosSale = {
 export type PosCartLine = {
   product: PosProduct;
   quantity: number;
+  /**
+   * The devices named for this line — SERIAL-PICK-01.
+   *
+   * One per unit sold of a serialised article, and empty for anything else.
+   * The basket keeps them so the quantity and the devices cannot drift apart:
+   * the server refuses a line that sells two and names one.
+   */
+  units: readonly PosLineUnit[];
 };
+
+/** Whether a line is ready to be charged: a serialised one needs its devices. */
+export function lineIsComplete(line: PosCartLine): boolean {
+  return line.product.isSerialized ? line.units.length === line.quantity : line.units.length === 0;
+}
 
 /**
  * Completing a sale: WHAT is being sold and HOW it is being paid.
@@ -169,7 +200,16 @@ export type PosCartLine = {
  */
 export type PosSaleInput = {
   branch: number;
-  items: readonly { product: number; quantity: number }[];
+  /**
+   * `units` names the devices of a serialised line — exactly as many as it
+   * sells — and is empty for an ordinary article. The server refuses either
+   * mismatch.
+   */
+  items: readonly {
+    product: number;
+    quantity: number;
+    units?: readonly PosLineUnit[];
+  }[];
   paymentMethod: string;
   amountReceived?: string;
   customer?: number;
@@ -188,3 +228,20 @@ export const CAP_SALES_POS_USE = 'sales.pos.use';
 export const CAP_SALES_POS_ASSIGN_SELLER = 'sales.pos.assign_seller';
 export const CAP_SALES_DISCOUNTS_APPLY = 'sales.discounts.apply';
 export const CAP_SALES_COMMISSIONS_VIEW = 'sales.commissions.view';
+
+/**
+ * A device the till may sell — SERIAL-PICK-01.
+ *
+ * The device AND the product it is, because a serial on its own tells a person
+ * nothing: the name carries the model and the colour, and the condition is
+ * what makes a used device a different thing from a new one at the same price.
+ *
+ * `product` is null when the payload could not be read as one; a device with
+ * no product is not something to put in a basket.
+ */
+export type PosUnitLookup = {
+  unit: UnitCandidate;
+  product: PosProduct | null;
+  /** Echoed by the server: how it understood the code was read. */
+  method: string;
+};
