@@ -16,9 +16,15 @@ import {
   hasUxCapability,
   type FulfillmentStatus,
 } from '@/domain/internal/types';
+import { OrderRiskSection } from '@/features/internal/order-risk-section';
+import { OrderUnitsSection } from '@/features/internal/order-units-section';
 import {
+  useForgetOrderUnit,
+  useIdentifyOrderUnit,
   useInternalContext,
   useInternalOrder,
+  useLookupOrderUnit,
+  useReviewOrderRisk,
   useSetFulfillmentStatus,
 } from '@/hooks/use-internal-sales';
 import { useTheme } from '@/theme/theme-provider';
@@ -51,6 +57,14 @@ export default function InternalOrderDetailScreen() {
     { enabled: mayView },
   );
   const mutation = useSetFulfillmentStatus();
+  // SERIAL-PICK-01 and CLIENT-SEC-01. The order id is -1 while the route
+  // parameter is not a number; the hooks are never fired in that state because
+  // the screen has already returned by then.
+  const orderId = Number.isFinite(numericId) ? numericId : -1;
+  const lookupUnit = useLookupOrderUnit(orderId);
+  const identifyUnit = useIdentifyOrderUnit(orderId);
+  const forgetUnit = useForgetOrderUnit(orderId);
+  const reviewRisk = useReviewOrderRisk(orderId);
 
   if (!mayView) {
     return (
@@ -155,6 +169,42 @@ export default function InternalOrderDetailScreen() {
               ))}
             </View>
           </Card>
+
+          {/* SERIAL-PICK-01. Before the fulfilment buttons on purpose: the
+              server refuses «entregado» while a device is missing, so the
+              person sees WHICH device is missing above the button that fails. */}
+          <Card variant="outlined">
+            <OrderUnitsSection
+              units={order.units}
+              pending={order.unitsPending}
+              canChange={order.unitsCanChange}
+              candidate={lookupUnit.data ?? null}
+              isLooking={lookupUnit.isPending}
+              isSaving={identifyUnit.isPending || forgetUnit.isPending}
+              lookupError={lookupUnit.error}
+              saveError={identifyUnit.error ?? forgetUnit.error}
+              onLookup={(input) => lookupUnit.mutate(input)}
+              onIdentify={(input) =>
+                identifyUnit.mutate(input, { onSuccess: () => lookupUnit.reset() })
+              }
+              onForget={(orderUnitId) => forgetUnit.mutate({ orderUnitId })}
+              onClearCandidate={() => lookupUnit.reset()}
+            />
+          </Card>
+
+          {/* CLIENT-SEC-01. `risk` is null for an order nobody assessed, and
+              the decision controls appear only while the server says this
+              reader may decide. */}
+          {order.risk ? (
+            <Card variant="outlined">
+              <OrderRiskSection
+                risk={order.risk}
+                isDeciding={reviewRisk.isPending}
+                error={reviewRisk.error}
+                onDecide={(input) => reviewRisk.mutate(input)}
+              />
+            </Card>
+          ) : null}
 
           {mayManage ? (
             <Card variant="outlined">
