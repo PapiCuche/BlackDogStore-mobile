@@ -248,13 +248,24 @@ describe('the module registry decides what to DRAW', () => {
     expect(modules[0]!.route).toBe('/internal/inventory');
   });
 
-  it('still refuses to draw a tile for a module with no screen', () => {
-    // The rule outlives the example. Customers is the current one.
+  it('customers is READY now that the search screen exists', () => {
+    // Was `pending-mobile`: `service/customers/` had been answering since M8
+    // and nothing in the app reached it, so the registry drew a tile that led
+    // nowhere — which live QA found as «no puedo ver clientes».
     const modules = visibleModules(context(['service.customers.view']));
 
     expect(modules.map((m) => m.key)).toEqual(['customers', 'notifications']);
-    expect(modules.find((m) => m.key === 'customers')!.integration).toBe('pending-mobile');
-    expect(modules[0]!.route).toBeUndefined();
+    expect(modules[0]!.integration).toBe('ready');
+    expect(modules[0]!.route).toBe('/internal/customers');
+  });
+
+  it('still refuses to draw a tile for a module with no screen', () => {
+    // The RULE outlives its examples, and this is the one that matters: a
+    // module is only «ready» when somebody can get somewhere from it.
+    for (const module of INTERNAL_MODULES) {
+      if (module.integration === 'ready') expect(module.route).toBeTruthy();
+      else expect(module.route).toBeUndefined();
+    }
   });
 
   it('technical service is READY now that M8 built both sides', () => {
