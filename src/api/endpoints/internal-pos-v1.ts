@@ -6,7 +6,13 @@ import type {
   PosProduct,
   PosSale,
   PosSaleInput,
+  PosUnitLookup,
+  PosLineUnit,
 } from '@/domain/internal/pos-types';
+
+import type { UnitMethodInput } from '@/domain/internal/order-unit-types';
+
+import { toUnitCandidate } from './internal-v1';
 
 import { authenticatedRequest } from '../authenticated-request';
 import { ApiError, userFacingMessage } from '../errors';
@@ -249,6 +255,11 @@ function toProduct(raw: unknown): PosProduct {
     price: str(row.price),
     available: num(row.available),
     barcode: str(row.barcode),
+    // SERIAL-PICK-01. Absent reads as NOT serialised, which is the shape of
+    // the catalogue before this flag existed; a line that then names no device
+    // is refused by the server with its own sentence rather than silently sold.
+    isSerialized: row.is_serialized === true,
+    requiresImei: row.requires_imei === true,
   };
 }
 
@@ -412,6 +423,52 @@ export async function lookupPosProduct(
 }
 
 /**
+ * WHICH DEVICE DOES THIS CODE NAME, AT THIS TILL — SERIAL-PICK-01.
+ *
+ * Writes nothing, sells nothing, moves no stock. It answers the device a
+ * serial or an IMEI names IF this branch can sell it, so the person at the
+ * counter confirms the model, the colour and the condition against the thing
+ * in their hand before it goes into a basket.
+ *
+ * THE BRANCH IS PART OF THE QUESTION. A device on another branch's shelf is
+ * not sellable here, and the server decides that — the same rule the web till
+ * gets, from `unit_identification.sellable_unit`.
+ *
+ * A code that names nothing answers 404, and that is not an error worth
+ * dressing up: the screen says «no encontrado» and the person tries again.
+ */
+export async function lookupPosUnit(
+  params: { code: string; branch: number; method?: UnitMethodInput },
+  deps: Deps,
+  signal?: AbortSignal,
+): Promise<PosUnitLookup | null> {
+  try {
+    const row = (await authenticatedRequest<unknown>(
+      `${posPath(requireTenant())}/units/lookup/`,
+      {
+        method: 'GET',
+        scope: 'authenticated-v1',
+        query: { code: params.code, branch: params.branch, method: params.method ?? 'scanner' },
+        signal,
+      },
+      deps,
+    )) as Record<string, unknown>;
+
+    const product = toProduct(row.product);
+    return {
+      unit: toUnitCandidate(row.unit),
+      // `toProduct` answers null for a payload it cannot read; a device with no
+      // product is not something to put in a basket.
+      product,
+      method: String(row.method ?? 'scanner'),
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    return translate(error);
+  }
+}
+
+/**
  * What this basket costs. THE ONLY SOURCE OF A TOTAL IN THIS APP.
  *
  * It writes nothing, moves no stock and spends no idempotency key — a preview
@@ -421,7 +478,11 @@ export async function lookupPosProduct(
 export async function previewPosSale(
   input: {
     branch: number;
-    items: readonly { product: number; quantity: number }[];
+    items: readonly {
+      product: number;
+      quantity: number;
+      units?: readonly PosLineUnit[];
+    }[];
     customer?: number;
     seller?: number;
     paymentMethod?: string;
@@ -435,7 +496,16 @@ export async function previewPosSale(
 ): Promise<PosPreview> {
   const body: Record<string, unknown> = {
     branch: input.branch,
-    items: input.items.map((i) => ({ product: i.product, quantity: i.quantity })),
+    // `units` travels only for a line that names devices: a basket without it
+    // hashes exactly as it did before SERIAL-PICK-01, which is what keeps an
+    // idempotency key meaning the same basket.
+    items: input.items.map((i) => ({
+      product: i.product,
+      quantity: i.quantity,
+      ...(i.units && i.units.length > 0
+        ? { units: i.units.map((u) => ({ id: u.unitId, method: u.method })) }
+        : {}),
+    })),
   };
   if (input.customer !== undefined) body.customer = input.customer;
   if (input.seller !== undefined) body.seller = input.seller;
@@ -481,7 +551,16 @@ export async function createPosSale(
 ): Promise<PosSale> {
   const body: Record<string, unknown> = {
     branch: input.branch,
-    items: input.items.map((i) => ({ product: i.product, quantity: i.quantity })),
+    // The devices of each serialised line, as on the preview. The sale is
+    // fingerprinted with its basket, so naming a different device is a
+    // different sale rather than a retry of this one.
+    items: input.items.map((i) => ({
+      product: i.product,
+      quantity: i.quantity,
+      ...(i.units && i.units.length > 0
+        ? { units: i.units.map((u) => ({ id: u.unitId, method: u.method })) }
+        : {}),
+    })),
     payment_method: input.paymentMethod,
     idempotency_key: input.idempotencyKey,
     terms_confirmed: input.termsConfirmed,

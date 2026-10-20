@@ -1,15 +1,21 @@
 import {
   fetchInternalContext,
+  fetchOrderDelivery,
   forgetOrderUnit,
   identifyOrderUnit,
   lookupOrderUnit,
   fetchInternalOrder,
   fetchInternalOrders,
   patchInternalOrderFulfillment,
+  patchOrderDelivery,
   reviewOrderRisk,
   type InternalOrderQuery,
 } from '@/api/endpoints/internal-v1';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
+import type {
+  OrderDeliveryInput,
+  OrderDeliveryRecord,
+} from '@/domain/internal/delivery-types';
 import type {
   OrderRisk,
   RiskDecision,
@@ -86,6 +92,21 @@ export class V1InternalSalesRepository {
     signal?: AbortSignal,
   ): Promise<InternalSalesOrderDetail> {
     return forgetOrderUnit(orderId, orderUnitId, this.deps, signal);
+  }
+
+  // DELIVERY-01. Reading takes `sales.orders.view`; writing takes `manage`,
+  // and the record is never the order: freight is information, and «enviado»
+  // is still said where it always was.
+  async getDelivery(orderId: number, signal?: AbortSignal): Promise<OrderDeliveryRecord> {
+    return fetchOrderDelivery(orderId, this.deps, signal);
+  }
+
+  async saveDelivery(
+    orderId: number,
+    input: OrderDeliveryInput,
+    signal?: AbortSignal,
+  ): Promise<OrderDeliveryRecord> {
+    return patchOrderDelivery(orderId, input, this.deps, signal);
   }
 
   /** CLIENT-SEC-01. Answers the assessment alone: `manage` does not imply `view`. */

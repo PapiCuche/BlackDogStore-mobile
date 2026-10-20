@@ -104,6 +104,8 @@ const CABLE: PosProduct = {
   price: '1250.00',
   available: 3,
   barcode: '0750123456789',
+      isSerialized: false,
+      requiresImei: false,
 };
 
 describe('what a scan means — the Web till, word for word', () => {

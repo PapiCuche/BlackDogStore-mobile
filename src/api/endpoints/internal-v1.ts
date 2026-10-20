@@ -1,6 +1,12 @@
 import { companySlug } from '@/config/env';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type {
+  DeliveryMode,
+  FreightPaidBy,
+  OrderDeliveryInput,
+  OrderDeliveryRecord,
+} from '@/domain/internal/delivery-types';
+import type {
   OrderRisk,
   OrderUnitRecord,
   RiskDecision,
@@ -483,6 +489,162 @@ export async function reviewOrderRisk(
       deps,
     )) as Record<string, unknown>;
     return toRisk(row.risk);
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DELIVERY-01 — the order's delivery as staff keep it
+// ---------------------------------------------------------------------------
+
+const DELIVERY_MODES: readonly string[] = [
+  'pickup_store',
+  'local_delivery',
+  'national_address',
+  'agency_pickup',
+];
+
+function toDeliveryMode(raw: unknown): DeliveryMode {
+  const value = String(raw ?? '');
+  // An unknown mode reads as none at all. Showing «recojo en agencia» for
+  // something the server called something else would misdescribe where a
+  // parcel is going.
+  return (DELIVERY_MODES.includes(value) ? value : '') as DeliveryMode;
+}
+
+function toFreightPaidBy(raw: unknown): FreightPaidBy {
+  const value = String(raw ?? '');
+  return (value === 'customer_at_destination' || value === 'store' ? value : '') as FreightPaidBy;
+}
+
+export function toDeliveryRecord(raw: unknown): OrderDeliveryRecord {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  const modes = row.allowed_modes;
+  return {
+    exists: row.exists === true,
+    // Absent reads as read-only: offering to write a delivery the server
+    // refuses — a till sale has none — teaches people the form is broken.
+    canEdit: row.can_edit === true,
+    mode: toDeliveryMode(row.mode),
+    modeLabel: String(row.mode_label ?? ''),
+    allowedModes: Array.isArray(modes)
+      ? modes.map(toDeliveryMode).filter((mode): mode is DeliveryMode => mode !== '')
+      : [],
+    recipientName: String(row.recipient_name ?? ''),
+    recipientDocumentType: (() => {
+      const value = String(row.recipient_document_type ?? '');
+      return value === 'dni' || value === 'ruc' || value === 'ce' ? value : '';
+    })(),
+    recipientDocumentNumber: String(row.recipient_document_number ?? ''),
+    recipientPhone: String(row.recipient_phone ?? ''),
+    addressLine: String(row.address_line ?? ''),
+    district: String(row.district ?? ''),
+    city: String(row.city ?? ''),
+    department: String(row.department ?? ''),
+    reference: String(row.reference ?? ''),
+    carrier: (() => {
+      const value = Number(row.carrier);
+      return Number.isFinite(value) && value > 0 ? Math.trunc(value) : null;
+    })(),
+    carrierName: String(row.carrier_name ?? ''),
+    agencyName: String(row.agency_name ?? ''),
+    agencyLocality: String(row.agency_locality ?? ''),
+    // A decimal STRING or null, kept as it came: freight is information and
+    // never enters arithmetic here.
+    freightAmount:
+      row.freight_amount === null || row.freight_amount === undefined
+        ? null
+        : String(row.freight_amount),
+    freightPaidBy: toFreightPaidBy(row.freight_paid_by),
+    waybillNumber: String(row.waybill_number ?? ''),
+    trackingCode: String(row.tracking_code ?? ''),
+    trackingUrl: String(row.tracking_url ?? ''),
+    trackingUrlTyped: row.tracking_url_typed === true,
+    shippedAt:
+      row.shipped_at === null || row.shipped_at === undefined ? null : String(row.shipped_at),
+    updatedBy:
+      row.updated_by === null || row.updated_by === undefined ? null : String(row.updated_by),
+    updatedAt:
+      row.updated_at === null || row.updated_at === undefined ? null : String(row.updated_at),
+  };
+}
+
+function deliveryPath(orderId: number): string {
+  return `${internalPath(requireTenant())}/orders/${encodeURIComponent(
+    String(orderId),
+  )}/delivery/`;
+}
+
+/** The order's delivery record, or the same shape empty. `sales.orders.view`. */
+export async function fetchOrderDelivery(
+  orderId: number,
+  deps: { refreshCoordinator: RefreshCoordinator },
+  signal?: AbortSignal,
+): Promise<OrderDeliveryRecord> {
+  try {
+    return toDeliveryRecord(
+      await authenticatedRequest<unknown>(
+        deliveryPath(orderId),
+        { scope: 'authenticated-v1', signal },
+        deps,
+      ),
+    );
+  } catch (error) {
+    return translate(error);
+  }
+}
+
+/**
+ * Write what the shop knows about this delivery. `sales.orders.manage`.
+ *
+ * ONLY WHAT CHANGED TRAVELS, and here that is not merely tidiness. The server
+ * keeps a typed tracking link and derives an untyped one from the carrier and
+ * the waybill; a record echoed back whole with a corrected waybill would look
+ * like somebody re-typing the old link, and the buyer would be left following
+ * a page for a number that no longer exists. So `tracking_url` is sent only
+ * when a person typed one.
+ *
+ * `freight_amount` is sent as the STRING it was typed as. Parsing a decimal
+ * here to «help» would be this app deciding what 10.5 means.
+ *
+ * A till sale has no delivery: the server answers 409 `NotAnOnlineOrder`, and
+ * that is not a validation failure to show against a field.
+ */
+export async function patchOrderDelivery(
+  orderId: number,
+  input: OrderDeliveryInput,
+  deps: { refreshCoordinator: RefreshCoordinator },
+  signal?: AbortSignal,
+): Promise<OrderDeliveryRecord> {
+  const body: Record<string, unknown> = {};
+  if (input.mode !== undefined) body.mode = input.mode;
+  if (input.recipientName !== undefined) body.recipient_name = input.recipientName;
+  if (input.recipientPhone !== undefined) body.recipient_phone = input.recipientPhone;
+  if (
+    input.recipientDocumentType !== undefined
+    || input.recipientDocumentNumber !== undefined
+  ) {
+    body.recipient_document_type = input.recipientDocumentType ?? '';
+    body.recipient_document_number = input.recipientDocumentNumber ?? '';
+  }
+  if (input.agencyName !== undefined) body.agency_name = input.agencyName;
+  if (input.agencyLocality !== undefined) body.agency_locality = input.agencyLocality;
+  if (input.freightAmount !== undefined) body.freight_amount = input.freightAmount;
+  if (input.freightPaidBy !== undefined) body.freight_paid_by = input.freightPaidBy;
+  if (input.waybillNumber !== undefined) body.waybill_number = input.waybillNumber;
+  if (input.trackingCode !== undefined) body.tracking_code = input.trackingCode;
+  if (input.trackingUrl !== undefined) body.tracking_url = input.trackingUrl;
+  if (input.shippedAt !== undefined) body.shipped_at = input.shippedAt;
+
+  try {
+    return toDeliveryRecord(
+      await authenticatedRequest<unknown>(
+        deliveryPath(orderId),
+        { scope: 'authenticated-v1', method: 'PATCH', body, signal },
+        deps,
+      ),
+    );
   } catch (error) {
     return translate(error);
   }

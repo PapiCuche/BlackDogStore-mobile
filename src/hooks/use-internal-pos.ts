@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { InternalCapabilityMissingError } from '@/api/endpoints/internal-v1';
 import { getAuthRuntime } from '@/auth/auth-runtime';
 import type { PosSaleInput } from '@/domain/internal/pos-types';
+import type { UnitMethodInput } from '@/domain/internal/order-unit-types';
 import { queryKeys } from '@/providers/query-client';
 import { useQueryScope } from '@/providers/use-query-scope';
 import { V1InternalPosRepository } from '@/repositories/api/v1-internal-pos-repository';
@@ -100,6 +101,47 @@ export function usePosLookup() {
         queryKey: queryKeys.internalPosLookup(scope, branchId, code),
         queryFn: ({ signal }) =>
           repository().lookupProduct({ code, branch: branchId }, signal),
+        retry: false,
+        staleTime: 0,
+        gcTime: 0,
+      });
+    } catch (error) {
+      if (error instanceof InternalCapabilityMissingError) {
+        client.removeQueries({ queryKey: queryKeys.internalPosRoot(scope) });
+        client.removeQueries({ queryKey: queryKeys.internalContext(scope) });
+      }
+      throw error;
+    }
+  };
+}
+
+/**
+ * Resolve a code as a DEVICE rather than as a product — SERIAL-PICK-01.
+ *
+ * The same shape as `usePosLookup` and for the same reasons: a GET asked on
+ * demand, `staleTime: 0` so a second scan asks again, `retry: false` because a
+ * 400 (a shop this person may not sell from) and a 404 (no such device here)
+ * are answers rather than failures, and a 403 evicts the till's cache.
+ *
+ * WHY BOTH EXIST. A barcode on a box names a product and sells by count; a
+ * serial or an IMEI names ONE device, and a serialised product cannot be sold
+ * without saying which. The till asks this when the person is holding a device
+ * rather than a box.
+ */
+export function usePosUnitLookup() {
+  const client = useQueryClient();
+  const scope = useQueryScope();
+
+  return async function lookupUnit(
+    branchId: number,
+    code: string,
+    method: UnitMethodInput = 'scanner',
+  ) {
+    try {
+      return await client.fetchQuery({
+        queryKey: queryKeys.internalPosUnitLookup(scope, branchId, code, method),
+        queryFn: ({ signal }) =>
+          repository().lookupUnit({ code, branch: branchId, method }, signal),
         retry: false,
         staleTime: 0,
         gcTime: 0,

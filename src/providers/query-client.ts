@@ -232,6 +232,15 @@ export const queryKeys = {
     [...internalPrefix(scope), 'announcement', id] as const,
   internalOrders: (scope: QueryScope, params: Record<string, unknown> = {}) =>
     [...internalPrefix(scope), 'orders', JSON.stringify(params)] as const,
+  /**
+   * DELIVERY-01 — an order's delivery record.
+   *
+   * Its own key rather than a field of the order: the order payload carries a
+   * copy for reading, and this is the one a save writes back. One slot for
+   * both would let the order's copy overwrite what was just edited.
+   */
+  internalOrderDelivery: (scope: QueryScope, id: number) =>
+    [...internalPrefix(scope), 'order', id, 'delivery'] as const,
   internalOrder: (scope: QueryScope, id: number) =>
     [...internalPrefix(scope), 'order', id] as const,
 
@@ -384,6 +393,18 @@ export const queryKeys = {
    */
   internalPosLookup: (scope: QueryScope, branchId: number, code: string) =>
     [...internalPrefix(scope), 'pos', 'lookup', branchId, code] as const,
+  /**
+   * SERIAL-PICK-01 at the till. The METHOD is part of the key: the server may
+   * refuse a code typed by hand that it accepts from a scanner, so the two
+   * questions have two answers and must not share a slot.
+   */
+  internalPosUnitLookup: (
+    scope: QueryScope,
+    branchId: number,
+    code: string,
+    method: string,
+  ) =>
+    [...internalPrefix(scope), 'pos', 'unit-lookup', branchId, code, method] as const,
   internalPosRoot: (scope: QueryScope) =>
     [...internalPrefix(scope), 'pos'] as const,
   /** The whole module, for invalidation after a write. */

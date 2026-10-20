@@ -38,7 +38,20 @@ export type PosConditions = {
  */
 export function conditionsSignature(conditions: PosConditions): string {
   const lines = conditions.lines
-    .map((line) => `${line.product.id}x${line.quantity}`)
+    .map((line) => {
+      // THE DEVICES ARE PART OF THE BASKET'S IDENTITY — SERIAL-PICK-01.
+      //
+      // They do not change the price, but the IDEMPOTENCY KEY is minted from
+      // this signature and the server fingerprints a sale WITH its units. Two
+      // baskets that differ only in which device is being sold would otherwise
+      // mint one key for two different sales, and the second one would come
+      // back refused as a key already used for something else.
+      const units = line.units
+        .map((unit) => unit.unitId)
+        .sort((a, b) => a - b)
+        .join('+');
+      return `${line.product.id}x${line.quantity}${units ? `#${units}` : ''}`;
+    })
     .sort()
     .join(',');
   return [
