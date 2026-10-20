@@ -18,7 +18,11 @@ import {
 import { useCart } from '@/cart/cart-provider';
 import { useStorefrontConfig } from '@/hooks/use-storefront-config';
 import { describeAvailability } from '@/domain/products/availability';
-import { productAvailability } from '@/domain/products/types';
+import {
+  describeConditionLine,
+  describeOnOrder,
+  productAvailability,
+} from '@/domain/products/types';
 import { openExternalLink } from '@/utils/external-links';
 import { hapticSuccess } from '@/utils/haptics';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
@@ -96,6 +100,10 @@ export default function ProductDetailScreen() {
   // the catalogue card uses.
   const availability = describeAvailability(product, { exact: true });
   const isOutOfStock = productAvailability(product) === 'out_of_stock';
+  const conditionLabel = describeConditionLine(product.conditionLine);
+  // Only when the shelf cannot cover it: with stock, the web sells at the
+  // shelf price and the on-order offer stays out of the way.
+  const onOrderOnly = isOutOfStock && product.onOrder !== null;
 
   return (
     <>
@@ -129,7 +137,12 @@ export default function ProductDetailScreen() {
           </View>
 
           <View style={{ gap: theme.spacing.xs }}>
-            {product.category ? <Badge label={product.category.name} uppercase /> : null}
+            <View style={{ flexDirection: 'row', gap: theme.spacing.xs, flexWrap: 'wrap' }}>
+              {product.category ? <Badge label={product.category.name} uppercase /> : null}
+              {/* DC2 — a used device is not a cheaper new one. The shop's own
+                  word for it, and nothing when it said neither. */}
+              {conditionLabel ? <Badge label={conditionLabel} uppercase /> : null}
+            </View>
 
             <Text variant="title1" accessibilityRole="header">
               {product.name}
@@ -143,7 +156,12 @@ export default function ProductDetailScreen() {
                 flexWrap: 'wrap',
               }}
             >
-              <Text variant="display">{formatCurrency(product.price)}</Text>
+              {/* DC3 — ON ORDER, THE PRICE IS THE OFFER'S. The web shows
+                  S/ 109.90 and not the shelf's S/ 99.00 for an article that is
+                  only available on order: charging the shelf price for
+                  something the shop has to buy in would be a figure nobody
+                  agreed to. */}
+              <Text variant="display">{formatCurrency(onOrderOnly ? product.onOrder!.price : product.price)}</Text>
 
               <Text
                 variant="subhead"
@@ -176,17 +194,60 @@ export default function ProductDetailScreen() {
             </Card>
           ) : null}
 
+          {/* DC2 — the web sells this one device by device, and this app
+              cannot: picking a device needs a surface no v1 route offers for
+              the storefront (BR-014). Said plainly instead of offering a
+              button that would add the wrong thing. */}
+          {product.sellsByUnit ? (
+            <Card variant="outlined">
+              <Text variant="subhead" color="textSecondary">
+                Este equipo se vende por unidad: cada aparato tiene su propio precio y
+                estado. Escríbenos o acércate a la tienda para elegir el tuyo.
+              </Text>
+            </Card>
+          ) : null}
+
+          {/* DC3 — the shop can bring it in. The cart of this app is local
+              intention and its checkout is closed (customerPaymentAvailability),
+              so this does not pretend to place a supplier order: it says what
+              the shop offers and how long it takes. */}
+          {onOrderOnly ? (
+            <Card variant="outlined">
+              <Text variant="subhead" color="textSecondary">
+                {`${describeOnOrder(product.onOrder!)}. Consúltanos para pedirlo.`}
+              </Text>
+            </Card>
+          ) : null}
+
           <Button
-            label={isOutOfStock ? 'Sin stock' : 'Agregar al carrito'}
+            label={
+              onOrderOnly
+                ? 'Consultar por este producto'
+                : isOutOfStock
+                  ? 'Sin stock'
+                  : 'Agregar al carrito'
+            }
             variant="primary"
             fullWidth
-            disabled={isOutOfStock || !canAddToCart}
+            disabled={!onOrderOnly && (isOutOfStock || !canAddToCart)}
             onPress={() => {
+              if (onOrderOnly) {
+                // An on-order purchase is a supplier order the server places
+                // from a paid checkout. This build cannot pay (see
+                // `customer-payment.ts`), so the honest action is the shop's
+                // own channel rather than a basket line that leads nowhere.
+                if (whatsappLink) void openExternalLink(whatsappLink);
+                return;
+              }
               add(product);
               hapticSuccess();
               router.push('/cart');
             }}
-            accessibilityHint="Agrega este producto a tu carrito"
+            accessibilityHint={
+              onOrderOnly
+                ? 'Abre el WhatsApp de la tienda para pedirlo'
+                : 'Agrega este producto a tu carrito'
+            }
           />
 
           {/* BR-006 CLOSED. The link is the tenant's own, published by the

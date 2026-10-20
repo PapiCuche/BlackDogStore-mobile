@@ -84,7 +84,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   catalog: {
     label: 'Catálogo',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/storefront/<empresa>/ — el servidor resuelve la empresa desde la ruta y acota cada queryset. En development sigue disponible el modo mock.',
+    note: 'Integrado con /api/v1/storefront/<empresa>/ — el servidor resuelve la empresa desde la ruta y acota cada queryset. Lee también si el artículo es nuevo o usado, si la web lo vende por unidad y la oferta «bajo pedido» (plazo y precio): sin estante, la ficha dice el plazo en vez de «agotado» y muestra el precio de la oferta. Elegir un equipo concreto o ver las variantes de un modelo sigue en la web: ninguna ruta v1 las lista (BR-014). En development sigue disponible el modo mock.',
     source: 'api/endpoints/catalog-v1.ts',
   },
   checkout: {

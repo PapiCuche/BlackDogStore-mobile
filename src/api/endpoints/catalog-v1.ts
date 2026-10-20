@@ -1,5 +1,5 @@
 import { companySlug } from '@/config/env';
-import type { Category, Product } from '@/domain/products/types';
+import type { Category, Product, ProductOnOrder } from '@/domain/products/types';
 
 import { ApiError } from '../errors';
 import { request } from '../client';
@@ -101,7 +101,37 @@ function toProduct(raw: unknown): Product {
         ? null
         : Number(row.average_rating),
     reviewCount: Number(row.review_count ?? 0),
+    // DC2 — new or used, in the server's own word. Anything else reads as
+    // neither: inventing «nuevo» for an unknown value would describe a used
+    // device as new.
+    conditionLine: (() => {
+      const value = String(row.condition_line ?? '');
+      return value === 'new' || value === 'used' ? value : '';
+    })(),
+    productModel:
+      row.product_model === null || row.product_model === undefined || row.product_model === ''
+        ? null
+        : String(row.product_model),
+    sellsByUnit: row.sells_by_unit === true,
+    // DC3 — null for anything the shop does not offer on order, which is also
+    // the shape of the payload before this field existed.
+    onOrder: toOnOrder(row.on_order),
   };
+}
+
+/**
+ * «Bajo pedido» — the lead time and the price, or null.
+ *
+ * A payload missing either is read as NO offer rather than as an offer with a
+ * zero: «entrega en 0 días» at «S/ 0» is a promise nobody made.
+ */
+function toOnOrder(raw: unknown): ProductOnOrder | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const row = raw as Record<string, unknown>;
+  const days = Number(row.lead_time_days);
+  const price = String(row.price ?? '');
+  if (!Number.isFinite(days) || days < 0 || !price) return null;
+  return { leadTimeDays: Math.trunc(days), price, overStock: row.over_stock === true };
 }
 
 function toCategory(raw: unknown): Category {

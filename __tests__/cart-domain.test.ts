@@ -33,6 +33,10 @@ function product(slug: string, price: string, name = slug): Product {
     imageUrl: `https://cdn.test/${slug}.png`,
     averageRating: null,
     reviewCount: 0,
+  conditionLine: 'new',
+    productModel: null,
+    sellsByUnit: false,
+    onOrder: null,
   };
 }
 

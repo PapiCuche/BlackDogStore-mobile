@@ -34,6 +34,10 @@ function product(slug: string, price = '100.00'): Product {
     imageUrl: '',
     averageRating: null,
     reviewCount: 0,
+  conditionLine: 'new',
+    productModel: null,
+    sellsByUnit: false,
+    onOrder: null,
   };
 }
 

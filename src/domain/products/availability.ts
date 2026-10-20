@@ -1,3 +1,4 @@
+import { describeOnOrder } from './types';
 import type { StatusTone } from '@/domain/orders/status';
 
 import { productAvailability, type Product, type ProductAvailability } from './types';
@@ -38,6 +39,12 @@ export function describeAvailability(
     const label =
       product.inventory === 1 ? 'Última unidad' : `Últimas ${product.inventory} unidades`;
     return { label, tone: availabilityMeta.low_stock.tone };
+  }
+  if (state === 'out_of_stock' && product.onOrder) {
+    // DC3 — nothing on the shelf, and the shop says it can bring it: «Bajo
+    // pedido — entrega en 5 días», the same line the web's availability shows.
+    // "Agotado" would be the wrong sentence for an article somebody can order.
+    return { label: describeOnOrder(product.onOrder), tone: 'info' };
   }
   return availabilityMeta[state];
 }
