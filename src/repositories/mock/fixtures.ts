@@ -43,6 +43,10 @@ const iphone15Pro: Product = {
   imageUrl: '',
   averageRating: 4.8,
   reviewCount: 12,
+  conditionLine: 'new',
+  productModel: null,
+  sellsByUnit: false,
+  onOrder: null,
 };
 
 const macbookAirM3: Product = {
@@ -57,6 +61,10 @@ const macbookAirM3: Product = {
   imageUrl: '',
   averageRating: 4.9,
   reviewCount: 7,
+  conditionLine: 'new',
+  productModel: null,
+  sellsByUnit: false,
+  onOrder: null,
 };
 
 const ipad10: Product = {
@@ -70,6 +78,10 @@ const ipad10: Product = {
   imageUrl: '',
   averageRating: null,
   reviewCount: 0,
+  conditionLine: 'new',
+  productModel: null,
+  sellsByUnit: false,
+  onOrder: null,
 };
 
 const airPodsPro2: Product = {
@@ -83,6 +95,10 @@ const airPodsPro2: Product = {
   imageUrl: '',
   averageRating: 4.7,
   reviewCount: 23,
+  conditionLine: 'new',
+  productModel: null,
+  sellsByUnit: false,
+  onOrder: null,
 };
 
 const charger20W: Product = {
@@ -96,6 +112,10 @@ const charger20W: Product = {
   imageUrl: '',
   averageRating: 4.4,
   reviewCount: 41,
+  conditionLine: 'new',
+  productModel: null,
+  sellsByUnit: false,
+  onOrder: null,
 };
 
 const appleWatchS9: Product = {
@@ -109,6 +129,10 @@ const appleWatchS9: Product = {
   imageUrl: '',
   averageRating: 4.6,
   reviewCount: 5,
+  conditionLine: 'new',
+  productModel: null,
+  sellsByUnit: false,
+  onOrder: null,
 };
 
 export const mockProducts: readonly Product[] = [

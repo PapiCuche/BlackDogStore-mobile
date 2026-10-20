@@ -209,6 +209,13 @@ describe('mapping the response to the domain', () => {
       imageUrl: 'https://cdn.example.test/mba.png',
       averageRating: 4.5,
       reviewCount: 12,
+      // DC2 / DC3 — a row that says nothing about them reads as: neither new
+      // nor used, no model, not sold by unit, and no on-order offer. That is
+      // also the shape every row had before those fields existed.
+      conditionLine: '',
+      productModel: null,
+      sellsByUnit: false,
+      onOrder: null,
     });
   });
 

@@ -1678,3 +1678,85 @@ nombre, un id y el tipo es lo único que un campo de selección necesita.
 
 Elegir el transportista de una entrega desde la app, con el aviso de que un
 recojo en agencia pide un transportista con agencias.
+
+---
+
+## BR-014 — Las variantes de un modelo, y los equipos de una variante usada
+
+**Estado:** abierto. **Superficie:** `/api/v1/storefront/<empresa>/…`.
+**Verificado contra** `PapiCuche/BlackDogStore-web` `origin/master` `1448a5d`
+(`store/v1_views.py` → `V1StorefrontProductViewSet`, `store/serializers.py` →
+`V1ProductSerializer`).
+
+### Lo que Mobile ya hace
+
+Leer y mostrar lo que el serializador envía de DC2 y DC3: si el artículo es
+nuevo o usado (`condition_line`), si la web lo vende equipo por equipo
+(`sells_by_unit`) y la oferta «bajo pedido» (`on_order`: plazo y precio). Sin
+estante y con oferta, la ficha dice «Bajo pedido — entrega en N días» y muestra
+el precio de la oferta, como la web.
+
+### Lo que no puede hacer, y por qué
+
+Dos cosas, y las dos por la misma razón: **no hay ruta**.
+
+1. **Las variantes de un modelo.** `product_model` llega como el slug del
+   modelo, y la web tiene `/modelo/<slug>`. En `/api/v1/` no hay ni una ruta de
+   modelo ni un filtro `?product_model=` en el viewset de productos, así que el
+   slug no lleva a ninguna parte. Mobile lo mapea y no lo muestra.
+
+2. **Los equipos de una variante usada.** El propio viewset las excluye —
+   `.exclude(product_model__isnull=False, condition_line=Product.CONDITION_USED)`
+   — con el motivo escrito al lado: una variante usada no tiene precio propio
+   (lo tiene cada aparato) y la app no puede comprar por equipo. Así que la app
+   dice en una frase que ese artículo se vende por unidad y remite a la tienda,
+   en lugar de ofrecer un botón que agregaría la cosa equivocada.
+
+### Contrato mínimo requerido
+
+Para (1), lo más pequeño que sirve es un filtro en la ruta que ya existe:
+
+```
+GET storefront/<empresa>/products/?product_model=<slug>
+→ las variantes publicadas de ese modelo, con la forma de producto que ya tiene
+```
+
+Para (2) hace falta una lectura de los equipos de una variante, con lo que un
+comprador puede saber y nada más:
+
+```
+GET storefront/<empresa>/products/<slug>/units/
+→ { "results": [
+      {"id": 31, "price": "2500.00", "condition_grade_label": "Excelente",
+       "battery_health": 87, "photos": [{"url": "…", "alt_text": ""}]}
+  ]}
+```
+
+Sin serie, sin IMEI, sin costo, sin proveedor: el número de serie identifica un
+aparato concreto y publicarlo en una tienda abierta es regalar el dato con el
+que se reclama una garantía ajena.
+
+### Autoridad
+
+Ninguna: es la tienda pública, acotada por la empresa de la ruta como el resto
+del storefront. Solo lo publicado (`is_published_online`) y solo los equipos que
+están realmente a la venta en esa sucursal.
+
+### Qué NO debe incluir
+
+Series, IMEI, costos, proveedores ni el historial del aparato. Y nada de un
+precio «desde»: si cada equipo tiene el suyo, la lista los dice uno por uno.
+
+### Tests backend requeridos
+
+1. el filtro por modelo solo devuelve variantes publicadas de esa empresa;
+2. un slug de modelo de otra empresa no devuelve nada (no un 403);
+3. la lectura de equipos solo trae los que están a la venta;
+4. ningún campo de serie, IMEI, costo o proveedor aparece en la respuesta;
+5. una variante usada sin equipos a la venta responde una lista vacía, no 404;
+6. el precio de cada equipo es el del equipo, no el del artículo.
+
+### Trabajo Mobile que desbloquea
+
+Una pantalla de modelo con sus variantes, y elegir un equipo usado concreto —
+con su estado y su precio— en vez de remitir a la tienda.
