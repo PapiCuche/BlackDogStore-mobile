@@ -28,7 +28,11 @@ import {
   type PosCartLine,
   type PosProduct,
 } from '@/domain/internal/pos-types';
-import { lineIsComplete } from '@/domain/internal/pos-types';
+import {
+  describePosOnOrder,
+  lineIsComplete,
+  SUPPLY_REASON_MAX_LENGTH,
+} from '@/domain/internal/pos-types';
 import { hasUxCapability } from '@/domain/internal/types';
 import {
   conditionsSignature,
@@ -122,6 +126,9 @@ export default function PosScreen() {
   // device, and a serialised article cannot be charged without saying which.
   const lookupUnit = usePosUnitLookup();
   const [scanNotice, setScanNotice] = useState<ScanNotice | null>(null);
+  // DC3 — the article a scan or a search offered to ORDER, waiting for the
+  // operator to say yes. Never added on their behalf.
+  const [onOrderOffer, setOnOrderOffer] = useState<PosProduct | null>(null);
 
   const conditions: PosConditions = {
     branch,
@@ -157,15 +164,21 @@ export default function PosScreen() {
     return minted;
   }
 
-  function add(product: PosProduct) {
+  function add(product: PosProduct, onOrder = false) {
     setLines((current) => {
       const found = current.find((l) => l.product.id === product.id);
       if (found) {
+        // A product is sold from the shelf or ordered, never both in one sale:
+        // the server refuses a basket that says both of one product, so the
+        // existing line decides and the quantity simply grows.
         return current.map((l) =>
           l.product.id === product.id ? { ...l, quantity: l.quantity + 1 } : l,
         );
       }
-      return [...current, { product, quantity: 1, units: [] }];
+      return [
+        ...current,
+        { product, quantity: 1, units: [], onOrder, supplyReason: '' },
+      ];
     });
     setTerm('');
     repriceNeeded();
@@ -189,6 +202,7 @@ export default function PosScreen() {
 
   function clearAfterSale() {
     setLines([]);
+    setOnOrderOffer(null);
     setCash('');
     setCoupon('');
     setDiscountType('');
@@ -209,6 +223,8 @@ export default function PosScreen() {
           product: l.product.id,
           quantity: l.quantity,
           units: l.units,
+          onOrder: l.onOrder,
+          supplyReason: l.supplyReason,
         })),
         paymentMethod: method,
         couponCode: coupon.trim() || undefined,
@@ -249,6 +265,9 @@ export default function PosScreen() {
     try {
       const outcome = describeScan(code, await lookup(branch, code));
       if (outcome.kind === 'add') add(outcome.product);
+      // DC3 — an offer is NOT added by the scan. Ordering from a supplier
+      // commits the shop to buying something, so the operator says so.
+      if (outcome.kind === 'on_order_available') setOnOrderOffer(outcome.product);
       setScanNotice(outcome);
     } catch (error) {
       setScanNotice({ kind: 'error', message: scanFailureMessage(error) });
@@ -273,6 +292,8 @@ export default function PosScreen() {
                   product: l.product.id,
                   quantity: l.quantity,
                   units: l.units,
+                  onOrder: l.onOrder,
+                  supplyReason: l.supplyReason,
                 })),
                 paymentMethod: method,
                 amountReceived: cash.trim() || undefined,
@@ -409,6 +430,34 @@ export default function PosScreen() {
                   {scanNotice.message}
                 </Text>
               ) : null}
+              {/* DC3 — «se puede vender bajo pedido»: the plazo, the ON-ORDER
+                  price, and an explicit act. The price is the offer's, not the
+                  shelf's: the shop has to buy this one in. */}
+              {onOrderOffer?.onOrder ? (
+                <Card variant="outlined">
+                  <View style={{ gap: theme.spacing.xs }}>
+                    <Text variant="subhead">{onOrderOffer.name}</Text>
+                    <Text variant="caption" color="textSecondary">
+                      {`${describePosOnOrder(onOrderOffer.onOrder)} · ${onOrderOffer.onOrder.price}`}
+                    </Text>
+                    <Button
+                      label="Agregar bajo pedido"
+                      size="compact"
+                      disabled={busy}
+                      onPress={() => {
+                        add(onOrderOffer, true);
+                        setOnOrderOffer(null);
+                      }}
+                    />
+                    <Button
+                      label="No pedirlo"
+                      variant="ghost"
+                      size="compact"
+                      onPress={() => setOnOrderOffer(null)}
+                    />
+                  </View>
+                </Card>
+              ) : null}
               {search.isFetching ? (
                 <Text variant="footnote" color="textTertiary">Buscando…</Text>
               ) : null}
@@ -429,11 +478,25 @@ export default function PosScreen() {
                         {product.price} · {product.available} en esta sucursal
                       </Text>
                     </View>
-                    <Button
-                      label="Agregar"
-                      onPress={() => add(product)}
-                      disabled={busy}
-                    />
+                    {/* The shelf first. With nothing on it and an offer, the
+                        same explicit act as a scan; with neither, no button
+                        that would build a basket the sale refuses. */}
+                    {product.available > 0 ? (
+                      <Button
+                        label="Agregar"
+                        onPress={() => add(product)}
+                        disabled={busy}
+                      />
+                    ) : product.onOrder ? (
+                      <Button
+                        label="Bajo pedido"
+                        variant="secondary"
+                        onPress={() => setOnOrderOffer(product)}
+                        disabled={busy}
+                      />
+                    ) : (
+                      <Button label="Sin stock" disabled onPress={() => undefined} />
+                    )}
                   </View>
                 </Card>
               ))}
@@ -492,9 +555,37 @@ export default function PosScreen() {
                         disabled={busy}
                       />
                     </View>
+                    {/* DC3 — an ordered line says so, with its lead time, and
+                        carries the shop's own reason for ordering it. */}
+                    {line.onOrder ? (
+                      <View style={{ gap: theme.spacing.xs }}>
+                        <Text variant="caption" color="statusWarning">
+                          {line.product.onOrder
+                            ? `${describePosOnOrder(line.product.onOrder)} · ${line.product.onOrder.price}`
+                            : 'Bajo pedido'}
+                        </Text>
+                        <Input
+                          label="Motivo del pedido (opcional)"
+                          value={line.supplyReason}
+                          onChangeText={(next) =>
+                            setLines((current) =>
+                              current.map((l) =>
+                                l.product.id === line.product.id
+                                  ? { ...l, supplyReason: next }
+                                  : l,
+                              ),
+                            )
+                          }
+                          maxLength={SUPPLY_REASON_MAX_LENGTH}
+                        />
+                      </View>
+                    ) : null}
+
                     {/* SERIAL-PICK-01. Only for an article the server marked
-                        as sold device by device. */}
-                    {line.product.isSerialized ? (
+                        as sold device by device — and never for an ordered
+                        line: no device exists yet, and it is identified when
+                        the article is received. */}
+                    {line.product.isSerialized && !line.onOrder ? (
                       <PosLineDevices
                         line={line}
                         isLooking={busy}

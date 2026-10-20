@@ -5,16 +5,18 @@ import {
 } from '@/api/endpoints/internal-v1';
 import type { TextColor } from '@/design-system';
 import type { PosProduct } from '@/domain/internal/pos-types';
+import { describePosOnOrder } from '@/domain/internal/pos-types';
 
 /**
  * What a scan at the counter means. The till's `handleScan`, as a function.
  *
  * THE RULES ARE THE WEB TILL'S, WORD FOR WORD. `frontend/app/admin/sales/pos`
- * trims the code, asks the server, and then does exactly one of three things:
- * says the code is unknown, refuses an article with nothing on this shelf, or
- * adds one unit. It never asks what an unknown code "might be", never adds an
- * article it has just been told is out of stock, and never prices anything.
- * Neither does this.
+ * trims the code, asks the server, and then does exactly one of four things:
+ * says the code is unknown, offers to ORDER an article the shop can bring in,
+ * refuses one with nothing on this shelf and no offer, or adds one unit. It
+ * never asks what an unknown code "might be", never adds an article it has
+ * just been told is out of stock, and never prices anything. Neither does
+ * this.
  *
  * NOTHING HERE IS AUTHORITY. `available` is the server's count for this shop,
  * read once to decide whether to put a line in a basket that is still only an
@@ -25,6 +27,14 @@ import type { PosProduct } from '@/domain/internal/pos-types';
 export type ScanOutcome =
   | { kind: 'not_found'; message: string }
   | { kind: 'no_stock'; message: string }
+  /**
+   * DC3 — nothing on this shelf, but the shop can order it.
+   *
+   * NOT added by the scan. Ordering from a supplier commits the shop to buying
+   * something; the operator says so explicitly, exactly as the web till makes
+   * them.
+   */
+  | { kind: 'on_order_available'; product: PosProduct; message: string }
   | { kind: 'add'; product: PosProduct; message: string };
 
 /** A scan that could not be answered at all — network, capability, a refused shop. */
@@ -48,6 +58,21 @@ export function describeScan(code: string, product: PosProduct | null): ScanOutc
     return { kind: 'not_found', message: `Código no encontrado: ${code}` };
   }
   if (product.available <= 0) {
+    // DC3 — nothing on this shelf, and the shop can order it. The web till
+    // says the same thing in the same place and then waits for the operator:
+    // ordering from a supplier is not something a scan decides.
+    if (product.onOrder) {
+      return {
+        kind: 'on_order_available',
+        product,
+        // Written out rather than lower-cased from the badge: this module
+        // reshapes no string, and a guard pins that — a scanner's code must
+        // reach the server exactly as it was read.
+        message:
+          `${product.name} sin stock en esta sucursal. `
+          + `Se puede vender bajo pedido: ${describePosOnOrder(product.onOrder)}.`,
+      };
+    }
     return {
       kind: 'no_stock',
       message: `${product.name} sin stock en esta sucursal.`,
@@ -83,6 +108,9 @@ export function scanNoticeColor(kind: ScanNotice['kind']): TextColor {
     case 'add':
       return 'textSecondary';
     case 'no_stock':
+    // DC3 — an offer to order is the same kind of fact as an empty shelf: the
+    // till is telling the operator about a state, not reporting a failure.
+    case 'on_order_available':
       return 'statusWarning';
     case 'not_found':
     case 'error':

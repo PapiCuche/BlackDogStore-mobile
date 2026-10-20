@@ -368,38 +368,31 @@ describe('a basket that cannot be charged', () => {
     barcode: '',
     isSerialized: true,
     requiresImei: true,
+    onOrder: null,
   };
   const ordinary: PosProduct = { ...serialised, id: 4, isSerialized: false, requiresImei: false };
 
   it('is incomplete while a serialised line names fewer devices than it sells', () => {
     // `check_line_units`: «se vende por su IMEI o serie. La venta lleva 2 y
     // hay 1 identificado(s)».
-    expect(lineIsComplete({ product: serialised, quantity: 2, units: [] })).toBe(false);
+    expect(lineIsComplete({ product: serialised, quantity: 2, units: [], onOrder: false, supplyReason: '' })).toBe(false);
     expect(
-      lineIsComplete({
-        product: serialised,
-        quantity: 2,
-        units: [{ unitId: 31, method: 'scanner' }],
-      }),
+      lineIsComplete({ product: serialised, quantity: 2, units: [{ unitId: 31, method: 'scanner' }], onOrder: false, supplyReason: '' }),
     ).toBe(false);
     expect(
-      lineIsComplete({
-        product: serialised,
-        quantity: 2,
-        units: [
+      lineIsComplete({ product: serialised, quantity: 2, units: [
           { unitId: 31, method: 'scanner' },
           { unitId: 32, method: 'scanner' },
-        ],
-      }),
+        ], onOrder: false, supplyReason: '' }),
     ).toBe(true);
   });
 
   it('is incomplete when an ordinary line names a device', () => {
     // «no se controla por número de serie».
     expect(
-      lineIsComplete({ product: ordinary, quantity: 1, units: [{ unitId: 31, method: 'scanner' }] }),
+      lineIsComplete({ product: ordinary, quantity: 1, units: [{ unitId: 31, method: 'scanner' }], onOrder: false, supplyReason: '' }),
     ).toBe(false);
-    expect(lineIsComplete({ product: ordinary, quantity: 1, units: [] })).toBe(true);
+    expect(lineIsComplete({ product: ordinary, quantity: 1, units: [], onOrder: false, supplyReason: '' })).toBe(true);
   });
 });
 
@@ -412,6 +405,7 @@ describe('the idempotency key and the devices', () => {
     barcode: '',
     isSerialized: true,
     requiresImei: true,
+    onOrder: null,
   };
   const base = {
     branch: 2,
@@ -428,11 +422,11 @@ describe('the idempotency key and the devices', () => {
     // refused as a key already used for something else.
     const first = conditionsSignature({
       ...base,
-      lines: [{ product: serialised, quantity: 1, units: [{ unitId: 31, method: 'scanner' }] }],
+      lines: [{ product: serialised, quantity: 1, units: [{ unitId: 31, method: 'scanner' }], onOrder: false, supplyReason: '' }],
     });
     const second = conditionsSignature({
       ...base,
-      lines: [{ product: serialised, quantity: 1, units: [{ unitId: 32, method: 'scanner' }] }],
+      lines: [{ product: serialised, quantity: 1, units: [{ unitId: 32, method: 'scanner' }], onOrder: false, supplyReason: '' }],
     });
 
     expect(first).not.toBe(second);
@@ -444,14 +438,14 @@ describe('the idempotency key and the devices', () => {
       lines: [{ product: serialised, quantity: 2, units: [
         { unitId: 31, method: 'scanner' },
         { unitId: 32, method: 'manual' },
-      ] }],
+      ], onOrder: false, supplyReason: '' }],
     });
     const b = conditionsSignature({
       ...base,
       lines: [{ product: serialised, quantity: 2, units: [
         { unitId: 32, method: 'manual' },
         { unitId: 31, method: 'scanner' },
-      ] }],
+      ], onOrder: false, supplyReason: '' }],
     });
 
     expect(a).toBe(b);

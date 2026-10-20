@@ -218,7 +218,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   internalPos: {
     label: 'Interno · Punto de venta',
     status: 'TESTED',
-    note: 'Vende artículos con número de serie identificando cada equipo por serie o IMEI antes de cobrar (/sales/pos/units/lookup/). Integrado con /api/v1/internal/<empresa>/sales/pos/ — contexto, búsqueda, lectura de código (escáner tipo teclado o código + Enter; sin cámara), previsualización y venta. El total lo calcula siempre el servidor.',
+    note: 'Vende artículos con número de serie identificando cada equipo por serie o IMEI antes de cobrar (/sales/pos/units/lookup/), y vende bajo pedido lo que no está en el estante cuando la tienda tiene oferta: la línea va marcada, con su plazo, el precio de la oferta y el motivo, y no lleva equipos porque todavía no existe ninguno. Integrado con /api/v1/internal/<empresa>/sales/pos/ — contexto, búsqueda, lectura de código (escáner tipo teclado o código + Enter; sin cámara), previsualización y venta. El total lo calcula siempre el servidor.',
     source: 'api/endpoints/internal-pos-v1.ts',
   },
   internalInventory: {

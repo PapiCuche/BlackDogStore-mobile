@@ -97,7 +97,31 @@ export type PosProduct = {
   isSerialized: boolean;
   /** An IMEI rather than only a serial. The server refuses a typed code without it. */
   requiresImei: boolean;
+  /**
+   * DC3 — what the shop may say about selling it ON ORDER, or null.
+   *
+   * The lead time and the price it would cost. Never the cost, the supplier or
+   * how many it confirmed: the server does not send those to a till either.
+   */
+  onOrder: PosOnOrder | null;
 };
+
+export type PosOnOrder = {
+  leadTimeDays: number;
+  /** A decimal STRING. The ON-ORDER price, not the shelf one. */
+  price: string;
+  /** The company lets it be offered on order even with stock on the shelf. */
+  overStock: boolean;
+};
+
+/** «Bajo pedido · 5 días», the till's own short form. */
+export function describePosOnOrder(onOrder: PosOnOrder): string {
+  const days = onOrder.leadTimeDays;
+  return `Bajo pedido · ${days} ${days === 1 ? 'día' : 'días'}`;
+}
+
+/** `pos_services.MAX_SUPPLY_REASON`. */
+export const SUPPLY_REASON_MAX_LENGTH = 200;
 
 /** One device named on a line: the id the lookup gave, and how it was read. */
 export type PosLineUnit = {
@@ -173,6 +197,15 @@ export type PosCartLine = {
   product: PosProduct;
   quantity: number;
   /**
+   * DC3 — taken off the shelf, or ordered from the supplier.
+   *
+   * The same product cannot be both in one sale, so this belongs to the LINE
+   * and the till keeps one line per product.
+   */
+  onOrder: boolean;
+  /** Only for an on-order line, and only when somebody typed it. */
+  supplyReason: string;
+  /**
    * The devices named for this line — SERIAL-PICK-01.
    *
    * One per unit sold of a serialised article, and empty for anything else.
@@ -184,6 +217,9 @@ export type PosCartLine = {
 
 /** Whether a line is ready to be charged: a serialised one needs its devices. */
 export function lineIsComplete(line: PosCartLine): boolean {
+  // DC3 — an on-order line names no device: none exists yet, and it is
+  // identified when the article is received. The server refuses one that does.
+  if (line.onOrder) return line.units.length === 0;
   return line.product.isSerialized ? line.units.length === line.quantity : line.units.length === 0;
 }
 
@@ -209,6 +245,17 @@ export type PosSaleInput = {
     product: number;
     quantity: number;
     units?: readonly PosLineUnit[];
+    /**
+     * DC3 — this line is being ORDERED, not taken off the shelf.
+     *
+     * A product is sold from stock or on order, never both in the same sale:
+     * the server refuses a basket that says both of one product. An on-order
+     * line names no device either — the device is identified when the article
+     * is received.
+     */
+    onOrder?: boolean;
+    /** Why it was ordered. Free text the shop keeps with the line. */
+    supplyReason?: string;
   }[];
   paymentMethod: string;
   amountReceived?: string;
