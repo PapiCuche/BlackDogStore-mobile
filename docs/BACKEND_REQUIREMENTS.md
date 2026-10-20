@@ -2029,3 +2029,117 @@ capacidad y un listado de catálogo no es donde se decide quién ve un costo.
 Un módulo «Productos» en el área interna para quien administra el catálogo,
 con búsqueda y ficha — hoy el catálogo solo se ve desde la caja o desde el
 stock, y cada uno pide una capacidad que esa persona puede no tener.
+
+---
+
+## REPORTS-01 — Las cifras que la empresa ya calcula, por una ruta v1
+
+**Estado:** abierto. **Superficie pedida:** `/api/v1/internal/<empresa>/…`.
+**Verificado contra** `PapiCuche/BlackDogStore-web` `origin/master` `50e7afe`
+(`store/urls.py` líneas 314-319 y 467, `store/capabilities.py`,
+`frontend/app/admin/inventory/reports/page.tsx`,
+`frontend/app/admin/sales/commissions/page.tsx`).
+
+### Flujo de trabajo en la web de producción
+
+`/admin/inventory/reports` arma su tablero con cinco lecturas, y
+`/admin/sales/commissions` con una sexta:
+
+```
+GET admin/inventory/summary/        ← YA existe en v1 e integrada
+GET admin/inventory/low-stock/
+GET admin/inventory/high-stock/
+GET admin/inventory/best-selling/
+GET admin/inventory/no-movement/
+GET admin/sales/commissions/
+```
+
+### Backend hoy
+
+Todas viven en `/api/admin/`, que habla cookies de sesión y CSRF. La única que
+cruzó a la superficie nativa es el resumen de inventario
+(`internal/<empresa>/inventory/summary/`), y Mobile la muestra ya.
+
+Las capacidades existen y están separadas con intención:
+`inventory.reports` («Reportes de inventario») y `sales.analytics.view`
+(«Analítica comercial»), que el aprovisionamiento NO concede a quien solo
+cobra en caja.
+
+### Workflow Mobile bloqueado
+
+Un encargado con `inventory.reports` abre el área interna y ve el resumen de
+inventario y nada más: ni qué se está quedando sin stock, ni qué no rota, ni
+qué más se vende. Con `sales.analytics.view` no ve absolutamente nada, porque
+ninguna ruta v1 responde a esa capacidad.
+
+### Por qué Mobile no lo reconstruye
+
+Porque sería inventar la contabilidad de la empresa en un teléfono. «Lo más
+vendido» es un ranking sobre movimientos de un período; «sin rotación» es una
+ventana temporal; una comisión es una liquidación con reglas de cierre. Pedir
+`inventory/movements/` y sumar en el cliente daría una cifra que no coincide
+con la de la consola, y dos cifras distintas para la misma pregunta es peor
+que ninguna. El servidor ya las calcula: lo que falta es la puerta.
+
+### Contrato mínimo requerido
+
+Las mismas lecturas, bajo el prefijo nativo y acotadas por empresa en el
+servidor. Forma sugerida, no implementación:
+
+```
+GET internal/<empresa>/inventory/low-stock/?branch=&threshold=&limit=
+GET internal/<empresa>/inventory/high-stock/?branch=&limit=
+GET internal/<empresa>/inventory/best-selling/?branch=&from=&to=&limit=
+GET internal/<empresa>/inventory/no-movement/?branch=&days=&limit=
+→ { "results": [ {"product_id", "product_slug", "product_name",
+                  "branch_id", "branch_name", "quantity", "value"} ],
+    "generated_at": "...", "window": {"from": "...", "to": "..."} }
+
+GET internal/<empresa>/sales/commissions/?from=&to=&seller=&branch=
+→ { "results": [ {"seller_id", "seller_name", "sales_count",
+                  "base_amount", "rate_percent", "amount", "status"} ],
+    "totals": {"base_amount", "amount"}, "period": {"from", "to"} }
+```
+
+Cada importe como **cadena decimal**, como el resto de esta superficie, y la
+ventana del cálculo explícita en la respuesta: un tablero que no dice de qué
+período habla invita a leerlo como «hoy».
+
+### Autoridad
+
+- inventario: `inventory.reports`, no `inventory.view` — la propia web las
+  separa, y el resumen ya integrado ocupa el lado de `view`;
+- comisiones: `sales.analytics.view` para el agregado y
+  `sales.commissions.view` para el detalle de una persona, tal como las declara
+  `capabilities.py`.
+
+Acotado por empresa siempre, y por sucursal cuando el parámetro se envía.
+
+### Qué NO debe incluir
+
+Costos ni márgenes salvo que la capacidad pedida sea `costs.view`; y nunca la
+comisión de otra persona para quien solo puede ver la suya.
+
+### Errores
+
+403 sin la capacidad; 404 para una empresa ajena —nunca 403, que confirmaría
+que existe—; 400 para una ventana temporal inválida (`from` posterior a `to`).
+
+### Idempotencia
+
+No aplica: son lecturas.
+
+### Tests backend requeridos
+
+1. cada lectura exige su capacidad y responde 403 sin ella;
+2. una empresa ajena responde 404;
+3. el filtro por sucursal no deja pasar filas de otra;
+4. la ventana temporal se refleja en la respuesta y una inválida es 400;
+5. los importes salen como cadena, no como número;
+6. la comisión de otra persona no aparece para quien solo ve la suya.
+
+### Trabajo Mobile que desbloquea
+
+Un módulo «Reportes» en el área interna: lo que se está agotando, lo que no
+rota, lo más vendido y la liquidación de comisiones del período — calculado por
+el servidor y mostrado tal cual.
