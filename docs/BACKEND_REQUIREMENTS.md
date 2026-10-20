@@ -1962,3 +1962,70 @@ vendedor. Un cliente puede quedarse con ese papel.
 
 El mismo gesto que ya existe para el ticket de una cotización: descargar y
 compartir el comprobante desde el mostrador, sin pasar por la consola.
+
+---
+
+## BR-018 — Una lista de productos para quien tiene `products.view`
+
+**Estado:** abierto. **Superficie:** `/api/v1/internal/<empresa>/…`.
+**Verificado contra** `PapiCuche/BlackDogStore-web` `origin/master` `50e7afe`
+(`store/v1_urls.py`, `store/v1_pos_views.py`, `store/v1_inventory_views.py`) y
+comprobado en vivo: `dev_inventory` recibe 403 en `sales/pos/context/`, y
+`dev_sales` recibe 403 en `inventory/stock/`.
+
+### El hueco, desde el trabajo de una persona
+
+«Quiero ver los productos de la empresa» no tiene respuesta en `/api/v1/` para
+quien solo tiene `products.view`. Las dos listas que existen pertenecen a otros
+módulos y piden otras capacidades:
+
+- `sales/pos/products/search/` — pide `sales.pos.use`. Es el buscador de la
+  caja: devuelve precio y lo que hay en ESA sucursal.
+- `inventory/stock/` — pide `inventory.view`. Es el stock por sucursal, no el
+  catálogo.
+
+Así que un jefe de producto con `products.view` y nada más entra al área
+interna y no tiene ninguna pantalla de productos, aunque el catálogo sea
+exactamente lo que administra. La app no inventa una: usar el buscador de la
+caja para esto obligaría a pedir `sales.pos.use` a quien no cobra.
+
+### Contrato mínimo requerido
+
+```
+GET internal/<empresa>/products/?search=&category=&page=&page_size=
+→ { "count": n, "page": 1, "page_size": 20, "results": [
+     {"id": 3, "name": "AirPods Pro (2.ª gen)", "slug": "airpods-pro-2",
+      "price": "999.00", "is_active": true, "is_published_online": true,
+      "is_serialized": false, "category": {"id": 1, "name": "Audio", "slug": "audio"}}
+  ]}
+
+GET internal/<empresa>/products/<slug>/
+→ lo mismo, más la descripción y las fotos
+```
+
+Acotado por empresa en el servidor, como todo lo demás de esta superficie.
+
+### Autoridad
+
+`products.view` para leer. Crear o editar un producto NO entra aquí: eso vive
+en la consola y necesita su propio contrato (BR-016).
+
+### Qué NO debe incluir
+
+Costos, márgenes, proveedores ni ofertas de compra: `costs.view` es otra
+capacidad y un listado de catálogo no es donde se decide quién ve un costo.
+
+### Tests backend requeridos
+
+1. la lista exige `products.view` y responde 403 sin ella;
+2. una empresa ajena responde 404, no 403;
+3. solo aparecen productos de esa empresa;
+4. ningún campo de costo, margen o proveedor aparece en la respuesta;
+5. el detalle por slug responde 404 para un slug de otra empresa;
+6. la paginación coincide con el resto de la superficie interna.
+
+### Trabajo Mobile que desbloquea
+
+Un módulo «Productos» en el área interna para quien administra el catálogo,
+con búsqueda y ficha — hoy el catálogo solo se ve desde la caja o desde el
+stock, y cada uno pide una capacidad que esa persona puede no tener.
