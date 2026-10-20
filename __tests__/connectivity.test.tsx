@@ -2,6 +2,7 @@ import { act, renderHook, screen, waitFor } from '@testing-library/react-native'
 import type { ReactNode } from 'react';
 
 import { ConnectivityProvider, useConnectivity } from '@/connectivity/connectivity-provider';
+import { reportNetworkReachable } from '@/connectivity/connectivity-signal';
 import { toConnectivityState } from '@/connectivity/connectivity-state';
 import { OfflineBanner } from '@/design-system';
 
@@ -156,5 +157,81 @@ describe('OfflineBanner', () => {
     expect(
       screen.getByLabelText('Sin conexión. Mostrando la información disponible.'),
     ).toBeOnTheScreen();
+  });
+});
+
+/**
+ * THE LATCH — the bug this guards against.
+ *
+ * `expo-network` answers once on mount and then only when IT decides something
+ * changed. A phone that slept through the change, or a machine whose host
+ * network flapped, keeps the last answer forever. And `offline` is not a
+ * banner: `QueryOnlineBridge` pins `onlineManager` to false, which PAUSES EVERY
+ * MUTATION — the till silently stops being able to charge.
+ *
+ * Found in the simulator against the real backend: the strip said «Sin
+ * conexión» while `curl` to the same API answered 200, and it stayed that way
+ * until the app was reloaded.
+ */
+describe('recovering from a stale offline', () => {
+  it('asks the OS again when the app comes back to the foreground', async () => {
+    const { AppState } = jest.requireActual('react-native') as {
+      AppState: { addEventListener: unknown };
+    };
+    const handlers: ((status: string) => void)[] = [];
+    const spy = jest
+      .spyOn(AppState as never, 'addEventListener')
+      .mockImplementation(((_event: string, handler: (status: string) => void) => {
+        handlers.push(handler);
+        return { remove: jest.fn() };
+      }) as never);
+
+    network.getNetworkStateAsync.mockResolvedValue({ isConnected: false });
+    const view = await renderHook(() => useConnectivity(), { wrapper });
+    await waitFor(() => expect(view.result.current.isOffline).toBe(true));
+
+    // The radio came back while the app was in the background: no change event
+    // was ever delivered to this process.
+    network.getNetworkStateAsync.mockResolvedValue({
+      isConnected: true,
+      isInternetReachable: true,
+    });
+    await act(async () => {
+      for (const handler of handlers) handler('active');
+    });
+
+    await waitFor(() => expect(view.result.current.isOffline).toBe(false));
+    spy.mockRestore();
+  });
+
+  it('believes a successful request over the OS', async () => {
+    // Bytes came back over the connection the OS says does not exist. The
+    // response is the proof, and it is what un-pauses the mutations.
+    network.getNetworkStateAsync.mockResolvedValue({ isConnected: false });
+    const view = await renderHook(() => useConnectivity(), { wrapper });
+    await waitFor(() => expect(view.result.current.isOffline).toBe(true));
+
+    network.getNetworkStateAsync.mockResolvedValue({
+      isConnected: true,
+      isInternetReachable: true,
+    });
+    await act(async () => {
+      reportNetworkReachable();
+    });
+
+    await waitFor(() => expect(view.result.current.isOffline).toBe(false));
+  });
+
+  it('keeps saying offline while nothing has demonstrated otherwise', async () => {
+    // The fix must not become "assume online": a real outage still reads as
+    // one, or the banner would be decoration.
+    network.getNetworkStateAsync.mockResolvedValue({ isConnected: false });
+    const view = await renderHook(() => useConnectivity(), { wrapper });
+
+    await waitFor(() => expect(view.result.current.isOffline).toBe(true));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(view.result.current.isOffline).toBe(true);
   });
 });

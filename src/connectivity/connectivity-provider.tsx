@@ -1,4 +1,5 @@
 import * as Network from 'expo-network';
+import { AppState } from 'react-native';
 import {
   createContext,
   use,
@@ -9,6 +10,7 @@ import {
 } from 'react';
 
 import { toConnectivityState, type ConnectivityState } from './connectivity-state';
+import { onNetworkReachable } from './connectivity-signal';
 
 type ConnectivityContextValue = {
   state: ConnectivityState;
@@ -44,25 +46,61 @@ export function ConnectivityProvider({
   useEffect(() => {
     let cancelled = false;
 
-    // Ask once up front. The listener only fires on CHANGE, so without this the
-    // app would sit at `unknown` until the user walked into a lift.
-    Network.getNetworkStateAsync()
-      .then((network) => {
-        if (!cancelled) setState(toConnectivityState(network));
-      })
-      .catch(() => {
-        // Unreadable network state is not offline. Staying `unknown` lets
-        // requests proceed and lets the API client report the truth.
-        if (!cancelled) setState('unknown');
-      });
+    function ask() {
+      // Ask the OS now. The listener only fires on CHANGE, so without this the
+      // app would sit at `unknown` until the user walked into a lift.
+      Network.getNetworkStateAsync()
+        .then((network) => {
+          if (!cancelled) setState(toConnectivityState(network));
+        })
+        .catch(() => {
+          // Unreadable network state is not offline. Staying `unknown` lets
+          // requests proceed and lets the API client report the truth.
+          if (!cancelled) setState('unknown');
+        });
+    }
+
+    ask();
 
     const subscription = Network.addNetworkStateListener((event) => {
       if (!cancelled) setState(toConnectivityState(event));
     });
 
+    // COMING BACK TO THE APP IS A REASON TO ASK AGAIN.
+    //
+    // A phone that slept through a change of network wakes up holding the
+    // answer from before it slept, because the change event fired while
+    // nothing was listening. Asking on `active` costs one call per return to
+    // the foreground and is what stops the counter's phone insisting it is
+    // offline for the rest of the shift.
+    const appState: { remove?: () => void } | undefined = AppState.addEventListener(
+      'change',
+      (status) => {
+        if (status === 'active') ask();
+      },
+    );
+
+    // A SUCCESSFUL REQUEST IS PROOF, and it outranks the OS.
+    //
+    // `offline` is not merely a banner: it pins `onlineManager` to false and
+    // TanStack Query then PAUSES EVERY MUTATION — the till cannot charge, and
+    // the screen does not say why. So when a response comes back over the
+    // connection the OS says does not exist, the app believes the response and
+    // re-asks the OS rather than waiting for an event that may never arrive.
+    const unsubscribe = onNetworkReachable(() => {
+      if (cancelled) return;
+      setState((current) => (current === 'offline' ? 'online' : current));
+      ask();
+    });
+
     return () => {
       cancelled = true;
       subscription.remove();
+      // `addEventListener` hands back a subscription on every RN this project
+      // ships; a host that hands back nothing must not take the cleanup — and
+      // the app — down with it.
+      appState?.remove?.();
+      unsubscribe();
     };
   }, []);
 

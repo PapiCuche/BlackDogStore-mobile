@@ -183,3 +183,40 @@ describe('Home — partial resilience', () => {
     expect(screen.getByText('No tienes reparaciones activas')).toBeOnTheScreen();
   });
 });
+
+/**
+ * WHY A STALE `offline` IS NOT COSMETIC.
+ *
+ * `QueryOnlineBridge` feeds connectivity to TanStack Query, and TanStack Query
+ * PAUSES MUTATIONS while `onlineManager` says offline. A latched state
+ * therefore stops the till charging, the stock moving and a quote being
+ * decided — with nothing on screen to explain it. This pins the wiring that
+ * makes recovery possible at all.
+ */
+describe('the client reports what the OS cannot see', () => {
+  it('announces reachability on a successful response', async () => {
+    const seen: string[] = [];
+    const { onNetworkReachable, resetNetworkReachableListeners } = jest.requireActual(
+      '@/connectivity/connectivity-signal',
+    ) as typeof import('@/connectivity/connectivity-signal');
+
+    resetNetworkReachableListeners();
+    const stop = onNetworkReachable(() => seen.push('reachable'));
+
+    const fetchMock = jest.fn(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const original = globalThis.fetch;
+    (globalThis as unknown as { fetch: unknown }).fetch = fetchMock;
+
+    const { request } = jest.requireActual('@/api/client') as typeof import('@/api/client');
+    await request('/api/v1/storefront/blackdog/config/');
+
+    expect(seen).toEqual(['reachable']);
+    stop();
+    (globalThis as unknown as { fetch: unknown }).fetch = original;
+  });
+});
