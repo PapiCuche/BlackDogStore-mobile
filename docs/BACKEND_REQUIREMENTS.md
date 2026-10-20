@@ -1883,3 +1883,82 @@ pantalla que falla.
 2. conteos de inventario (BR-009, ya pedido);
 3. notas de venta y disponibilidad;
 4. el resto, que es administración de escritorio.
+
+---
+
+## BR-017 — El documento impreso de una venta de mostrador
+
+**Estado:** abierto. **Superficie:** `/api/v1/internal/<empresa>/sales/pos/…`.
+**Verificado contra** `PapiCuche/BlackDogStore-web` `origin/master` `50e7afe`
+(`store/pos_payloads.py` → `sale_payload`, `store/fiscal_services.py`,
+`store/v1_urls.py`), y comprobado en vivo contra una copia de ese árbol: una
+venta con `receipt_type: "sales_note"` responde `document_number: "NV-000038"`,
+`document_status: "issued"`.
+
+### Lo que Mobile ya hace
+
+Cerrar la venta eligiendo comprobante entre los que el servidor ofrece para esa
+sucursal, y mostrar lo que el servidor contestó: tipo, número, estado de la
+emisión, el desglose de impuestos congelado y los equipos entregados con su
+serie o IMEI.
+
+### Lo que no puede hacer, y por qué
+
+**Entregar el documento.** El número identifica un comprobante que el cliente
+pedirá impreso o por correo, y en `/api/v1/` no hay ninguna ruta que lo
+devuelva:
+
+- la única ruta de documento de la superficie v1 es el ticket de una cotización
+  de servicio (`service/orders/<id>/quotes/<id>/ticket/?formato=ticket80`);
+- el PDF fiscal y el ticket de 80 mm de una venta viven en la consola
+  (`/api/admin/`) y en el print-agent, que es un demonio de escritorio;
+- `print_agent` recoge trabajos por `print-agent/jobs/claim/`, que es una cola
+  entre el servidor y una impresora, no algo que un teléfono pida.
+
+Así que la app no ofrece «imprimir»: un botón que no puede imprimir es peor que
+ninguno.
+
+### Contrato mínimo requerido
+
+Lo mismo que ya existe para la cotización de servicio, aplicado a la venta:
+
+```
+GET internal/<empresa>/sales/pos/sales/<order_id>/document/?formato=ticket80
+→ application/pdf, Cache-Control: private, no-store
+```
+
+Y, si el comprobante electrónico tiene su propia representación:
+
+```
+GET internal/<empresa>/sales/pos/sales/<order_id>/document/?formato=a4
+```
+
+Debe servir el documento **tal como el servidor lo emitió**, no uno regenerado
+con los precios de hoy: una reimpresión dentro de un año tiene que decir lo
+mismo que dijo el día de la venta, que es justamente por qué el desglose de
+impuestos se congela en la orden.
+
+### Autoridad
+
+`sales.orders.view` para el ticket interno. Para la representación del
+comprobante fiscal, la misma que lo emite: `sales.fiscal.view`. Acotado por
+empresa y por la sucursal de la venta, como todo lo demás de esta superficie.
+
+### Qué NO debe incluir
+
+Nada que el ticket no lleve ya: ni el costo, ni el margen, ni la comisión del
+vendedor. Un cliente puede quedarse con ese papel.
+
+### Tests backend requeridos
+
+1. la ruta exige la capability y responde 403 sin ella;
+2. una venta de otra empresa responde 404, no 403;
+3. una venta sin comprobante responde 404 y no un PDF vacío;
+4. el PDF servido corresponde al documento emitido, no a uno regenerado;
+5. `Cache-Control: private, no-store`, como el ticket de cotización;
+6. un `formato` desconocido se rechaza en vez de adivinarse.
+
+### Trabajo Mobile que desbloquea
+
+El mismo gesto que ya existe para el ticket de una cotización: descargar y
+compartir el comprobante desde el mostrador, sin pasar por la consola.

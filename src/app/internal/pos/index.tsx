@@ -27,6 +27,7 @@ import {
   CAP_SALES_POS_USE,
   type PosCartLine,
   type PosProduct,
+  type PosSale,
 } from '@/domain/internal/pos-types';
 import {
   describePosOnOrder,
@@ -55,6 +56,7 @@ import {
 } from '@/hooks/use-internal-pos';
 import { useInternalContext } from '@/hooks/use-internal-sales';
 import { PosLineDevices } from '@/features/internal/pos-line-devices';
+import { PosSaleResult } from '@/features/internal/pos-sale-result';
 import { useTheme } from '@/theme/theme-provider';
 
 /**
@@ -126,9 +128,20 @@ export default function PosScreen() {
   // device, and a serialised article cannot be charged without saying which.
   const lookupUnit = usePosUnitLookup();
   const [scanNotice, setScanNotice] = useState<ScanNotice | null>(null);
+  // Only what this BRANCH may issue: the server says which branches each
+  // document belongs to, and a till in one shop must not offer another's.
+  const receiptOptions = (context.data?.receiptOptions ?? []).filter(
+    (option) => branch === null || option.branches.length === 0 || option.branches.includes(branch),
+  );
   // DC3 — the article a scan or a search offered to ORDER, waiting for the
   // operator to say yes. Never added on their behalf.
   const [onOrderOffer, setOnOrderOffer] = useState<PosProduct | null>(null);
+  // The sale the server just closed. Held until the operator says they are
+  // done with it, because it is what they read to the customer.
+  const [lastSale, setLastSale] = useState<PosSale | null>(null);
+  // Which document to issue. Empty means NONE — the server's own default — and
+  // it is a choice the operator makes, never one this app makes for the shop.
+  const [receiptType, setReceiptType] = useState('');
 
   const conditions: PosConditions = {
     branch,
@@ -302,6 +315,7 @@ export default function PosScreen() {
                 manualDiscountType: discountType || undefined,
                 manualDiscountValue: discountValue.trim() || undefined,
                 discountReason: discountReason.trim() || undefined,
+                receiptType: receiptType || undefined,
                 idempotencyKey: keyFor(),
                 // NO price, NO subtotal, NO total, NO commission, NO promotion
                 // result. A till is TOLD what to charge; it is never asked, and
@@ -312,15 +326,11 @@ export default function PosScreen() {
               {
                 onSuccess: (result) => {
                   clearAfterSale();
-                  Alert.alert(
-                    result.created
-                      ? 'Venta registrada'
-                      : 'Esta venta ya estaba registrada',
-                    // The FINAL figures, from the sale. If the shelf or a
-                    // promotion moved between pricing and charging, this is the
-                    // number that happened.
-                    `Total ${result.total} · vuelto ${result.changeAmount ?? '—'}`,
-                  );
+                  // Kept on screen, not announced and dismissed: the counter
+                  // has to read the document number back to the customer and
+                  // check the devices that went out. An alert disappears on the
+                  // first tap.
+                  setLastSale(result);
                 },
                 onError: (error) => {
                   Alert.alert('No se pudo cobrar', saleFailureMessage(error));
@@ -503,6 +513,13 @@ export default function PosScreen() {
             </View>
           ) : null}
 
+          {lastSale ? (
+            <View>
+              <SectionHeader title="Última venta" />
+              <PosSaleResult sale={lastSale} onDismiss={() => setLastSale(null)} />
+            </View>
+          ) : null}
+
           {lines.length > 0 ? (
             <View>
               <SectionHeader title="Venta" />
@@ -625,6 +642,48 @@ export default function PosScreen() {
             <View>
               <SectionHeader title="Condiciones" />
               <Card variant="outlined">
+                {/* THE COMPROBANTE. Without one the sale is recorded and no
+                    document is issued — which is the server's own default, and
+                    a perfectly normal counter sale. The options, which branches
+                    they belong to, and whether each can be issued right now all
+                    come from the server: a fiscal document needs the capability
+                    AND fiscal issuance switched on, and the reason it cannot be
+                    issued is the server's sentence, not a guess made here. */}
+                {receiptOptions.length > 0 ? (
+                  <View style={{ gap: theme.spacing.xs, marginBottom: theme.spacing.sm }}>
+                    <Text variant="subhead">Comprobante</Text>
+                    <View
+                      style={{ flexDirection: 'row', gap: theme.spacing.xs, flexWrap: 'wrap' }}
+                    >
+                      <Button
+                        label="Sin comprobante"
+                        size="compact"
+                        variant={receiptType === '' ? 'primary' : 'secondary'}
+                        disabled={busy}
+                        onPress={() => setReceiptType('')}
+                      />
+                      {receiptOptions.map((option) => (
+                        <Button
+                          key={option.value}
+                          label={option.label}
+                          size="compact"
+                          variant={receiptType === option.value ? 'primary' : 'secondary'}
+                          // The server already said this one cannot be issued.
+                          disabled={busy || !option.enabled}
+                          onPress={() => setReceiptType(option.value)}
+                        />
+                      ))}
+                    </View>
+                    {receiptOptions
+                      .filter((option) => !option.enabled && option.disabledReason)
+                      .map((option) => (
+                        <Text key={option.value} variant="caption" color="textSecondary">
+                          {`${option.label}: ${option.disabledReason}`}
+                        </Text>
+                      ))}
+                  </View>
+                ) : null}
+
                 {/* A COUPON NEEDS NO PERMISSION, and that is the server's
                     decision, not a gap here: the company configured the
                     promotion in advance, so honouring it is not something the

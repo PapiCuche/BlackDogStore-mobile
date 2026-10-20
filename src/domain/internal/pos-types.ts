@@ -72,6 +72,8 @@ export type PosContext = {
   canViewCommissions: boolean;
   seller: { id: number; username: string; name: string };
   sellers: readonly PosSeller[];
+  /** What this till may issue right now, as the server offers it. */
+  receiptOptions: readonly PosReceiptOption[];
 };
 
 /**
@@ -162,6 +164,48 @@ export type PosPreview = {
 };
 
 /** A completed counter sale. */
+/**
+ * THE TAX BREAKDOWN THIS SALE WAS CLOSED WITH — frozen, not recomputed.
+ *
+ * The server reads it off the order rather than calculating it again, so a
+ * reprint a year from now says what it said today even if the rate changed.
+ * Every figure is a STRING for the same reason as every other amount here.
+ */
+export type PosSaleTax = {
+  currency: string;
+  subtotal: string;
+  discountAmount: string;
+  taxableAmount: string;
+  taxAmount: string;
+  taxRate: string;
+  taxTreatment: string;
+  /** The total the breakdown adds up to, as the server froze it. */
+  total: string;
+  /** «Op. gravada» / «Op. exonerada» / «Op. inafecta», as the server labels it. */
+  baseLabel: string;
+  /** «IGV (18%)», with the rate the sale was closed at. */
+  taxLabel: string;
+};
+
+/**
+ * A DOCUMENT THE TILL MAY ISSUE, as the server offers it — `receipt_options`.
+ *
+ * The shop decides which exist, which branches they apply to, and whether each
+ * one can be issued right now: a fiscal document needs `sales.fiscal.issue`
+ * AND fiscal issuance switched on, and a sales note needs
+ * `sales.notes.manage`. `disabledReason` is the server's own sentence for why
+ * one is greyed, so the till never guesses at a rule it does not own.
+ */
+export type PosReceiptOption = {
+  value: string;
+  label: string;
+  /** The branches this document can be issued from. */
+  branches: readonly number[];
+  enabled: boolean;
+  disabledCode: string;
+  disabledReason: string;
+};
+
 export type PosSale = {
   orderId: number;
   /** False when this key had already been spent on this exact basket. */
@@ -180,10 +224,68 @@ export type PosSale = {
   seller: string;
   customer: string;
   commission: string | null;
+  /**
+   * THE DOCUMENT THIS SALE PRODUCED, as the server names it.
+   *
+   * `receiptType` is `boleta`, `factura`, `sales_note` or empty; `documentNumber`
+   * is the number the customer will quote when they come back, and
+   * `documentStatus` is where the electronic document stands — issuance is the
+   * server's business and takes time, so «aceptado» is not something a till may
+   * assume.
+   *
+   * There is no route to the printed document itself on `/api/v1/` (BR-017), so
+   * the app shows what the sale answered and does not pretend to print.
+   */
+  receiptType: string;
+  documentNumber: string;
+  documentStatus: string;
+  tax: PosSaleTax | null;
   items: readonly {
-    product: number; name: string; quantity: number; price: string;
+    product: number;
+    name: string;
+    quantity: number;
+    price: string;
+    /** SERIAL-PICK-01 — the devices this line handed over, as the server recorded them. */
+    units: readonly { serialNumber: string; imei: string; imei2: string; method: string }[];
   }[];
 };
+
+export function describeReceiptType(value: string): string {
+  switch (value) {
+    case 'boleta':
+      return 'Boleta';
+    case 'factura':
+      return 'Factura';
+    case 'sales_note':
+      return 'Nota de venta';
+    default:
+      return 'Sin comprobante';
+  }
+}
+
+/**
+ * What the shop can tell the customer about the document right now.
+ *
+ * The words are the server's statuses; an unknown one is shown as it came,
+ * because inventing a translation for a state this build has not seen would be
+ * telling somebody their invoice is fine when nobody said so.
+ */
+export function describeDocumentStatus(value: string): string {
+  switch (value) {
+    case 'accepted':
+      return 'Aceptado por SUNAT';
+    case 'pending':
+      return 'En proceso de emisión';
+    case 'rejected':
+      return 'Rechazado — revisar en la consola';
+    case 'issued':
+      return 'Emitido';
+    case '':
+      return '';
+    default:
+      return value;
+  }
+}
 
 /**
  * A line in the basket the operator is building. LOCAL INTENTION ONLY.
@@ -236,6 +338,14 @@ export function lineIsComplete(line: PosCartLine): boolean {
  */
 export type PosSaleInput = {
   branch: number;
+  /**
+   * The document to issue, or omitted to issue none.
+   *
+   * Sent ONLY when the operator chose one: the server treats `null` as «do not
+   * issue» and checks a capability per type, so sending a default would be the
+   * app deciding what the shop bills.
+   */
+  receiptType?: string;
   /**
    * `units` names the devices of a serialised line — exactly as many as it
    * sells — and is empty for an ordinary article. The server refuses either

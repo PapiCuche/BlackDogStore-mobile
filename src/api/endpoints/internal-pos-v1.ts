@@ -8,6 +8,7 @@ import type {
   PosSaleInput,
   PosUnitLookup,
   PosLineUnit,
+  PosSaleTax,
 } from '@/domain/internal/pos-types';
 
 import type { UnitMethodInput } from '@/domain/internal/order-unit-types';
@@ -228,6 +229,25 @@ function toContext(raw: unknown): PosContext {
           return { value: str(method.value), label: str(method.label) };
         })
       : [],
+    // What this till may issue, and why not when it may not. Read from the
+    // server on every open: the answer depends on the branch, on capabilities
+    // and on whether fiscal issuance is switched on at all.
+    receiptOptions: Array.isArray(row.receipt_options)
+      ? row.receipt_options.map((o) => {
+          const option = (o ?? {}) as Record<string, unknown>;
+          const branches = option.branches;
+          return {
+            value: str(option.value),
+            label: str(option.label),
+            branches: Array.isArray(branches) ? branches.map((b) => num(b)) : [],
+            // Absent reads as NOT issuable: offering a document the server
+            // would refuse sends somebody back to the counter empty-handed.
+            enabled: option.enabled === true,
+            disabledCode: str(option.disabled_code),
+            disabledReason: str(option.disabled_reason),
+          };
+        })
+      : [],
     canManageCustomers: row.can_manage_customers === true,
     canAssignSeller: row.can_assign_seller === true,
     canApplyDiscount: row.can_apply_discount === true,
@@ -282,11 +302,26 @@ function toLines(raw: unknown) {
   return Array.isArray(raw)
     ? raw.map((l) => {
         const line = (l ?? {}) as Record<string, unknown>;
+        const units = line.units;
         return {
           product: num(line.product),
           name: str(line.name),
           quantity: num(line.quantity),
           price: str(line.price),
+          // SERIAL-PICK-01 — which devices actually went out on this line, as
+          // the server recorded them. Whole serial and IMEI: whoever reads this
+          // has the device in their hand.
+          units: Array.isArray(units)
+            ? units.map((entry) => {
+                const unit = (entry ?? {}) as Record<string, unknown>;
+                return {
+                  serialNumber: str(unit.serial_number),
+                  imei: str(unit.imei),
+                  imei2: str(unit.imei2),
+                  method: str(unit.method),
+                };
+              })
+            : [],
         };
       })
     : [];
@@ -355,7 +390,37 @@ function toSale(raw: unknown): PosSale {
     seller: str(row.seller),
     customer: str(row.customer),
     commission: row.commission == null ? null : str(row.commission),
+    // THE DOCUMENT THE SALE PRODUCED. The server answers what it issued — or
+    // what it is still issuing — and this prints it. Issuance is not something
+    // a till asserts.
+    receiptType: str(row.receipt_type),
+    documentNumber: str(row.document_number),
+    documentStatus: str(row.document_status),
+    tax: toSaleTax(row.tax),
     items: toLines(row.items),
+  };
+}
+
+/**
+ * The frozen breakdown, with the labels the server wrote.
+ *
+ * Null when the payload carried none, never an invented zero: «IGV S/ 0.00» on
+ * a sale nobody computed tax for is a figure the shop did not state.
+ */
+function toSaleTax(raw: unknown): PosSaleTax | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const row = raw as Record<string, unknown>;
+  return {
+    currency: str(row.currency),
+    subtotal: str(row.subtotal),
+    discountAmount: str(row.discount_amount),
+    taxableAmount: str(row.taxable_amount),
+    taxAmount: str(row.tax_amount),
+    taxRate: str(row.tax_rate),
+    taxTreatment: str(row.tax_treatment),
+    total: str(row.total),
+    baseLabel: str(row.base_label),
+    taxLabel: str(row.tax_label),
   };
 }
 
@@ -596,6 +661,10 @@ export async function createPosSale(
     idempotency_key: input.idempotencyKey,
     terms_confirmed: input.termsConfirmed,
   };
+  // The document the operator chose, and nothing when they chose none: the
+  // server reads an absent `receipt_type` as «issue no document», and checks a
+  // capability for each type it is given.
+  if (input.receiptType) body.receipt_type = input.receiptType;
   if (input.amountReceived?.trim()) body.amount_received = input.amountReceived.trim();
   if (input.customer !== undefined) body.customer = input.customer;
   if (input.seller !== undefined) body.seller = input.seller;
