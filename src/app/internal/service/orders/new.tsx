@@ -1,4 +1,4 @@
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
@@ -88,12 +88,24 @@ export default function ServiceIntakeScreen() {
   // how a permission boundary starts looking like a broken app.
   const mayFindCustomers = hasUxCapability(context ?? null, CAP_SERVICE_CUSTOMERS_VIEW);
 
+  const params = useLocalSearchParams<{ customer?: string; name?: string }>();
   const service = useServiceContext({ enabled: mayCreate });
   const receive = useReceiveDevice();
   const createDevice = useCreateServiceDevice();
 
   const [search, setSearch] = useState('');
-  const [customer, setCustomer] = useState<ServiceCustomerSummary | null>(null);
+  /**
+   * ARRIVING FROM «Clientes» WITH SOMEBODY ALREADY CHOSEN.
+   *
+   * The counter found the person on the customers screen; making them search
+   * for the same person again is the kind of step that gets skipped by typing
+   * a name wrong. The id is what the intake actually uses — the devices step
+   * asks the server for THAT customer's devices — and the name travels only so
+   * the header can say who, until the server answers with its own data.
+   */
+  const [customer, setCustomer] = useState<ServiceCustomerSummary | null>(
+    preselectedCustomer(params),
+  );
   const [device, setDevice] = useState<ServiceDevice | null>(null);
   const [branchId, setBranchId] = useState<number | null>(null);
   const [reportedIssue, setReportedIssue] = useState('');
@@ -637,4 +649,25 @@ export default function ServiceIntakeScreen() {
       </Screen>
     </>
   );
+}
+
+/**
+ * The customer named in the route, or null.
+ *
+ * Only an id that is a real positive number counts: a hand-edited link must
+ * not preselect «cliente 0», and the devices step would then ask the server
+ * about nobody.
+ */
+function preselectedCustomer(params: {
+  customer?: string;
+  name?: string;
+}): ServiceCustomerSummary | null {
+  const id = Number(params.customer);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return {
+    id: Math.trunc(id),
+    displayName: params.name ?? 'Cliente seleccionado',
+    documentNumber: '',
+    phone: '',
+  };
 }

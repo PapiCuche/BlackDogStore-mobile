@@ -84,9 +84,14 @@ export const INTERNAL_MODULES: readonly InternalModule[] = [
   {
     key: 'customers',
     title: 'Clientes',
-    description: 'Fichas y historial comercial.',
+    // What this surface actually offers, said plainly. The CRM is on the web
+    // console and is not reachable with a Bearer token: `service/customers/`
+    // answers a name, a document and a phone, which is what the counter needs
+    // to tell two people apart. Editing a file is BR-016.
+    description: 'Busca a quien atiendes y mira sus equipos.',
     requires: 'service.customers.view',
-    integration: 'pending-mobile',
+    integration: 'ready',
+    route: '/internal/customers',
   },
   {
     key: 'service',

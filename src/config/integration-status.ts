@@ -240,7 +240,7 @@ export const featureIntegration: Record<FeatureKey, FeatureIntegration> = {
   internalService: {
     label: 'Interno · Servicio técnico',
     status: 'TESTED',
-    note: 'Integrado con /api/v1/internal/<empresa>/service/ — recepción, diagnóstico, cotización, ejecución, repuestos, control de calidad, entrega y cobro.',
+    note: 'Integrado con /api/v1/internal/<empresa>/service/ — recepción, diagnóstico, cotización, ejecución, repuestos, control de calidad, entrega y cobro. Incluye «Clientes»: buscar a quien atiende el mostrador, ver sus equipos y abrir una recepción con el cliente ya elegido. Crear o editar una ficha sigue en la consola web (BR-016): la ruta v1 devuelve nombre, documento y teléfono, y nada más.',
     source: 'api/endpoints/internal-service-v1.ts',
   },
 };
