@@ -58,6 +58,10 @@
     "lint": "expo lint .",
     "test": "jest --watch",
     "test:ci": "jest --ci --coverage=false --passWithNoTests=false",
+    "eas:ios:sim": "eas build -p ios --profile ios-simulator",
+    "eas:ios:dev": "eas build -p ios --profile development",
+    "eas:android:dev": "eas build -p android --profile development",
+    "eas:preview": "eas build -p all --profile preview",
     "doctor": "npx expo-doctor@latest",
     "verify": "npm run typecheck && npm run lint && npm run test:ci && git diff --check"
   },

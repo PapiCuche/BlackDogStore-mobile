@@ -11,7 +11,12 @@
       "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
-      "channel": "development"
+      "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_COMPANY_SLUG": "black-dog-store",
+        "EXPO_PUBLIC_USE_MOCK_DATA": "false"
+      }
     },
     "ios-simulator": {
       "extends": "development",
@@ -22,12 +27,24 @@
     "preview": {
       "extends": "base",
       "distribution": "internal",
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_API_BASE_URL": "https://blackdogstoreperu.com",
+        "EXPO_PUBLIC_COMPANY_SLUG": "black-dog-store",
+        "EXPO_PUBLIC_USE_MOCK_DATA": "false"
+      }
     },
     "production": {
       "extends": "base",
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_API_BASE_URL": "https://blackdogstoreperu.com",
+        "EXPO_PUBLIC_COMPANY_SLUG": "black-dog-store",
+        "EXPO_PUBLIC_USE_MOCK_DATA": "false"
+      }
     }
   },
   "submit": {
