@@ -1,4 +1,5 @@
 import { apiBaseUrl, apiTimeoutMs, isApiConfigured } from '@/config/env';
+import { reportNetworkReachable } from '@/connectivity/connectivity-signal';
 
 import { ApiError, kindFromStatus, parseErrorCode, parseFieldErrors } from './errors';
 
@@ -219,6 +220,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     throw new ApiError('offline', 'No se pudo conectar con el servidor.', { cause });
   }
   attempt.dispose();
+
+  // THE RESPONSE IS THE PROOF. Whatever the OS believes about the radio, bytes
+  // just came back over it — and a stale `offline` pins TanStack Query's
+  // `onlineManager` to false, which pauses every mutation in the app. Saying so
+  // here is what un-sticks the till when the change event never arrived.
+  reportNetworkReachable();
 
   const payload = await readBody(response);
 
