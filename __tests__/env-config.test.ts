@@ -1,6 +1,7 @@
 import {
   PILOT_COMPANY_SLUG,
   collectConfigurationIssues,
+  isLocalOnlyApiHost,
   resolveAppEnvironment,
   resolveMockDataPolicy,
   resolveTenant,
@@ -156,5 +157,99 @@ describe('collectConfigurationIssues', () => {
       mockPolicy: okPolicy,
     });
     expect(issues).toEqual([]);
+  });
+});
+
+/**
+ * A DISTRIBUTED BUILD MAY NOT POINT AT A LOCAL MACHINE.
+ *
+ * `localhost` baked into an EAS preview or production binary is the
+ * developer's laptop as seen from somebody else's phone: every request fails,
+ * or worse, reaches whatever answers on that port on THEIR network. The build
+ * resolves to no API at all and says it is unconfigured, loudly and once,
+ * instead of failing one request at a time.
+ *
+ * Development is exempt, because a local backend is the whole point there —
+ * the QA flow of this project runs Django on `localhost:8000`.
+ */
+describe('isLocalOnlyApiHost', () => {
+  it('recognises every way of writing «this machine»', () => {
+    for (const url of [
+      'http://localhost:8000',
+      'http://127.0.0.1:8000',
+      'http://0.0.0.0:8000',
+      // The Android emulator's alias for its host Mac. Outside an emulator it
+      // addresses somebody's LAN, which is not a Black Dog server.
+      'http://10.0.2.2:8000',
+      'http://macbook-de-ana.local:8000',
+      'https://LOCALHOST/api',
+    ]) {
+      expect(isLocalOnlyApiHost(url)).toBe(true);
+    }
+  });
+
+  it('leaves a real deployment alone', () => {
+    for (const url of [
+      'https://blackdogstoreperu.com',
+      'https://api.example.test',
+      'http://192.168.1.40:8000',
+    ]) {
+      expect(isLocalOnlyApiHost(url)).toBe(false);
+    }
+  });
+
+  it('says nothing about a string it cannot read as a URL', () => {
+    // Not a hostname we can clear, so not one we can condemn either: the
+    // configuration check reports an unusable value on its own terms.
+    expect(isLocalOnlyApiHost('not a url')).toBe(false);
+    expect(isLocalOnlyApiHost('')).toBe(false);
+  });
+});
+
+describe('the API base a release resolves to', () => {
+  function load(env: Record<string, string | undefined>, isDev: boolean) {
+    let module!: typeof import('@/config/env');
+    jest.isolateModules(() => {
+      const previous = { ...process.env };
+      Object.assign(process.env, env);
+      (globalThis as unknown as { __DEV__: boolean }).__DEV__ = isDev;
+      module = require('@/config/env');
+      process.env = previous;
+    });
+    return module;
+  }
+
+  it('refuses a local host in a release build', () => {
+    const module = load(
+      {
+        EXPO_PUBLIC_API_BASE_URL: 'http://localhost:8000',
+        EXPO_PUBLIC_APP_ENV: 'staging',
+      },
+      false,
+    );
+
+    expect(module.apiBaseUrl).toBe('');
+    expect(module.isApiConfigured).toBe(false);
+  });
+
+  it('keeps a local host in a development build', () => {
+    const module = load(
+      { EXPO_PUBLIC_API_BASE_URL: 'http://localhost:8000' },
+      true,
+    );
+
+    expect(module.apiBaseUrl).toBe('http://localhost:8000');
+  });
+
+  it('keeps a real deployment in a release build, without its trailing slash', () => {
+    const module = load(
+      {
+        EXPO_PUBLIC_API_BASE_URL: 'https://blackdogstoreperu.com/',
+        EXPO_PUBLIC_APP_ENV: 'production',
+      },
+      false,
+    );
+
+    expect(module.apiBaseUrl).toBe('https://blackdogstoreperu.com');
   });
 });

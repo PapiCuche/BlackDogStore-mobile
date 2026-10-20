@@ -287,9 +287,44 @@ function inferLocalDevHost(): string {
   return Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 }
 
+/**
+ * Hosts that only ever mean «the machine this build is running on».
+ *
+ * `10.0.2.2` is the Android emulator's alias for its host Mac, which is why it
+ * belongs here with the other two: outside an emulator it addresses a machine
+ * on somebody's LAN that is almost certainly not a Black Dog server.
+ */
+const LOCAL_ONLY_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '10.0.2.2', '::1'];
+
+export function isLocalOnlyApiHost(url: string): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return LOCAL_ONLY_HOSTS.includes(host) || host.endsWith('.local');
+  } catch {
+    // Not a URL we can read. Whatever it is, it is not a hostname we can clear.
+    return false;
+  }
+}
+
 function resolveApiBaseUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
-  if (configured) return configured.replace(/\/+$/, '');
+  if (configured) {
+    const url = configured.replace(/\/+$/, '');
+    // A DISTRIBUTED BUILD MAY NOT POINT AT A LOCAL MACHINE.
+    //
+    // `localhost` inside an EAS preview or production binary is the developer's
+    // laptop as seen from somebody else's phone: every request fails, or worse,
+    // reaches whatever happens to answer on that port on THEIR network. A
+    // build like that is not testable and must not be shippable, so it resolves
+    // to no API at all and the app says it is unconfigured — loudly, at the
+    // first screen — instead of failing one request at a time.
+    //
+    // Development is exempt because that is exactly where a local backend is
+    // the point.
+    if (appEnvironment !== 'development' && isLocalOnlyApiHost(url)) return '';
+    return url;
+  }
 
   // Inferred ONLY in development. A release with no configured URL must fail
   // loudly at the first request, not quietly call a guessed server.
