@@ -1,0 +1,28 @@
+# WHAT A BUYER SEES. Read-only: nothing here writes.
+appId: com.blackdogstore.app
+---
+# The development build starts on its own launcher, so every flow begins by
+# getting onto the app. `00` is idempotent: it taps nothing when the app is
+# already loaded.
+- runFlow:
+    file: 00-connect-dev-client.yaml
+- tapOn: "Tienda"
+- extendedWaitUntil:
+    visible: "Buscar productos"
+    timeout: 30000
+# The catalogue comes from the server, so a price on screen proves the whole
+# chain: bundle, API, tenant, mapping.
+# Waited for, not asserted on the spot: the list arrives from the server, and
+# an immediate assert races the request. The card exposes one accessibility
+# label — «iPhone 15 Pro, S/ 5,599.00, Últimas unidades» — which is what
+# VoiceOver reads. Maestro matches a selector against the WHOLE string, so the
+# pattern has to allow for the price and the availability that follow.
+- extendedWaitUntil:
+    visible: ".*iPhone 15 Pro.*"
+    timeout: 30000
+- takeScreenshot: artifacts/01-catalogue
+- tapOn: "Perfil"
+- extendedWaitUntil:
+    visible: "Mis datos y direcciones"
+    timeout: 30000
+- takeScreenshot: artifacts/01-profile
