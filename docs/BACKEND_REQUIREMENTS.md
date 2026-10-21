@@ -2167,3 +2167,61 @@ No aplica: son lecturas.
 Un módulo «Reportes» en el área interna: lo que se está agotando, lo que no
 rota, lo más vendido y la liquidación de comisiones del período — calculado por
 el servidor y mostrado tal cual.
+
+---
+
+## STAGING-01 — Un backend de QA accesible por HTTPS
+
+**Estado:** abierto. **No es trabajo de Backend de producto: es infraestructura.**
+**Verificado el 2026-10-21:** `staging.`, `qa.` y `dev.blackdogstoreperu.com` no
+resuelven, y los slugs `demo`, `qa`, `test` y `sandbox` responden 404 en
+producción. El único backend alcanzable es
+`https://blackdogstoreperu.com`, que es la tienda real.
+
+### Qué bloquea
+
+Las builds de EAS que se instalan en un teléfono —Preview y, más adelante, una
+development build en un iPhone físico— no pueden hablar con `localhost`: ese
+nombre, dentro del teléfono de otra persona, es su propio aparato. Hoy la única
+dirección que una build distribuida puede llevar es la de producción, así que
+una QA honesta de extremo a extremo tendría que vender, mover stock y entregar
+equipos sobre los datos reales de la tienda.
+
+Por eso la build de Preview **no se ha generado**. No es una tarea pendiente: es
+una decisión, y se revierte el día que exista un servidor donde equivocarse sea
+barato.
+
+### Lo que hace falta
+
+```
+Un despliegue de QA accesible por HTTPS, con:
+  · base de datos propia, separada de producción
+  · el MISMO contrato /api/v1/ que master (no una rama vieja)
+  · empresa y usuarios de prueba, con las mismas capabilities reales
+  · ningún efecto sobre clientes, pagos, stock ni comprobantes reales
+  · sin emisión fiscal real, o con el modo de pruebas del proveedor
+```
+
+Un subdominio basta: `qa.blackdogstoreperu.com` o equivalente.
+
+### Qué NO resuelve esto
+
+No sustituye al backend local. El flujo de desarrollo seguirá apuntando a
+Django en la máquina de quien programa —eso es lo que el perfil `development`
+hace hoy, infiriendo la dirección del host de Metro— porque iterar contra un
+servidor remoto es más lento y porque un error local no se le cuenta a nadie.
+
+### Qué desbloquea
+
+1. `eas build --profile preview` y QA interna de una binaria casi de release;
+2. QA en teléfonos físicos, donde una dirección local no sirve;
+3. probar de verdad lo destructivo —ventas, devoluciones, movimientos de stock,
+   entregas— sin tocar la tienda;
+4. cerrar la comprobación de BR-017 el día que exista la ruta del documento:
+   emitir un comprobante de prueba y descargarlo sin facturar a nadie.
+
+### Comprobación de aceptación
+
+Desde una build de Preview instalada en un teléfono: iniciar sesión con un
+usuario de prueba, cobrar una venta, emitir su comprobante y anularla o
+dejarla, y comprobar en producción que nada de eso ocurrió allí.
