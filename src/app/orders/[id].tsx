@@ -16,6 +16,7 @@ import {
 } from '@/design-system';
 import { describeFulfillmentStatus, describePaymentStatus } from '@/domain/orders/status';
 import { orderNumber } from '@/domain/orders/types';
+import { useMockData } from '@/config/env';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import {
   PrivateActionPrompt,
@@ -186,7 +187,11 @@ export default function OrderDetailScreen() {
             </View>
           </Card>
 
-          <MockDataNotice message="Datos de ejemplo. El endpoint de pedidos existe pero requiere el contrato de autenticación web." />
+          {/* Same rule as the list this screen was opened from: the notice
+              belongs to mock data, not to every order ever shown. */}
+          {useMockData ? (
+            <MockDataNotice message="Datos de ejemplo. El endpoint de pedidos existe pero requiere el contrato de autenticación web." />
+          ) : null}
         </View>
       </Screen>
     </>

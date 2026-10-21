@@ -21,6 +21,7 @@ import { orderNumber } from '@/domain/orders/types';
 import { describeRepairStatus } from '@/domain/repairs/status';
 import { findActiveRepair } from '@/domain/repairs/types';
 import { initials, displayName } from '@/domain/customers/types';
+import { useMockData } from '@/config/env';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { QuickActions } from '@/features/home/quick-actions';
 import { useConnectivity } from '@/connectivity/connectivity-provider';
@@ -327,7 +328,14 @@ export default function HomeScreen() {
 
         <Divider />
 
-        <MockDataNotice message="Reparaciones y pedidos son datos de ejemplo. Aún no hay integración con el servidor." />
+        {/* ONLY WHEN THE DATA ABOVE REALLY IS INVENTED.
+            It used to render unconditionally, so a build reading a live server
+            still told the customer their repairs and orders were examples —
+            and the one person who most needs to trust what a repair screen
+            says is the person whose phone is being repaired. */}
+        {useMockData ? (
+          <MockDataNotice message="Reparaciones y pedidos son datos de ejemplo. Aún no hay integración con el servidor." />
+        ) : null}
       </View>
     </Screen>
   );
