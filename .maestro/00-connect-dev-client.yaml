@@ -1,0 +1,27 @@
+# GET THE DEVELOPMENT BUILD ONTO THE APP.
+#
+# A dev client starts on its own launcher, and iOS asks «¿Abrir en "Black
+# Dog"?» whenever a server is opened by URL. Both are system UI rather than the
+# app, and neither can be driven from `simctl` — which is why this flow exists.
+# Every other flow assumes the app is already loaded.
+#
+# THE SERVER IS ADDRESSED BY ITS URL, not by its name. The launcher lists the
+# current server AND every one it remembers, all called «Black Dog Store», so a
+# tap on the name is a coin toss between today's address and a stale one from
+# another network. Pass the address in:
+#
+#   maestro test -e METRO_URL=http://<lan-ip>:8099 .maestro/00-connect-dev-client.yaml
+appId: com.blackdogstore.app
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    text: "Abrir"
+    optional: true
+- tapOn:
+    text: "${METRO_URL}"
+    optional: true
+- extendedWaitUntil:
+    visible: "Tienda"
+    timeout: 90000
+- takeScreenshot: artifacts/00-connected

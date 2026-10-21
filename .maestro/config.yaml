@@ -1,0 +1,10 @@
+# Maestro flows for QA of the DEVELOPMENT BUILD on a simulator.
+#
+# These are developer tooling: they are not bundled, not imported by the app,
+# and nothing in `src/` knows they exist.
+#
+# THEY MUTATE DATA, so every flow that writes starts by asserting the build is
+# NOT pointed at production — see `shared/assert-scratch-backend.yaml`. The
+# till and the stock screens here create real rows; on the production tenant
+# they would create real sales.
+appId: com.blackdogstore.app

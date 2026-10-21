@@ -1,0 +1,108 @@
+# A SALE, END TO END, THROUGH THE UI.
+#
+# THIS FLOW WRITES. It creates a real order and moves real stock, so it must
+# only ever run against the scratch backend — see the guard below, which reads
+# the API the app RESOLVED rather than trusting the runner's environment.
+appId: com.blackdogstore.app
+---
+# The development build starts on its own launcher, so every flow begins by
+# getting onto the app. `00` is idempotent: it taps nothing when the app is
+# already loaded.
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+# ── Fail closed ────────────────────────────────────────────────────────────
+# «Estado de integración» prints the API base this build is talking to. If it
+# names the real shop, stop: a till flow on production is a real sale.
+- tapOn: "Perfil"
+- scrollUntilVisible:
+    element: ".*Estado de integración.*"
+    direction: DOWN
+    timeout: 20000
+- assertNotVisible: ".*blackdogstoreperu\\.com.*"
+
+# ── The till ───────────────────────────────────────────────────────────────
+# Back up the profile screen: the guard above scrolled past the entry to the
+# internal area.
+- scrollUntilVisible:
+    element: ".*Área interna.*"
+    direction: UP
+    timeout: 20000
+- tapOn: ".*Área interna.*"
+- extendedWaitUntil:
+    visible: "Punto de venta"
+    timeout: 30000
+- tapOn: "Punto de venta"
+- extendedWaitUntil:
+    visible: "Nombre o código de barras"
+    timeout: 30000
+
+- tapOn: "Nombre o código de barras"
+- inputText: "AirPods"
+- extendedWaitUntil:
+    visible: "Agregar"
+    timeout: 30000
+- tapOn: "Agregar"
+
+# The search keyboard stays up and covers the lower half of the till, which is
+# where the charge controls live. A person taps away from the field; the flow
+# says so explicitly.
+- hideKeyboard
+- scrollUntilVisible:
+    element: "Calcular total"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Calcular total"
+- extendedWaitUntil:
+    visible: "Cobrar"
+    timeout: 30000
+- takeScreenshot: artifacts/03-priced
+
+# ── The comprobante, and the charge ────────────────────────────────────────
+# «Sin comprobante» is the server's own default; picking the nota de venta is
+# what makes it issue a document and answer with its number.
+- scrollUntilVisible:
+    element: "Nota de venta interna"
+    direction: UP
+    timeout: 20000
+- tapOn: "Nota de venta interna"
+
+# Cash is the default method, and the server refuses a cash sale that does not
+# say what was handed over — «Indica el efectivo recibido.» So the flow does
+# what the cashier does.
+# TAPPED BY ITS PLACEHOLDER, not by its label. The label «Efectivo recibido»
+# is on three nodes — the caption, the field's accessibility label and its
+# wrapper — and only the field itself takes focus. The placeholder belongs to
+# the input alone.
+- scrollUntilVisible:
+    element: "Efectivo recibido"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "0.00"
+- inputText: "1000"
+# The numeric keypad has no «return», so it is dismissed by tapping away —
+# which is what the cashier does too.
+- tapOn:
+    text: "Pago"
+    optional: true
+
+- scrollUntilVisible:
+    element: "Cobrar"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Cobrar"
+
+# Charging asks twice on purpose: the second tap is the operator saying the
+# terms were explained, and the sale cannot be undone from here.
+- extendedWaitUntil:
+    visible: "Confirmar y cobrar"
+    timeout: 20000
+- tapOn: "Confirmar y cobrar"
+
+# The result stays on screen so the counter can read the document number back.
+- extendedWaitUntil:
+    visible: ".*Venta registrada.*"
+    timeout: 45000
+- assertVisible: "Comprobante"
+- assertVisible: ".*NV-.*"
+- takeScreenshot: artifacts/03-sale-result

@@ -1,0 +1,23 @@
+# THE INTERNAL AREA IS REACHABLE AND SHOWS WHAT THIS PERSON MAY DO.
+#
+# The modules drawn here come from the server's capability list, so this also
+# proves `internal/<slug>/context/` answered and was mapped.
+appId: com.blackdogstore.app
+---
+# The development build starts on its own launcher, so every flow begins by
+# getting onto the app. `00` is idempotent: it taps nothing when the app is
+# already loaded.
+- runFlow:
+    file: 00-connect-dev-client.yaml
+- tapOn: "Perfil"
+- extendedWaitUntil:
+    visible: ".*Área interna.*"
+    timeout: 30000
+- tapOn: ".*Área interna.*"
+- extendedWaitUntil:
+    visible: "Punto de venta"
+    timeout: 30000
+- assertVisible: "Inventario"
+- assertVisible: "Clientes"
+- assertVisible: "Pedidos"
+- takeScreenshot: artifacts/02-internal-home
