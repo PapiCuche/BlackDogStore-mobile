@@ -131,13 +131,15 @@ describe('HomeScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/(tabs)/shop');
   });
 
-  it('tells the user the data is not real', async () => {
+  it('tells the user the data is not real WHILE it is not real', async () => {
     // Non-negotiable while the app runs on fixtures: a demo screen that looks
-    // live is how a stakeholder concludes a feature is integrated.
+    // live is how a stakeholder concludes a feature is integrated. The jest
+    // environment runs with mock data on, which is why the notice is here.
     await renderWithProviders(<HomeScreen />);
     await waitFor(() => {
       expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
     });
+    expect(screen.getByText(/datos de ejemplo/i)).toBeTruthy();
   });
 
   it('marks its section titles as headers for rotor navigation', async () => {
