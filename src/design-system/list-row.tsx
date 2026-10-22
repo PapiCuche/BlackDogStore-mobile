@@ -18,6 +18,14 @@ export type ListRowProps = {
   destructive?: boolean;
   /** Replaces the value/chevron, e.g. with a Switch. */
   trailing?: ReactNode;
+  /**
+   * For a row that is ONE CHOICE among several.
+   *
+   * A tick drawn in `trailing` is a picture: assistive technology reads the
+   * row's label and nothing else, so the chosen option sounds exactly like the
+   * ones that were not chosen. `role` + `selected` is what actually says it.
+   */
+  selected?: boolean;
   accessibilityHint?: string;
 };
 
@@ -36,6 +44,7 @@ export function ListRow({
   onPress,
   destructive = false,
   trailing,
+  selected,
   accessibilityHint,
 }: ListRowProps) {
   const theme = useTheme();
@@ -91,7 +100,8 @@ export function ListRow({
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
+      accessibilityRole={selected === undefined ? 'button' : 'radio'}
+      accessibilityState={selected === undefined ? undefined : { selected }}
       accessibilityLabel={value ? `${label}, ${value}` : label}
       accessibilityHint={accessibilityHint}
       style={({ pressed }) => (pressed ? { backgroundColor: theme.colors.surfacePressed } : null)}

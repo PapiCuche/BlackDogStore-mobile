@@ -1,0 +1,59 @@
+# NARROWING THE SHELF — the three questions a stockroom actually asks.
+#
+# Read-only. «Bajo mínimo» and «Sin stock» are the server's answers, computed
+# from each product's own minimum: the app never recomputes them, so what this
+# proves is that the filter it sends is the filter it shows.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Inventario"
+    timeout: 30000
+- tapOn: "Inventario"
+- scrollUntilVisible:
+    element: "Ver stock"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Ver stock"
+
+- extendedWaitUntil:
+    visible: "Buscar producto"
+    timeout: 30000
+- assertVisible: ".*registro.*"
+- takeScreenshot: artifacts/29-stock-all
+
+# ── Below the minimum ──────────────────────────────────────────────────────
+- tapOn: "Bajo mínimo"
+- extendedWaitUntil:
+    visible: ".*registro.*|.*Sin resultados.*"
+    timeout: 30000
+- takeScreenshot: artifacts/29-stock-low
+
+# ── Nothing left ───────────────────────────────────────────────────────────
+- tapOn: "Sin stock"
+- extendedWaitUntil:
+    visible: ".*registro.*|.*Sin resultados.*"
+    timeout: 30000
+- takeScreenshot: artifacts/29-stock-out
+
+# ── And back to everything ─────────────────────────────────────────────────
+- tapOn: "Todos"
+- extendedWaitUntil:
+    visible: ".*registro.*"
+    timeout: 30000
+
+# The search field survives a reload, which it did not until the list stopped
+# replacing itself with a skeleton on every keystroke.
+- tapOn: "Buscar producto"
+- inputText: "AirPods"
+- assertVisible: "AirPods"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: ".*AirPods Pro.*"
+    timeout: 30000
