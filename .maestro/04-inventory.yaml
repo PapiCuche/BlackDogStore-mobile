@@ -20,7 +20,10 @@ appId: com.blackdogstore.app
 - extendedWaitUntil:
     visible: ".*Unidades en stock.*"
     timeout: 30000
-- assertVisible: ".*Productos con stock.*"
+# Two counts with two units, each named for what it is: rows that hold stock,
+# and products that are active.
+- assertVisible: ".*Registros con stock.*"
+- assertVisible: ".*Productos activos.*"
 - takeScreenshot: artifacts/04-summary
 
 # ── The stock list ─────────────────────────────────────────────────────────
