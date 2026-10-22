@@ -1,0 +1,50 @@
+# WHAT THE SHOP IS OFFERED FOR AN ORDER, in words.
+#
+# Read-only, deliberately. The fulfilment lifecycle runs FORWARD: from «En
+# preparación» the server offers «Enviado» and nothing that goes back, so a
+# flow that moved the fixture order would pass once and then run out of states
+# to move it to. The write itself is proven by a contract smoke
+# (`PATCH orders/<id>/fulfillment/ 200`).
+#
+# What this guards is the thing a contract smoke cannot see: the buttons are
+# drawn from the status CODES the server sends, and the app has to translate
+# them. They read «ready_for_pickup» and «shipped» until this flow was written.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Pedidos"
+    timeout: 30000
+- tapOn: "Pedidos"
+- extendedWaitUntil:
+    visible: ".*pedidos ·.*|.*pedido ·.*"
+    timeout: 30000
+
+# The fixture's online order, by the name it was created with.
+- tapOn: ".*QA Pedido Online.*"
+- extendedWaitUntil:
+    visible: "Pedido #[0-9]+"
+    timeout: 30000
+
+# The delivery record the web checkout wrote, read back on the phone.
+- assertVisible: ".*Modo de entrega:.*"
+- assertVisible: ".*Recibe:.*"
+
+# The controls sit under the lines, the units and the delivery record.
+- scrollUntilVisible:
+    element: "Cambiar estado de entrega"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- assertNotVisible: "pending"
+- assertNotVisible: "preparing"
+- assertNotVisible: "ready_for_pickup"
+- assertNotVisible: "shipped"
+- assertNotVisible: "delivered"
+- assertVisible: "Pendiente|Confirmado|En preparación|Listo para retiro|Enviado|Entregado"
+- takeScreenshot: artifacts/23-transitions
