@@ -296,6 +296,29 @@ function inferLocalDevHost(): string {
  */
 const LOCAL_ONLY_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '10.0.2.2', '::1'];
 
+/**
+ * True for a URL this app must not call from a distributed build.
+ *
+ * ATS refuses cleartext on iOS and Android's network config does the same, so
+ * an `http://` API in a release binary is not a working build with a weaker
+ * connection — it is a build whose every request fails, after the credentials
+ * have already been typed. It is also how a server gets addressed over a
+ * network somebody else controls.
+ *
+ * Development is exempt: Metro and Django are plain HTTP on a LAN address, and
+ * that is the whole point of a development client.
+ */
+export function isInsecureApiUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    return new URL(url).protocol !== 'https:';
+  } catch {
+    // Not a URL we can read; `resolveApiBaseUrl` keeps it and the first request
+    // fails loudly, which is the same answer by a different road.
+    return false;
+  }
+}
+
 export function isLocalOnlyApiHost(url: string): boolean {
   if (!url) return false;
   try {
@@ -323,6 +346,10 @@ function resolveApiBaseUrl(): string {
     // Development is exempt because that is exactly where a local backend is
     // the point.
     if (appEnvironment !== 'development' && isLocalOnlyApiHost(url)) return '';
+    // AND IT MUST BE HTTPS. Same rule, same reason: a build other people run
+    // has no way to make a cleartext call succeed, and should say it is
+    // unconfigured rather than fail one request at a time.
+    if (appEnvironment !== 'development' && isInsecureApiUrl(url)) return '';
     return url;
   }
 

@@ -7,11 +7,24 @@ import { useAuth } from '@/auth/auth-provider';
 import { Button, Input, Text } from '@/design-system';
 import { AuthScreenShell } from '@/features/auth/auth-screen-shell';
 import { AuthUnavailableScreen } from '@/features/auth/auth-unavailable';
-import { DevQuickLogin } from '@/features/auth/dev-quick-login';
 import { MockDataNotice } from '@/features/home/mock-data-notice';
 import { useTheme } from '@/theme/theme-provider';
 import { hapticError, hapticSuccess } from '@/utils/haptics';
 import { loginSchema, type LoginFormValues } from '@/validation/auth-schemas';
+
+/**
+ * REQUIRED ONLY IN A DEVELOPMENT BUILD, and required rather than imported.
+ *
+ * `DevQuickLogin` already returns null outside development, but a runtime
+ * check does not keep a module out of a bundle: Metro still packed it, and the
+ * fixture password it names ended up as a readable string inside the
+ * production binary. `__DEV__` is replaced with `false` when the release
+ * bundle is built, so this branch is dead code there and the module — and
+ * everything it says — is dropped instead of shipped.
+ */
+const DevQuickLogin: typeof import('@/features/auth/dev-quick-login').DevQuickLogin | null =
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- see above
+  __DEV__ ? require('@/features/auth/dev-quick-login').DevQuickLogin : null;
 
 /**
  * Sign in.
@@ -161,7 +174,7 @@ export default function LoginScreen() {
           present them as real sessions when nothing would be verified — the two
           look alike on screen and are not the same thing at all.
           `unavailable` never reaches this line: the screen returned earlier. */}
-      {policy.mode === 'backend' ? (
+      {policy.mode === 'backend' && DevQuickLogin ? (
         <DevQuickLogin
           onUse={(email, password) => {
             // FILLS, and stops. No submit, no navigation, no session. The
