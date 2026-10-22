@@ -1,0 +1,42 @@
+# THE QUOTE AS AN 80 mm TICKET — fetched, written to disk, handed to iOS.
+#
+# THIS FLOW WRITES: it runs the quote flow first, so it has an APPROVED quote;
+# the server refuses a ticket for anything else.
+#
+# Sharing is all this app can do with a PDF — there is no viewer — and the
+# share sheet is where printing lives, so the proof ends at the sheet: if the
+# sheet opens, the bytes arrived and the file is on disk.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 11-service-quote.yaml
+
+# CENTRED, not merely on screen. The navigation bar floats over the top of the
+# list, so a button that stops just under it counts as visible and a tap on it
+# lands on the bar instead.
+- scrollUntilVisible:
+    element: "Ticket de la cotización"
+    direction: UP
+    timeout: 20000
+    centerElement: true
+- tapOn: "Ticket de la cotización"
+
+# System UI from here. The sheet is recognised by ITS OWN controls — the
+# button that opened it carries the same words, so waiting for that title
+# would pass without a sheet ever appearing.
+- extendedWaitUntil:
+    visible: "cotizacion-[0-9]+-[0-9]+"
+    timeout: 60000
+# iOS says what it thinks the file is. «Documento PDF» means the bytes the
+# server drew arrived and were written as a PDF, which is the whole claim.
+- assertVisible: ".*Documento PDF.*"
+- takeScreenshot: artifacts/16-share-sheet
+
+# Leave the sheet the way a person would, so the next flow starts on a screen
+# and not on a modal.
+- swipe:
+    direction: DOWN
+    duration: 600
+- tapOn:
+    text: "Cerrar|Close|Cancelar"
+    optional: true
