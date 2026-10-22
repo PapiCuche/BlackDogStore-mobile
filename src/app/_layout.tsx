@@ -91,6 +91,29 @@ function RootNavigator() {
           name="orders/[id]"
           options={{ headerShown: true, title: 'Pedido', headerBackTitle: 'Atrás' }}
         />
+        {/* A PUSHED SCREEN NEEDS A WAY BACK. The stack hides headers by
+            default, and these four were never registered, so they opened with
+            no navigation bar and no back control: the only way out was the
+            iOS back-swipe, and on the error state there was nothing on the
+            screen to press at all. Each screen already names itself through
+            its own `Stack.Screen` options; registering them is what makes
+            that title — and the back button beside it — appear. */}
+        <Stack.Screen
+          name="cart"
+          options={{ headerShown: true, headerBackTitle: 'Atrás' }}
+        />
+        <Stack.Screen
+          name="checkout"
+          options={{ headerShown: true, headerBackTitle: 'Atrás' }}
+        />
+        <Stack.Screen
+          name="account/index"
+          options={{ headerShown: true, headerBackTitle: 'Atrás' }}
+        />
+        <Stack.Screen
+          name="notifications"
+          options={{ headerShown: true, headerBackTitle: 'Atrás' }}
+        />
       </Stack>
     </ThemeProvider>
   );

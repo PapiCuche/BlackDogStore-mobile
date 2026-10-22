@@ -1,0 +1,33 @@
+# THE CUSTOMER SURFACE, OPENED BY SOMEBODY WHO IS NOT A CUSTOMER.
+#
+# Read-only. The QA account is staff: it has no `Customer` record in this
+# company, so `customer/<slug>/profile/` and `addresses/` answer 404 — the
+# server's way of saying «not yours», which is the whole fail-closed rule.
+#
+# FIXTURE LIMITATION, recorded rather than worked around: editing the address
+# book cannot be automated with this account, and the fixture would need a
+# customer account to cover it. What IS covered is the half that matters more:
+# the app meets that 404 with its own screen and a way back, instead of a blank
+# page or a crash.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- tapOn: "Perfil"
+- extendedWaitUntil:
+    visible: "Mis datos y direcciones"
+    timeout: 30000
+- tapOn: "Mis datos y direcciones"
+
+- extendedWaitUntil:
+    visible: "Mi cuenta"
+    timeout: 30000
+- assertVisible: ".*No encontramos lo que buscabas.*"
+- takeScreenshot: artifacts/26-account-not-a-customer
+
+# The way out works: this is a screen, not a trap.
+- tapOn: "Atrás"
+- extendedWaitUntil:
+    visible: "Mis datos y direcciones"
+    timeout: 30000
