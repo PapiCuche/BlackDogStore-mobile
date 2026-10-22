@@ -1,6 +1,7 @@
 import {
   PILOT_COMPANY_SLUG,
   collectConfigurationIssues,
+  isInsecureApiUrl,
   isLocalOnlyApiHost,
   resolveAppEnvironment,
   resolveMockDataPolicy,
@@ -206,6 +207,34 @@ describe('isLocalOnlyApiHost', () => {
   });
 });
 
+/**
+ * Cleartext in a distributed build is not a weaker connection: iOS refuses it
+ * under App Transport Security and Android refuses it under its network
+ * config, so every request fails — after somebody has already typed their
+ * password into it.
+ */
+describe('isInsecureApiUrl', () => {
+  it('condemns anything that is not HTTPS', () => {
+    for (const url of [
+      'http://blackdogstoreperu.com',
+      'http://192.168.1.40:8000',
+      'ws://blackdogstoreperu.com',
+    ]) {
+      expect(isInsecureApiUrl(url)).toBe(true);
+    }
+  });
+
+  it('leaves HTTPS alone, whatever the case', () => {
+    expect(isInsecureApiUrl('https://blackdogstoreperu.com')).toBe(false);
+    expect(isInsecureApiUrl('HTTPS://BLACKDOGSTOREPERU.COM')).toBe(false);
+  });
+
+  it('says nothing about a string it cannot read as a URL', () => {
+    expect(isInsecureApiUrl('not a url')).toBe(false);
+    expect(isInsecureApiUrl('')).toBe(false);
+  });
+});
+
 describe('the API base a release resolves to', () => {
   function load(env: Record<string, string | undefined>, isDev: boolean) {
     let module!: typeof import('@/config/env');
@@ -239,6 +268,31 @@ describe('the API base a release resolves to', () => {
     );
 
     expect(module.apiBaseUrl).toBe('http://localhost:8000');
+  });
+
+  it('refuses a cleartext deployment in a release build', () => {
+    // A real host, reachable, and still not shippable: the platform will not
+    // make the call, so the app says it is unconfigured instead of failing
+    // one request at a time.
+    const module = load(
+      {
+        EXPO_PUBLIC_API_BASE_URL: 'http://blackdogstoreperu.com',
+        EXPO_PUBLIC_APP_ENV: 'production',
+      },
+      false,
+    );
+
+    expect(module.apiBaseUrl).toBe('');
+    expect(module.isApiConfigured).toBe(false);
+  });
+
+  it('keeps plain HTTP in a development build', () => {
+    const module = load(
+      { EXPO_PUBLIC_API_BASE_URL: 'http://192.168.0.141:8000' },
+      true,
+    );
+
+    expect(module.apiBaseUrl).toBe('http://192.168.0.141:8000');
   });
 
   it('keeps a real deployment in a release build, without its trailing slash', () => {
