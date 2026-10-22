@@ -55,10 +55,19 @@ another network.
 | `17-tracking-link` | The customer's link revealed, then replaced. | link rotation |
 | `18-deep-links` | Four addresses, including one that does not exist. | — |
 | `19-resume` | Background and back, with nothing latched offline. | — |
+| `20-service-execution` | The repair started, worked and finished. | execution |
+| `21-service-quality` | A quality check opened, answered and passed. | check |
+| `22-service-delivery` | The device handed over, with no payment implied. | delivery |
+| `23-order-fulfilment` | The shop's delivery states, read as words. | — |
+| `24-customer-devices` | A customer's device file and its visits. | — |
+| `25-messaging-settings` | What the shop controls about WhatsApp notices. | — |
+| `26-account-fail-closed` | A 404 met with a screen and a way back. | — |
+| `27-service-payment` | A payment recorded against a repair. | payment |
+| `28-transfer-dispatch` | Stock moved between branches, end to end. | stock |
 
-Flows chain: `10` runs `09` first, `11` runs `10`, `16` runs `11`. Each one
-therefore works on an order it opened itself, rather than on whichever row
-happens to be in the fixture.
+Flows chain: `10` runs `09` first, `11` runs `10`, `16`, `20` run `11`, `21`
+runs `20`, and `22` and `27` run `21`. Each one therefore works on an order it
+opened itself, rather than on whichever row happens to be in the fixture.
 
 ## Selector lessons, learned the hard way
 
@@ -116,6 +125,13 @@ production, and the guard is what stops it.
   never receives one: the audience is the company's active internal members and
   this account reaches the area as a superuser. It needs a member account in
   the fixture.
-- **Despatching and receiving a transfer** (`05`). Covered as a contract smoke
-  instead; driving it through the UI collides on selectors that have nothing to
-  do with the app.
+- **Reversing a service payment** (`27`). The confirming button inside the OS
+  alert carries the same word as the row's own button underneath it, and the
+  two cannot be told apart from here. Contract smoke instead.
+- **The customer address book** (`26`). The QA account is staff and has no
+  `Customer` record, so the customer surface answers 404 — correctly. It needs
+  a customer account in the fixture.
+- **Consuming a part on a repair.** The candidates are quote lines bound to a
+  product, and the quote form in this app cannot bind one: the backend accepts
+  `product_id` on a quote item and Mobile never sends it. A gap in the app, not
+  in the automation.

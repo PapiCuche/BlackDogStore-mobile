@@ -1,0 +1,57 @@
+# THE DEVICE FILE — what this machine has been through.
+#
+# Read-only. A counter uses it to answer «¿ya lo trajeron antes?», so what it
+# has to show is the identity of the machine and its visits.
+#
+# It goes in the way staff do: find the person, open their device.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Clientes"
+    timeout: 30000
+- tapOn: "Clientes"
+
+- extendedWaitUntil:
+    visible: "Nombre, documento o teléfono"
+    timeout: 30000
+- tapOn: "Nombre, documento o teléfono"
+# A SURNAME: the server matches each name field on its own, so a whole display
+# name as one term matches nothing.
+- inputText: "Técnico"
+- hideKeyboard
+# On THIS screen the row that opens a person is the name alone: the card is
+# no longer one pressable element, so its name is its own label. (On the
+# intake screen the card is still one element and reads as its lines joined
+# by commas — same person, two shapes.)
+- extendedWaitUntil:
+    visible: "Cliente y Técnico"
+    timeout: 20000
+- tapOn: "Cliente y Técnico"
+
+# The devices on file are buttons inside the opened card.
+- extendedWaitUntil:
+    visible: ".*iPhone.*"
+    timeout: 20000
+- tapOn:
+    text: ".*iPhone.*"
+    index: 0
+
+# ── The file itself ────────────────────────────────────────────────────────
+- extendedWaitUntil:
+    visible: "Marca: .*"
+    timeout: 30000
+- assertVisible: "Modelo: .*"
+- takeScreenshot: artifacts/24-device
+
+# Its history, which is why the screen exists rather than being a form.
+- scrollUntilVisible:
+    element: "Veces que estuvo aquí"
+    direction: DOWN
+    timeout: 20000
+- takeScreenshot: artifacts/24-device-history

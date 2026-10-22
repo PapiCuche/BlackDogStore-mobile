@@ -16,6 +16,7 @@ import {
   hasUxCapability,
   type FulfillmentStatus,
 } from '@/domain/internal/types';
+import { describeFulfillmentStatus } from '@/domain/orders/status';
 import { OrderDeliverySection } from '@/features/internal/order-delivery-section';
 import { OrderRiskSection } from '@/features/internal/order-risk-section';
 import { OrderUnitsSection } from '@/features/internal/order-units-section';
@@ -233,10 +234,15 @@ export default function InternalOrderDetailScreen() {
               <View style={{ gap: theme.spacing.xs }}>
                 <Text variant="headline">Cambiar estado de entrega</Text>
                 <Divider />
+                {/* THE WORD, not the code. These buttons were labelled with
+                    the raw status the server sends — «ready_for_pickup»,
+                    «shipped» — which is the machine's name for the state, in
+                    English, in front of somebody at a counter. The same map
+                    the customer's own order screen uses says it in Spanish. */}
                 {order.availableFulfillmentTransitions.map((next) => (
                   <Button
                     key={next}
-                    label={next}
+                    label={describeFulfillmentStatus(next).label}
                     variant={next === order.fulfillmentStatus ? 'secondary' : 'ghost'}
                     disabled={mutation.isPending || next === order.fulfillmentStatus}
                     onPress={() =>

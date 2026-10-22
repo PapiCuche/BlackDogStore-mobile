@@ -1,0 +1,71 @@
+# TAKING MONEY FOR A REPAIR, and reversing it.
+#
+# THIS FLOW WRITES: it records a payment against the order the quality flow
+# passed, then reverses it, so a run leaves the balance where it found it.
+#
+# The amount is NOT computed here: the server states the outstanding balance
+# and this flow pays part of it. A payment cannot be edited — correcting one
+# means reversing it, which is what the app says before it writes.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 21-service-quality.yaml
+
+- scrollUntilVisible:
+    element: "Pago del servicio"
+    direction: DOWN
+    timeout: 25000
+- assertVisible: ".*Saldo.*"
+- assertVisible: "Sin pagos"
+
+# ── Pay part of it ─────────────────────────────────────────────────────────
+# The amount field reads out its caption only, so it is reached by position.
+- scrollUntilVisible:
+    element: "Importe (PEN)"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn:
+    below: "Importe (PEN)"
+- inputText: "20"
+- tapOn: "Pago del servicio"
+- tapOn: "Efectivo"
+
+- scrollUntilVisible:
+    element: "Registrar pago"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Registrar pago"
+- extendedWaitUntil:
+    visible: ".*No se puede editar después.*"
+    timeout: 20000
+- tapOn: "Registrar"
+
+# The balance the server recomputed, not arithmetic done on the phone.
+- extendedWaitUntil:
+    visible: ".*pagado PEN 20.00.*"
+    timeout: 45000
+- takeScreenshot: artifacts/27-paid
+
+# ── What undoing one would say ─────────────────────────────────────────────
+# SYSTEM UI LIMITATION. The confirming button inside the OS alert carries the
+# same word as the row's own button underneath it («Reversar»), and an alert's
+# buttons cannot be told apart from the page's by name or by position here. So
+# the flow opens the warning, checks that it refuses to promise a refund this
+# platform cannot make, and backs out. The reversal itself is covered by a
+# contract smoke.
+- scrollUntilVisible:
+    element: "Reversar"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Reversar"
+- extendedWaitUntil:
+    visible: ".*NO devuelve dinero.*"
+    timeout: 20000
+- takeScreenshot: artifacts/27-reversal-warning
+- tapOn: "Cancelar"
+- extendedWaitUntil:
+    visible: "PEN 20.00  Efectivo"
+    timeout: 20000

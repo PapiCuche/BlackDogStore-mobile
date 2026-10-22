@@ -1,0 +1,55 @@
+# HANDING THE DEVICE BACK.
+#
+# THIS FLOW WRITES: it delivers the order the quality flow passed, which closes
+# it on the scratch backend. Delivery cannot be undone, which is what the app
+# says before it writes.
+#
+# It also proves the one thing the handover does NOT do: it registers no
+# payment. This platform cannot charge for a repair, and the screen says so
+# rather than implying the device left paid for.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 21-service-quality.yaml
+
+- scrollUntilVisible:
+    element: "Quién recibe"
+    direction: DOWN
+    timeout: 25000
+    centerElement: true
+# This field reads out its caption only, so it is reached by position: the
+# input sits directly under it.
+- tapOn:
+    below: "Quién recibe"
+- inputText: "QA Maestro"
+# Dismissed by tapping the section heading, which is static text ABOVE the
+# field and therefore never under the keyboard. A swipe would also dismiss it,
+# but it moves the page and the button then has to be hunted for again.
+- tapOn: "Entrega"
+
+# The swipe that dismissed the keyboard also moved the page, so the button is
+# found again rather than assumed to be where it was.
+- scrollUntilVisible:
+    element: "Registrar entrega"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+# Said right above the button: handing the device over is not a payment.
+- assertVisible: ".*No registra cobro.*"
+- tapOn: "Registrar entrega"
+- extendedWaitUntil:
+    visible: ".*No se puede deshacer.*"
+    timeout: 20000
+- tapOn: "Entregar"
+
+# The app confirms with the name the server recorded, in a dialog that has to
+# be dismissed before the page can be scrolled again.
+- extendedWaitUntil:
+    visible: ".*quedó entregada a QA Maestro.*"
+    timeout: 45000
+- tapOn: "OK"
+- scrollUntilVisible:
+    element: "Estado de la orden: Entregado"
+    direction: UP
+    timeout: 25000
+- takeScreenshot: artifacts/22-delivered

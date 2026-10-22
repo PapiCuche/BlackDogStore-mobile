@@ -1,0 +1,122 @@
+# MOVING STOCK ALL THE WAY: draft, line, despatch, receive.
+#
+# THIS FLOW WRITES: it moves one unit between the two branches of the scratch
+# backend, which changes real stock on both of them.
+#
+# Quantity 1, so a run that dies half way leaves the shelves almost where it
+# found them. The transfer it creates is its own — it never picks up a draft
+# left behind by something else.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Inventario"
+    timeout: 30000
+- tapOn: "Inventario"
+- scrollUntilVisible:
+    element: "Transferencias entre sucursales"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Transferencias entre sucursales"
+
+- extendedWaitUntil:
+    visible: "Nueva transferencia"
+    timeout: 30000
+- tapOn: "Nueva transferencia"
+- extendedWaitUntil:
+    visible: "Origen"
+    timeout: 20000
+- tapOn:
+    text: "Tienda principal"
+    index: 0
+- tapOn:
+    text: "Sucursal QA Transfer"
+    index: 1
+- tapOn:
+    below: "Motivo"
+- inputText: "QA Maestro: envío"
+- tapOn:
+    text: "Nueva transferencia"
+    optional: true
+- tapOn: "Abrir borrador"
+- extendedWaitUntil:
+    visible: ".*Borrador.*"
+    timeout: 30000
+
+# ── Put something in it ────────────────────────────────────────────────────
+# The search field and the result row hold the same words, so the row is
+# recognised by the line the SERVER adds to it: how many are in the origin.
+- scrollUntilVisible:
+    element: "Buscar en el origen"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Buscar en el origen"
+- inputText: "AirPods"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: ".*en Tienda principal.*"
+    timeout: 30000
+
+# «Cantidad a enviar» has «0» for a placeholder, which matches every zero on
+# the screen, so the field is reached by position under the row's stock line.
+- scrollUntilVisible:
+    element: "Cantidad a enviar"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn:
+    below: "Cantidad a enviar"
+- inputText: "1"
+- scrollUntilVisible:
+    element: "Poner en la transferencia"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Poner en la transferencia"
+- extendedWaitUntil:
+    visible: ".*AirPods.*"
+    timeout: 30000
+# The number pad has no return key, so it is dragged away: left up, it covers
+# «Despachar» and the tap lands on a digit.
+- swipe:
+    direction: DOWN
+    duration: 600
+- takeScreenshot: artifacts/28-line-added
+
+# ── Send it ────────────────────────────────────────────────────────────────
+- scrollUntilVisible:
+    element: "Despachar"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Despachar"
+- extendedWaitUntil:
+    visible: "Confirmar"
+    timeout: 20000
+- tapOn: "Confirmar"
+- extendedWaitUntil:
+    visible: ".*En tránsito.*"
+    timeout: 45000
+- takeScreenshot: artifacts/28-dispatched
+
+# ── Receive it ─────────────────────────────────────────────────────────────
+- scrollUntilVisible:
+    element: "Recibir"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Recibir"
+- extendedWaitUntil:
+    visible: "Confirmar"
+    timeout: 20000
+- tapOn: "Confirmar"
+- extendedWaitUntil:
+    visible: ".*Recibida.*"
+    timeout: 45000
+- takeScreenshot: artifacts/28-received

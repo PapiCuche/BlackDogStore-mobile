@@ -1,0 +1,85 @@
+# THE CHECK BEFORE THE DEVICE GOES BACK.
+#
+# THIS FLOW WRITES: it opens a quality check on the order the execution flow
+# repaired and passes it, which moves the order to «Listo para recoger» on the
+# scratch backend.
+#
+# The checklist is the COMPANY's: its points are copied from the tenant's
+# template when the check starts. The four required points of this fixture's
+# «Control general» are answered by name — the names are data, not app text,
+# which is the one fixture assumption here.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 20-service-execution.yaml
+
+- scrollUntilVisible:
+    element: "Iniciar control de calidad"
+    direction: DOWN
+    timeout: 25000
+    centerElement: true
+- tapOn: "Iniciar control de calidad"
+- extendedWaitUntil:
+    visible: ".*Se copiará la lista de control.*"
+    timeout: 20000
+- tapOn: "Iniciar"
+
+# ── Answer what the server will insist on ──────────────────────────────────
+# «Correcto» is the first chip under each point, so each point is answered by
+# where its chips sit rather than by tapping a word that appears six times.
+- extendedWaitUntil:
+    visible: "Enciende y arranca correctamente"
+    timeout: 45000
+- tapOn:
+    below: "Enciende y arranca correctamente"
+- scrollUntilVisible:
+    element: "La falla reportada quedó resuelta"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn:
+    below: "La falla reportada quedó resuelta"
+- scrollUntilVisible:
+    element: "Carga y alimentación"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn:
+    below: "Carga y alimentación"
+- scrollUntilVisible:
+    element: "Estado físico y cierre del equipo"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn:
+    below: "Estado físico y cierre del equipo"
+
+# The app's own count of what is still missing — a preview, never the decision.
+- extendedWaitUntil:
+    visible: "Todo lo obligatorio está respondido."
+    timeout: 30000
+- takeScreenshot: artifacts/21-checklist-answered
+
+# ── Pass it ────────────────────────────────────────────────────────────────
+- scrollUntilVisible:
+    element: "Aprobar control de calidad"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Aprobar control de calidad"
+# The server verifies the answers; passing does NOT notify the customer.
+- extendedWaitUntil:
+    visible: ".*El servidor verificará las respuestas.*"
+    timeout: 20000
+- tapOn: "Aprobar"
+
+# Passing opens the handover: the delivery form appears only for an order
+# that is ready to be picked up.
+- extendedWaitUntil:
+    visible: "Quién recibe"
+    timeout: 45000
+- scrollUntilVisible:
+    element: "Estado de la orden: Listo para recoger"
+    direction: UP
+    timeout: 25000
+- takeScreenshot: artifacts/21-ready-for-pickup

@@ -1,0 +1,46 @@
+# WHAT THE SHOP CONTROLS ABOUT ITS WHATSAPP NOTICES, and what it does not.
+#
+# Read-only. The screen separates two things on purpose: the INSTALLATION —
+# provider, number, templates — which belongs to whoever set the platform up,
+# and the few settings a shop owns. A flow that could edit the first would be
+# describing a permission the app does not have.
+#
+# Seeing the setup needs `settings.view`; changing it needs `settings.manage`,
+# and the screen asks for them separately.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- scrollUntilVisible:
+    element: "Avisos por WhatsApp"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Avisos por WhatsApp"
+
+- extendedWaitUntil:
+    visible: "Proveedor: .*"
+    timeout: 30000
+- assertVisible: "Número configurado: .*"
+# Each credential the installation needs is listed as present or missing, by
+# name, instead of one «mal configurado».
+- assertVisible: ".*access_token.*"
+- assertVisible: "Estado de los avisos: .*"
+- assertNotVisible: "No administras la configuración"
+- takeScreenshot: artifacts/25-messaging
+
+# What the shop itself decides.
+- scrollUntilVisible:
+    element: "Lo que controla la tienda"
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Código de país por defecto"
+- assertVisible: "Idioma de las plantillas"
+- scrollUntilVisible:
+    element: "Guardar cambios"
+    direction: DOWN
+    timeout: 20000
+- takeScreenshot: artifacts/25-messaging-shop

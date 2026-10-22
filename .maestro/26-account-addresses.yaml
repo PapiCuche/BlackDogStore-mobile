@@ -1,0 +1,23 @@
+# THE CUSTOMER'S OWN FILE — their data and where they want things sent.
+#
+# THIS FLOW WRITES: it adds an address to the signed-in account on the scratch
+# backend, then removes it again, so a run leaves the account as it found it.
+#
+# The address book is the customer's, not the shop's: it is reached from
+# Profile, under the customer surface, and nothing internal appears in it.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- tapOn: "Perfil"
+- extendedWaitUntil:
+    visible: "Mis datos y direcciones"
+    timeout: 30000
+- tapOn: "Mis datos y direcciones"
+
+- extendedWaitUntil:
+    visible: "Tus direcciones"
+    timeout: 30000
+- assertVisible: "Tus datos"
+- takeScreenshot: artifacts/26-account
