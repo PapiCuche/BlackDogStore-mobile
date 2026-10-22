@@ -40,6 +40,22 @@ const ROW = {
   void_reason: null,
 };
 
+/** Stands in for `expo-file-system`'s `File`, which reads a local path. */
+class FakeFile {
+  readonly uri: string;
+  readonly name: string;
+  readonly type = 'image/heic';
+
+  constructor(uri: string) {
+    this.uri = uri;
+    this.name = uri.split('/').pop() ?? '';
+  }
+
+  async bytes(): Promise<Uint8Array> {
+    return new Uint8Array([1, 2, 3]);
+  }
+}
+
 function load(
   options: {
     slug?: string | null;
@@ -70,6 +86,10 @@ function load(
 
   let module!: Loaded;
   jest.isolateModules(() => {
+    // The photo is handed to `FormData` as a FILE. Expo's `fetch` encodes a
+    // part it can read bytes from; a bare `{ uri }` object is refused, which
+    // is what broke every upload until SDK 57's encoder was taken seriously.
+    jest.doMock('expo-file-system', () => ({ File: FakeFile }));
     jest.doMock('@/api/authenticated-request', () => ({
       authenticatedRequest: (path: string, opts: unknown, d: unknown) => send(path, opts, d),
     }));
@@ -414,11 +434,14 @@ describe('uploading a photo', () => {
 
     const form = fields(options.multipart as FormData);
     expect(form.stage).toBe('quality');
-    expect(form.image).toEqual({
-      uri: 'file:///tmp/IMG_0042.HEIC',
-      name: 'IMG_0042.HEIC',
-      type: 'image/heic',
-    });
+    // THE PART IS A FILE, not a description of one. Expo SDK 57 encodes
+    // multipart in JavaScript and takes a string, a `Blob` or anything that
+    // answers `bytes()`; the `{ uri, name, type }` shape React Native used to
+    // accept throws «Unsupported FormDataPart implementation» inside the app,
+    // so no upload ever reached the server.
+    expect(form.image).toBeInstanceOf(FakeFile);
+    expect((form.image as FakeFile).uri).toBe('file:///tmp/IMG_0042.HEIC');
+    expect(typeof (form.image as FakeFile).bytes).toBe('function');
   });
 
   it('never sets Content-Type itself', async () => {
