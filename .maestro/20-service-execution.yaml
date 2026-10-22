@@ -1,0 +1,81 @@
+# THE BENCH — a technician starts the work, and finishes it.
+#
+# THIS FLOW WRITES: it runs the quote flow first, so the order it works on is
+# APPROVED, and then moves it through repair to «Reparado» on the scratch
+# backend.
+#
+# Starting and finishing are EVENTS, not states somebody picks from a list:
+# the server refuses to set `in_repair` or `repaired` any other way, which is
+# why this flow presses the buttons instead of using «Mover la orden».
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 11-service-quote.yaml
+
+# ── Start ──────────────────────────────────────────────────────────────────
+# Wait for the section to settle first: the quote decision refetches the whole
+# order, and a tap that lands mid-render is swallowed.
+- scrollUntilVisible:
+    element: "Nadie ha empezado a trabajar en este equipo todavía."
+    direction: DOWN
+    timeout: 25000
+    centerElement: true
+- tapOn: "Iniciar reparación"
+# Harmless if the first tap did open the dialog: «Iniciar reparación» is also
+# the dialog's own title, and tapping a title does nothing.
+- tapOn:
+    text: "Iniciar reparación"
+    optional: true
+# The app asks, because the work is recorded in the technician's name.
+- extendedWaitUntil:
+    visible: ".*Quedará registrado a tu nombre.*"
+    timeout: 20000
+- tapOn: "Iniciar"
+
+- extendedWaitUntil:
+    visible: "Trabajo realizado"
+    timeout: 45000
+- takeScreenshot: artifacts/20-in-repair
+
+# ── What was done ──────────────────────────────────────────────────────────
+# THE FIELD, not its caption: the label sits on the caption, on the field's
+# accessibility label and on the wrapper, and only the field takes focus. The
+# field is the one that reads out its placeholder too.
+- tapOn: "Trabajo realizado Qué se hizo realmente en el equipo"
+- inputText: "QA Maestro: batería reemplazada."
+- swipe:
+    direction: DOWN
+    duration: 600
+
+- scrollUntilVisible:
+    element: "Resultado"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Resuelto"
+
+# ── Finish ─────────────────────────────────────────────────────────────────
+- scrollUntilVisible:
+    element: "Finalizar trabajo técnico"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Finalizar trabajo técnico"
+# «Reparado» is not «revisado» and not «listo para entregar», and the dialog
+# says so before it writes.
+- extendedWaitUntil:
+    visible: ".*marcará la orden como reparada.*"
+    timeout: 20000
+- tapOn: "Finalizar"
+
+# The quality section only offers to start once the work is finished, so this
+# is the server's answer read where the screen already is; the status badge
+# itself lives at the top, several screens up.
+- extendedWaitUntil:
+    visible: "Iniciar control de calidad"
+    timeout: 45000
+- scrollUntilVisible:
+    element: "Estado de la orden: Reparado"
+    direction: UP
+    timeout: 25000
+- takeScreenshot: artifacts/20-repaired
