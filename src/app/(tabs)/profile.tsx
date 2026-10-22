@@ -179,6 +179,9 @@ export default function ProfileScreen() {
                       option === 'system' ? 'Sigue la configuración del sistema' : undefined
                     }
                     icon={index === 0 ? icons.theme : undefined}
+                    // The tick below is for the eye; this is what a screen
+                    // reader announces.
+                    selected={preference === option}
                     onPress={() => {
                       hapticSelection();
                       setPreference(option);

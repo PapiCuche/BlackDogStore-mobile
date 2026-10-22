@@ -64,6 +64,8 @@ another network.
 | `26-account-fail-closed` | A 404 met with a screen and a way back. | — |
 | `27-service-payment` | A payment recorded against a repair. | payment |
 | `28-transfer-dispatch` | Stock moved between branches, end to end. | stock |
+| `29-inventory-filters` | «Bajo mínimo» and «Sin stock», and the search. | — |
+| `30-appearance` | The theme sticks across a cold relaunch. | — |
 
 Flows chain: `10` runs `09` first, `11` runs `10`, `16`, `20` run `11`, `21`
 runs `20`, and `22` and `27` run `21`. Each one therefore works on an order it
@@ -131,6 +133,12 @@ production, and the guard is what stops it.
 - **The customer address book** (`26`). The QA account is staff and has no
   `Customer` record, so the customer surface answers 404 — correctly. It needs
   a customer account in the fixture.
+- **Choosing a receipt type at the till.** The server decides which documents
+  exist and which may be issued; fiscal issuance is off in this fixture, so it
+  sends none and the section is not drawn. Needs a company with fiscal
+  issuance configured.
+- **Selling something «bajo pedido».** It needs a product with no stock in the
+  branch, and this fixture has none out of stock.
 - **Consuming a part on a repair.** The candidates are quote lines bound to a
   product, and the quote form in this app cannot bind one: the backend accepts
   `product_id` on a quote item and Mobile never sends it. A gap in the app, not

@@ -1,0 +1,47 @@
+# THE THEME, AND THAT IT STICKS.
+#
+# Writes nothing to the server: the preference is this device's. What matters
+# is that it survives a relaunch — a theme that resets every morning is worse
+# than no setting at all — and that the app comes back on the screen the person
+# left it on.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- tapOn: "Perfil"
+- scrollUntilVisible:
+    element: "Apariencia"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+
+- tapOn: "Oscuro"
+# The chosen row SAYS it is chosen. A tick drawn beside it is a picture, and
+# assistive technology — and this flow — read neither pictures nor colour.
+- assertVisible:
+    text: "Oscuro"
+    selected: true
+- takeScreenshot: artifacts/30-dark
+
+# Relaunched cold, on purpose: this is the one check that a preference was
+# written down rather than kept in memory.
+- runFlow:
+    file: 00-connect-dev-client.yaml
+- tapOn: "Perfil"
+- scrollUntilVisible:
+    element: "Apariencia"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- assertVisible:
+    text: "Oscuro"
+    selected: true
+- takeScreenshot: artifacts/30-dark-after-relaunch
+
+# Put it back, so the next flow starts from the same place as always.
+- tapOn: "Automático"
+- assertVisible:
+    text: "Automático"
+    selected: true
+- takeScreenshot: artifacts/30-system
