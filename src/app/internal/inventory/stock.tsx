@@ -17,6 +17,7 @@ import {
 import { CAP_INVENTORY_VIEW } from '@/domain/internal/inventory-types';
 import { hasUxCapability } from '@/domain/internal/types';
 import { parseBranchParam } from '@/features/internal/branch-scope';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useInventoryStock } from '@/hooks/use-internal-inventory';
 import { useInternalContext } from '@/hooks/use-internal-sales';
 import { useTheme } from '@/theme/theme-provider';
@@ -41,13 +42,16 @@ export default function InventoryStockScreen() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
 
+  // One request per pause, not one per character.
+  const term = useDebouncedValue(search.trim(), 300);
+
   const { data: context, isPending: contextPending } = useInternalContext();
   const mayView = hasUxCapability(context ?? null, CAP_INVENTORY_VIEW);
 
   const query = useInventoryStock(
     {
       branchId: branchId ?? undefined,
-      search: search.trim() || undefined,
+      search: term || undefined,
       lowStock: filter === 'low' || undefined,
       outOfStock: filter === 'out' || undefined,
     },
@@ -96,28 +100,20 @@ export default function InventoryStockScreen() {
     );
   }
 
-  if (isPending) {
-    return (
-      <>
-        <Stack.Screen options={{ title }} />
-        <Screen scrollable>
-          <LoadingState label="Cargando stock" skeletonCount={5} />
-        </Screen>
-      </>
-    );
-  }
-
   return (
     <>
       <Stack.Screen options={{ title }} />
       <Screen padded={false}>
         <FlatList
-          data={data.results}
+          data={data?.results ?? []}
           keyExtractor={(row) => String(row.id)}
           ListHeaderComponent={
+            // SEARCH-KEEPS-ITS-FIELD. Drawn while the list loads: a new term is
+            // a new query key, so the query is `isPending` again, and taking
+            // the header away at that moment unmounted this input mid-word.
             <View style={{ gap: theme.spacing.sm, marginBottom: theme.spacing.md }}>
               <Text variant="footnote" color="textTertiary">
-                {data.count} {data.count === 1 ? 'registro' : 'registros'}
+                {data ? `${data.count} ${data.count === 1 ? 'registro' : 'registros'}` : 'Buscando'}
               </Text>
               <SearchInput
                 value={search}
@@ -188,15 +184,19 @@ export default function InventoryStockScreen() {
             flexGrow: 1,
           }}
           ListEmptyComponent={
-            <EmptyState
-              icon={icons.empty}
-              title="Sin resultados"
-              message={
-                filter === 'all'
-                  ? 'No hay productos con stock registrado en esta selección.'
-                  : 'Ningún producto cumple ese filtro en esta selección.'
-              }
-            />
+            isPending ? (
+              <LoadingState label="Cargando stock" skeletonCount={5} />
+            ) : (
+              <EmptyState
+                icon={icons.empty}
+                title="Sin resultados"
+                message={
+                  filter === 'all'
+                    ? 'No hay productos con stock registrado en esta selección.'
+                    : 'Ningún producto cumple ese filtro en esta selección.'
+                }
+              />
+            )
           }
           refreshing={query.isFetching}
           onRefresh={() => void query.refetch()}

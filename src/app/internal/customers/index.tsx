@@ -1,6 +1,6 @@
 import { Stack, router } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, View } from 'react-native';
+import { FlatList, Pressable, View } from 'react-native';
 
 import {
   AppHeader,
@@ -126,17 +126,28 @@ export default function InternalCustomersScreen() {
           keyExtractor={(item) => String(item.id)}
           ListHeaderComponent={header}
           renderItem={({ item }) => (
-            <Card
-              variant="outlined"
-              onPress={() => setOpenId((current) => (current === item.id ? null : item.id))}
-              accessibilityLabel={item.displayName}
-              accessibilityHint="Muestra los equipos registrados de este cliente"
-            >
+            // ONLY THE NAME OPENS THE CARD, not the card itself. A pressable
+            // card is ONE accessibility element and absorbs everything inside
+            // it: while this whole row was the control, the device buttons and
+            // «Recibir un equipo de este cliente» were on the screen but
+            // unreachable with VoiceOver, because an accessible container
+            // hides its children from assistive technology.
+            <Card variant="outlined">
               <View style={{ gap: theme.spacing.xs }}>
-                <Text variant="headline">{item.displayName}</Text>
-                <Text variant="caption" color="textTertiary">
-                  {[item.documentNumber, item.phone].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
-                </Text>
+                <Pressable
+                  onPress={() => setOpenId((current) => (current === item.id ? null : item.id))}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.displayName}
+                  accessibilityHint="Muestra los equipos registrados de este cliente"
+                  accessibilityState={{ expanded: openId === item.id }}
+                  style={{ gap: theme.spacing.xs }}
+                >
+                  <Text variant="headline">{item.displayName}</Text>
+                  <Text variant="caption" color="textTertiary">
+                    {[item.documentNumber, item.phone].filter(Boolean).join(' · ') ||
+                      'Sin datos de contacto'}
+                  </Text>
+                </Pressable>
 
                 {openId === item.id ? (
                   <View style={{ gap: theme.spacing.xs }}>
