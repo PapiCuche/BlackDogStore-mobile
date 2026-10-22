@@ -1,0 +1,90 @@
+# TELLING THE STAFF SOMETHING, and seeing who read it.
+#
+# THIS FLOW WRITES: it drafts a communiqué, aims it at the whole company and
+# publishes it, on the scratch backend. Everyone in that company then has it in
+# their inbox, which is the point of the feature and the reason this runs
+# against scratch only.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+# The hub lists more modules than fit on one screen. «Comunicados de
+# plataforma» is a DIFFERENT tile; matching is on the whole string, so the
+# shorter name cannot pick it up by accident.
+- scrollUntilVisible:
+    element: "Comunicados"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Comunicados"
+
+# ── Draft it ───────────────────────────────────────────────────────────────
+- extendedWaitUntil:
+    visible: "Redactar un comunicado"
+    timeout: 30000
+- tapOn: "Redactar un comunicado"
+
+- extendedWaitUntil:
+    visible: "Título"
+    timeout: 20000
+- tapOn:
+    below: "Título"
+- inputText: "QA Maestro"
+- swipe:
+    direction: DOWN
+    duration: 600
+- tapOn:
+    below: "Mensaje"
+- inputText: "Prueba automatizada. Ignórala."
+- swipe:
+    direction: DOWN
+    duration: 600
+
+- scrollUntilVisible:
+    element: "Guardar el borrador"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Guardar el borrador"
+
+# The draft the server wrote, opened on its own screen.
+- extendedWaitUntil:
+    visible: "Terminar el borrador"
+    timeout: 45000
+- takeScreenshot: artifacts/13-draft
+
+# ── Aim it, count it, publish it ───────────────────────────────────────────
+- tapOn: "Dirigirlo a toda la empresa"
+- scrollUntilVisible:
+    element: "Ver a cuántas personas llegaría"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Ver a cuántas personas llegaría"
+# The REACH is the server's count, not a number this app works out. It is a
+# key/value row, read out as one string.
+- extendedWaitUntil:
+    visible: "Llegaría a: .*"
+    timeout: 30000
+
+# Publishing takes two presses on purpose: it writes a notice per person and
+# cannot be withdrawn.
+- scrollUntilVisible:
+    element: "Publicar el comunicado"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Publicar el comunicado"
+- extendedWaitUntil:
+    visible: "Se enviará ahora y no se puede retirar."
+    timeout: 20000
+- tapOn: "Publicarlo"
+
+# Published, with the server's own reading figures: the recipient list is
+# fixed at publication and the app only ever shows totals.
+- extendedWaitUntil:
+    visible: "Estado del comunicado: Publicado"
+    timeout: 45000
+- assertVisible: "Destinatarios: [0-9]+"
+- assertVisible: "Sin leer: [0-9]+"
+- takeScreenshot: artifacts/13-published
