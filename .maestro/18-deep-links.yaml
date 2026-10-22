@@ -1,0 +1,41 @@
+# OPENING THE APP AT A PLACE, from outside it.
+#
+# Read-only. Every link here is handled by the app's own router: a tab, a
+# screen behind one, the internal area, and an address that does not exist —
+# which has to land on the app's «no existe» screen rather than on a blank
+# page or a crash.
+#
+# Deep links are how a notification, a WhatsApp message or the web storefront
+# hand somebody over to this app, so a broken route is a dead end for a real
+# person, not a QA detail.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+# ── A screen of the customer side ──────────────────────────────────────────
+- openLink: blackdogstore://cart
+- extendedWaitUntil:
+    visible: ".*carrito.*|.*Carrito.*"
+    timeout: 30000
+- takeScreenshot: artifacts/18-cart
+
+# ── A tab ──────────────────────────────────────────────────────────────────
+- openLink: blackdogstore://orders
+- extendedWaitUntil:
+    visible: "Pedidos"
+    timeout: 30000
+
+# ── The internal area ──────────────────────────────────────────────────────
+- openLink: blackdogstore://internal
+- extendedWaitUntil:
+    visible: "ÁREA INTERNA"
+    timeout: 30000
+- takeScreenshot: artifacts/18-internal
+
+# ── An address that does not exist ─────────────────────────────────────────
+- openLink: blackdogstore://no-existe-esta-ruta
+- extendedWaitUntil:
+    visible: ".*Esta pantalla no existe.*"
+    timeout: 30000
+- takeScreenshot: artifacts/18-not-found

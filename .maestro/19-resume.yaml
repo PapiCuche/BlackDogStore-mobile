@@ -1,0 +1,48 @@
+# COMING BACK TO THE APP, which a counter does twenty times a day.
+#
+# Read-only. It parks the app on a screen that depends on the network, sends
+# it to the background, brings it back, and demands that the screen still
+# works.
+#
+# THIS IS A REGRESSION GUARD. «Sin conexión» used to LATCH: once the app had
+# decided it was offline it never asked again, TanStack Query's `onlineManager`
+# stayed false, and every mutation in the app was paused — the till could not
+# sell and stock could not be added. The fix re-asks on resume, and this is the
+# flow that would catch it coming back.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Inventario"
+    timeout: 30000
+- tapOn: "Inventario"
+- scrollUntilVisible:
+    element: "Ver stock"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Ver stock"
+- extendedWaitUntil:
+    visible: "Buscar producto"
+    timeout: 30000
+
+# ── Away, and back ─────────────────────────────────────────────────────────
+- pressKey: Home
+# RESUME, not restart. `launchApp` on its own terminates the app first, which
+# would test a cold start — a different thing, and one that cannot latch.
+- launchApp:
+    stopApp: false
+
+# The same screen, not the launcher and not the first tab.
+- extendedWaitUntil:
+    visible: "Buscar producto"
+    timeout: 60000
+# Nothing latched: the list is live and the app is not claiming to be offline.
+- assertNotVisible: ".*Sin conexión.*"
+- assertVisible: ".*registro.*|.*registros.*"
+- takeScreenshot: artifacts/19-resumed
