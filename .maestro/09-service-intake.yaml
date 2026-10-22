@@ -1,0 +1,79 @@
+# RECEIVING A DEVICE AT THE COUNTER.
+#
+# THIS FLOW WRITES: it opens a real service order on the scratch backend.
+#
+# It uses a customer who ALREADY has a device on file, which is the common case
+# and keeps the run repeatable — registering a new device twice with the same
+# serial is refused by the server, correctly, and that refusal is not what this
+# flow is here to prove.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Servicio técnico"
+    timeout: 30000
+- tapOn: "Servicio técnico"
+- extendedWaitUntil:
+    visible: "Recibir un equipo"
+    timeout: 30000
+- tapOn: "Recibir un equipo"
+
+# ── 1. Who is at the counter ───────────────────────────────────────────────
+- extendedWaitUntil:
+    visible: "Buscar por nombre, documento o teléfono"
+    timeout: 30000
+- tapOn: "Buscar por nombre, documento o teléfono"
+# A SURNAME, not the full display name. The server matches each name field on
+# its own (`first_name`, `last_name`, business name, document, phone), so the
+# whole name as one string matches nothing.
+- inputText: "Técnico"
+- hideKeyboard
+# The field holds the SAME words as the row it found, and a card is read out as
+# its lines joined by commas — so the row is matched on that joined shape, and
+# tapped by where it sits, under the field.
+- extendedWaitUntil:
+    visible: "Cliente y Técnico, .*"
+    timeout: 20000
+- tapOn: "Cliente y Técnico, .*"
+
+# ── 2. Which device ────────────────────────────────────────────────────────
+- extendedWaitUntil:
+    visible: "Equipo"
+    timeout: 20000
+- tapOn:
+    text: ".*iPhone.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Cambiar equipo"
+    timeout: 20000
+
+# ── 3. Which shop, 4. what is wrong ────────────────────────────────────────
+# Two branches exist in this backend, so the chips are drawn and one is chosen.
+- tapOn:
+    text: "Tienda principal"
+    optional: true
+- scrollUntilVisible:
+    element: "Problema reportado"
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    below: "Problema reportado"
+- inputText: "QA Maestro: el equipo no enciende."
+- hideKeyboard
+
+- scrollUntilVisible:
+    element: "Abrir la orden"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Abrir la orden"
+
+# The screen the server sends back is the order itself, numbered.
+- extendedWaitUntil:
+    visible: "SRV-[0-9]+"
+    timeout: 45000
+- takeScreenshot: artifacts/09-service-order-opened

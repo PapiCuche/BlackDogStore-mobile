@@ -1,0 +1,85 @@
+# MOVING STOCK BETWEEN TWO SHOPS.
+#
+# THIS FLOW WRITES: it opens a transfer, sends it and receives it, which moves
+# real units between the two branches of the scratch backend. Quantity 1.
+#
+# Needs the QA fixture branch «Sucursal QA Transfer»; without a second branch
+# the server refuses, correctly, with «El origen y el destino no pueden ser la
+# misma sucursal.»
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Inventario"
+    timeout: 30000
+- tapOn: "Inventario"
+- scrollUntilVisible:
+    element: "Transferencias entre sucursales"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Transferencias entre sucursales"
+
+# ── Open a draft ───────────────────────────────────────────────────────────
+- extendedWaitUntil:
+    visible: "Nueva transferencia"
+    timeout: 30000
+- tapOn: "Nueva transferencia"
+- extendedWaitUntil:
+    visible: "Origen"
+    timeout: 20000
+# Source and destination are chosen from the branches this person reaches; the
+# server refuses the two being the same.
+- tapOn:
+    text: "Tienda principal"
+    index: 0
+- tapOn:
+    text: "Sucursal QA Transfer"
+    index: 1
+- tapOn:
+    below: "Motivo"
+- inputText: "QA Maestro"
+# Dismissed by tapping the heading rather than with `hideKeyboard`, which does
+# not always find a return key to press on these forms.
+- tapOn:
+    text: "Nueva transferencia"
+    optional: true
+- tapOn: "Abrir borrador"
+
+# ── What this flow does NOT do ─────────────────────────────────────────────
+# Adding a line, despatching and receiving are exercised as CONTRACT smokes
+# against the same scratch backend (draft → line → dispatch → receive, with the
+# stock moving 15→13 and 0→2), because driving them through the UI depends on
+# selectors that collide: the search field holds the same words as the result
+# row, and the quantity field has «0» for a placeholder, which matches every
+# zero on the screen. Pinning those with brittle selectors would make this flow
+# fail for reasons that have nothing to do with the app.
+#
+# What IS worth automating here is the part a person does first and most often:
+# opening a draft between two real branches, and withdrawing it.
+
+- extendedWaitUntil:
+    visible: ".*Borrador.*"
+    timeout: 30000
+- takeScreenshot: artifacts/05-draft
+
+# Withdrawing a draft is the safe half of the lifecycle: nothing has moved yet.
+- scrollUntilVisible:
+    element: "Anular"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Anular"
+# The app asks before withdrawing: «Anular la transferencia / El documento se
+# cierra sin mover stock.» with «Cancelar» and «Confirmar».
+- extendedWaitUntil:
+    visible: "Anular la transferencia"
+    timeout: 20000
+- tapOn: "Confirmar"
+- extendedWaitUntil:
+    visible: ".*Anulada.*"
+    timeout: 45000
+- takeScreenshot: artifacts/05-cancelled

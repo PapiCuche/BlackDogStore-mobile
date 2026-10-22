@@ -1,0 +1,60 @@
+# PHOTOGRAPHING THE DEVICE — the shop's defence and the customer's.
+#
+# THIS FLOW WRITES: it uploads one photo to the service order it opens, on the
+# scratch backend.
+#
+# It goes through the REAL iOS photo picker, which is system UI outside the
+# app. The simulator ships sample photos, so the picker can be driven; nothing
+# in the app was changed to make that possible.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 09-service-intake.yaml
+
+- scrollUntilVisible:
+    element: "Añadir una foto"
+    direction: DOWN
+    timeout: 25000
+- tapOn: "Añadir una foto"
+
+# The stage decides which permission the SERVER will demand for the upload, so
+# it is chosen rather than defaulted.
+- tapOn: "Antes de reparar"
+- extendedWaitUntil:
+    visible: "Galería"
+    timeout: 20000
+- tapOn: "Galería"
+
+# ── System UI from here until the photo comes back ─────────────────────────
+- extendedWaitUntil:
+    visible: "Foto, .*"
+    timeout: 30000
+- tapOn:
+    text: "Foto, .*"
+    index: 0
+
+# The app says which file it holds, with its real name.
+- extendedWaitUntil:
+    visible: "Foto lista: .*"
+    timeout: 30000
+- tapOn:
+    below: "Qué muestra la foto."
+- inputText: "QA Maestro"
+- swipe:
+    direction: DOWN
+    duration: 600
+
+- scrollUntilVisible:
+    element: "Subir la foto"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Subir la foto"
+
+# What the SERVER now holds: the gallery counts one photo for this stage. The
+# note is not asserted here — the row shows it behind «Ver detalle».
+- extendedWaitUntil:
+    visible: "Antes de reparar · [0-9]+"
+    timeout: 60000
+- assertNotVisible: "Esta orden todavía no tiene fotos."
+- assertVisible: "Ver detalle"
+- takeScreenshot: artifacts/12-evidence-uploaded

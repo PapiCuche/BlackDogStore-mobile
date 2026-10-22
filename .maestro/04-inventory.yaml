@@ -1,0 +1,100 @@
+# STOCK, AND MOVING IT.
+#
+# THIS FLOW WRITES: it registers a real movement against the scratch backend.
+# The quantity is 1 so a failed run leaves the shelf almost where it was, and
+# the reason says who wrote it.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+# ── Fail closed ────────────────────────────────────────────────────────────
+- runFlow:
+    file: shared/open-internal.yaml
+
+# ── The figures the server computed ────────────────────────────────────────
+- extendedWaitUntil:
+    visible: "Inventario"
+    timeout: 30000
+- tapOn: "Inventario"
+- extendedWaitUntil:
+    visible: ".*Unidades en stock.*"
+    timeout: 30000
+# Two counts with two units, each named for what it is: rows that hold stock,
+# and products that are active.
+- assertVisible: ".*Registros con stock.*"
+- assertVisible: ".*Productos activos.*"
+- takeScreenshot: artifacts/04-summary
+
+# ── The stock list ─────────────────────────────────────────────────────────
+- tapOn: "Ver stock"
+- extendedWaitUntil:
+    visible: ".*AirPods.*"
+    timeout: 30000
+- takeScreenshot: artifacts/04-stock
+# iOS has no hardware back button: the app's own «Atrás» is the way out, and
+# it is what a person taps.
+- tapOn: "Atrás"
+
+# ── The kardex ─────────────────────────────────────────────────────────────
+- scrollUntilVisible:
+    element: "Ver movimientos"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Ver movimientos"
+- extendedWaitUntil:
+    visible: ".*Entrada manual.*"
+    timeout: 30000
+- takeScreenshot: artifacts/04-movements
+- tapOn: "Atrás"
+
+# ── Register one entry ─────────────────────────────────────────────────────
+- scrollUntilVisible:
+    element: "Registrar movimiento"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Registrar movimiento"
+- extendedWaitUntil:
+    visible: "Buscar producto"
+    timeout: 30000
+- tapOn: "Buscar producto"
+- inputText: "AirPods"
+- extendedWaitUntil:
+    visible: ".*AirPods.*"
+    timeout: 30000
+- tapOn: ".*AirPods Pro.*"
+
+# The type is chosen explicitly: «entrada» and «salida» are different acts and
+# the server writes down which one it was.
+- extendedWaitUntil:
+    visible: "Entrada manual"
+    timeout: 20000
+- tapOn: "Entrada manual"
+# THE LABEL IS NOT THE FIELD. «Cantidad» and «Motivo» are captions above their
+# inputs, and the inputs have no placeholder to aim at — so they are addressed
+# by position relative to the caption, which is how a person finds them too.
+- tapOn:
+    below: "Cantidad"
+- inputText: "1"
+- tapOn:
+    below: "Motivo"
+- inputText: "QA Maestro: entrada"
+# The text keyboard has a return key, so it can be dismissed properly — unlike
+# the till's numeric pad, which has none and needs a tap away instead.
+- hideKeyboard
+# TWO BUTTONS CARRY THIS NAME: the one on the inventory index that opens this
+# form, and the one that submits it. The submit is the one under the hint about
+# the Kardex, so it is addressed that way rather than by a name that matches
+# both.
+- scrollUntilVisible:
+    element: ".*Queda registrado en el Kardex.*"
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    below: ".*Queda registrado en el Kardex.*"
+
+# The server answers with the balance before and after; the screen prints it.
+- extendedWaitUntil:
+    visible: ".*Movimiento registrado.*"
+    timeout: 45000
+- takeScreenshot: artifacts/04-movement-done

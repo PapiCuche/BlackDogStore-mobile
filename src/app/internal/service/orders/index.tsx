@@ -19,6 +19,7 @@ import {
   CAP_SERVICE_ORDERS_VIEW,
 } from '@/domain/internal/service-types';
 import { hasUxCapability } from '@/domain/internal/types';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useServiceContext, useServiceOrders } from '@/hooks/use-internal-service';
 import { useInternalContext } from '@/hooks/use-internal-sales';
 import { useTheme } from '@/theme/theme-provider';
@@ -50,9 +51,12 @@ export default function ServiceOrderListScreen() {
   // and opening an order are two different permissions.
   const mayCreate = hasUxCapability(context ?? null, CAP_SERVICE_ORDERS_CREATE);
 
+  // One request per pause, not one per character.
+  const term = useDebouncedValue(search.trim(), 300);
+
   const service = useServiceContext({ enabled: mayView });
   const query = useServiceOrders(
-    { search: search.trim() || undefined, status: status ?? undefined },
+    { search: term || undefined, status: status ?? undefined },
     { enabled: mayView },
   );
   const { data, isPending, isError, error } = query;
@@ -98,28 +102,21 @@ export default function ServiceOrderListScreen() {
     );
   }
 
-  if (isPending) {
-    return (
-      <>
-        <Stack.Screen options={{ title }} />
-        <Screen scrollable>
-          <LoadingState label="Cargando órdenes" skeletonCount={4} />
-        </Screen>
-      </>
-    );
-  }
-
   return (
     <>
       <Stack.Screen options={{ title }} />
       <Screen padded={false}>
         <FlatList
-          data={data.results}
+          data={data?.results ?? []}
           keyExtractor={(order) => String(order.id)}
           ListHeaderComponent={
+            // SEARCH-KEEPS-ITS-FIELD. Drawn while the list loads: a new term is
+            // a new query key, so the query is `isPending` again, and taking
+            // the header away at that moment unmounted this input mid-word.
             <View style={{ gap: theme.spacing.sm, marginBottom: theme.spacing.md }}>
               <Text variant="footnote" color="textTertiary">
-                {data.count} {data.count === 1 ? 'orden' : 'órdenes'} · {context?.company.name}
+                {data ? `${data.count} ${data.count === 1 ? 'orden' : 'órdenes'}` : 'Buscando'} ·{' '}
+                {context?.company.name}
               </Text>
               {mayCreate ? (
                 <Button
@@ -202,15 +199,19 @@ export default function ServiceOrderListScreen() {
           ItemSeparatorComponent={() => <View style={{ height: theme.spacing.sm }} />}
           contentContainerStyle={{ padding: theme.spacing.md, flexGrow: 1 }}
           ListEmptyComponent={
-            <EmptyState
-              icon={icons.empty}
-              title="Sin órdenes"
-              message={
-                status === null
-                  ? 'Todavía no hay equipos recibidos en tus sucursales.'
-                  : 'Ninguna orden está en ese estado ahora mismo.'
-              }
-            />
+            isPending ? (
+              <LoadingState label="Cargando órdenes" skeletonCount={4} />
+            ) : (
+              <EmptyState
+                icon={icons.empty}
+                title="Sin órdenes"
+                message={
+                  status === null
+                    ? 'Todavía no hay equipos recibidos en tus sucursales.'
+                    : 'Ninguna orden está en ese estado ahora mismo.'
+                }
+              />
+            )
           }
           refreshing={query.isFetching}
           onRefresh={() => void query.refetch()}

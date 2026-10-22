@@ -1,0 +1,39 @@
+# THE INBOX — what the platform and the company have told this person.
+#
+# Read-only. It opens «Avisos», proves the screen loads for this account and
+# that the unread filter switches both ways.
+#
+# FIXTURE LIMITATION, not a defect: the QA account publishes communiqués but
+# does not RECEIVE them. `resolve_audience` writes a notice per active internal
+# member, and this account reaches the internal area as a superuser rather than
+# as a member of the company, so it is never in that list. Marking a notice as
+# read therefore cannot be exercised here; the button only exists while
+# something is unread. It needs a member account in the fixture.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- scrollUntilVisible:
+    element: "Avisos"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Avisos"
+
+- extendedWaitUntil:
+    visible: "Lo que la plataforma te ha comunicado."
+    timeout: 30000
+- takeScreenshot: artifacts/14-inbox
+
+# The filter is the screen's own state; its label says which way it is set.
+- tapOn: "Solo no leídos"
+- extendedWaitUntil:
+    visible: "Ver todos"
+    timeout: 20000
+- tapOn: "Ver todos"
+- extendedWaitUntil:
+    visible: "Solo no leídos"
+    timeout: 20000

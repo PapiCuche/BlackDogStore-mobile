@@ -1,3 +1,5 @@
+import { File } from 'expo-file-system';
+
 import { apiBaseUrl, companySlug } from '@/config/env';
 import type { RefreshCoordinator } from '@/auth/refresh-coordinator';
 import type { AccessTokenStore } from '@/auth/tokens/access-token-store';
@@ -352,15 +354,19 @@ export async function uploadInternalEvidence(
   signal?: AbortSignal,
 ): Promise<InternalEvidence> {
   const form = new FormData();
-  // React Native's `FormData` takes a file as this shape. The cast is the
-  // standard one: the DOM type describes a `Blob`, which a native file URI is
-  // not, and reading the file into memory to make one would double the cost of
-  // a 9 MB photo for no gain.
-  form.append('image', {
-    uri: upload.uri,
-    name: upload.name,
-    type: upload.mimeType,
-  } as unknown as Blob);
+  // A FILE OBJECT, not `{ uri, name, type }`.
+  //
+  // React Native's own `FormData` understood that shape, and this used to send
+  // it. Expo SDK 57 installs a WinterCG `fetch` over the whole app, and its
+  // multipart encoder accepts a string, a `Blob` or anything that can hand it
+  // `bytes()` — a bare URI is none of those, so every upload died inside the
+  // app with «Unsupported FormDataPart implementation», which the client could
+  // only report as a lost connection. Nothing ever left the device.
+  //
+  // `File` implements `Blob` and reads the photo itself; the filename and the
+  // content type come off the file on disk rather than from the picker, which
+  // is what Django's multipart parser needs to treat this part as a file.
+  form.append('image', new File(upload.uri) as unknown as Blob);
   form.append('stage', upload.stage);
   // Sent only when there is something to say: the server collapses whitespace
   // and an empty note is the absence of a note, not a note.

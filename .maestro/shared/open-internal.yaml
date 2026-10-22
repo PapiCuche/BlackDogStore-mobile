@@ -1,0 +1,25 @@
+# FAIL CLOSED, THEN GO IN.
+#
+# Every flow that writes starts here. «Estado de integración» prints the API
+# base this build RESOLVED, so the check reads the app's own answer rather than
+# trusting an environment variable the runner could have wrong.
+#
+# The guard has to scroll to the bottom of a long screen, and coming back up by
+# scrolling is position-dependent and flakes. Relaunching is deterministic: the
+# app reopens at the top, where «Área interna» is the first row.
+appId: com.blackdogstore.app
+---
+- tapOn: "Perfil"
+- scrollUntilVisible:
+    element: ".*Estado de integración.*"
+    direction: DOWN
+    timeout: 20000
+- assertNotVisible: ".*blackdogstoreperu\\.com.*"
+
+- runFlow:
+    file: ../00-connect-dev-client.yaml
+- tapOn: "Perfil"
+- extendedWaitUntil:
+    visible: ".*Área interna.*"
+    timeout: 30000
+- tapOn: ".*Área interna.*"

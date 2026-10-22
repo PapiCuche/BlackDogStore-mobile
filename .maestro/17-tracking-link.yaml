@@ -1,0 +1,45 @@
+# THE LINK THE CUSTOMER FOLLOWS, and the fact that it can be replaced.
+#
+# THIS FLOW WRITES: it reveals the tracking link of the order it opens and then
+# rotates it, which invalidates the previous one. Scratch backend only.
+#
+# Revealing is a SERVER act — `canReveal` is the server's word about this
+# person — so the flow proves the link came back from the server rather than
+# being assembled here.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 09-service-intake.yaml
+
+- scrollUntilVisible:
+    element: "Seguimiento del cliente"
+    direction: DOWN
+    timeout: 25000
+- assertVisible: "Estado del enlace de seguimiento: Enlace activo"
+- assertVisible: "Veces abierto: [0-9]+"
+
+# ── Reveal ─────────────────────────────────────────────────────────────────
+- scrollUntilVisible:
+    element: "Mostrar el enlace"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Mostrar el enlace"
+- extendedWaitUntil:
+    visible: ".*Entrégale este enlace al cliente.*"
+    timeout: 45000
+- assertVisible: "http.*"
+- takeScreenshot: artifacts/17-link-revealed
+
+# ── Replace ────────────────────────────────────────────────────────────────
+# A replaced link is a new secret: whoever held the old one loses access.
+- scrollUntilVisible:
+    element: "Reemplazar el enlace"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Reemplazar el enlace"
+- extendedWaitUntil:
+    visible: "Estado del enlace de seguimiento: Enlace activo"
+    timeout: 45000
+- takeScreenshot: artifacts/17-link-rotated

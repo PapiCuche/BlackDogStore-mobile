@@ -1,0 +1,34 @@
+# THE PLATFORM'S OWN SECTION — communiqués that cross companies.
+#
+# Read-only. The account this runs as administers the platform, so the section
+# opens; an account that does not gets an honest empty state instead, which is
+# the behaviour this flow would show up if it ever changed.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+# The badge on the hub says this account administers the platform.
+- extendedWaitUntil:
+    visible: "Administración de plataforma"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "Comunicados de plataforma"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Comunicados de plataforma"
+
+- extendedWaitUntil:
+    visible: "Mensajes que cruzan empresas."
+    timeout: 30000
+- assertNotVisible: "Sección de plataforma"
+- takeScreenshot: artifacts/15-platform-list
+
+# The status filters are the app's own words for the platform's three states.
+- tapOn: "Publicado"
+- tapOn: "Borrador"
+- tapOn: "Todos"
+- takeScreenshot: artifacts/15-platform-filtered

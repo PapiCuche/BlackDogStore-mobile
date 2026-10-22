@@ -13,6 +13,7 @@ import {
   Text,
 } from '@/design-system';
 import { CAP_SALES_ORDERS_VIEW, hasUxCapability } from '@/domain/internal/types';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useInternalContext, useInternalOrders } from '@/hooks/use-internal-sales';
 import { screenGutter } from '@/theme';
 import { useTheme } from '@/theme/theme-provider';
@@ -33,10 +34,14 @@ export default function InternalOrdersScreen() {
   const theme = useTheme();
   const [search, setSearch] = useState('');
 
+  // The term the SERVER is asked about trails the field by a moment, so one
+  // request leaves per pause instead of one per character.
+  const term = useDebouncedValue(search.trim(), 300);
+
   const { data: context, isPending: contextPending } = useInternalContext();
   const mayView = hasUxCapability(context ?? null, CAP_SALES_ORDERS_VIEW);
 
-  const query = useInternalOrders({ search: search.trim() || undefined }, { enabled: mayView });
+  const query = useInternalOrders({ search: term || undefined }, { enabled: mayView });
   const { data, isPending, isError, error } = query;
 
   if (contextPending) {
@@ -69,17 +74,6 @@ export default function InternalOrdersScreen() {
     );
   }
 
-  if (isPending) {
-    return (
-      <>
-        <Stack.Screen options={{ title: 'Pedidos' }} />
-        <Screen scrollable>
-          <LoadingState label="Cargando pedidos" skeletonCount={4} />
-        </Screen>
-      </>
-    );
-  }
-
   if (isError) {
     return (
       <>
@@ -96,12 +90,19 @@ export default function InternalOrdersScreen() {
       <Stack.Screen options={{ title: 'Pedidos' }} />
       <Screen padded={false}>
         <FlatList
-          data={data.results}
+          data={data?.results ?? []}
           keyExtractor={(order) => String(order.id)}
           ListHeaderComponent={
+            // SEARCH-KEEPS-ITS-FIELD. The header is drawn while the list is
+            // still loading on purpose. Searching changes the query key, so a
+            // new term has no cached page and the query reports `isPending`
+            // again; replacing the whole screen with a skeleton at that moment
+            // unmounted this input, which threw away the rest of the word the
+            // person was typing and dismissed the keyboard.
             <View style={{ gap: theme.spacing.sm, marginBottom: theme.spacing.md }}>
               <Text variant="footnote" color="textTertiary">
-                {data.count} {data.count === 1 ? 'pedido' : 'pedidos'} · {context?.company.name}
+                {data ? `${data.count} ${data.count === 1 ? 'pedido' : 'pedidos'}` : 'Buscando'} ·{' '}
+                {context?.company.name}
               </Text>
               <SearchInput
                 value={search}
@@ -131,11 +132,15 @@ export default function InternalOrdersScreen() {
           )}
           ItemSeparatorComponent={() => <View style={{ height: theme.spacing.sm }} />}
           ListEmptyComponent={
-            <EmptyState
-              icon={icons.orders}
-              title="Sin pedidos"
-              message="No hay pedidos que coincidan con la búsqueda."
-            />
+            isPending ? (
+              <LoadingState label="Cargando pedidos" skeletonCount={4} />
+            ) : (
+              <EmptyState
+                icon={icons.orders}
+                title="Sin pedidos"
+                message="No hay pedidos que coincidan con la búsqueda."
+              />
+            )
           }
           contentContainerStyle={{
             paddingHorizontal: screenGutter,

@@ -1,0 +1,81 @@
+# WHAT IS WRONG WITH IT — the technician's half of a repair.
+#
+# THIS FLOW WRITES: it records a diagnosis on the service order it opens, in
+# the scratch backend.
+#
+# It takes the order it just received rather than one from the board, so the
+# run never depends on which orders happen to exist.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 09-service-intake.yaml
+
+# ── Move it into diagnosis first ───────────────────────────────────────────
+# The server refuses a diagnosis on an order that is not being diagnosed:
+# «Solo se puede diagnosticar una orden que está en diagnóstico.»
+#
+# The chip is named by its LABEL. A tenant may rename what its staff read, so
+# this one word is the flow's single fixture assumption — it is the default
+# label of `diagnosing` and this backend has not renamed it. Picking the chip
+# by position instead was tried and taps «Cancelado», which closes the order.
+- scrollUntilVisible:
+    element: "Mover la orden"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "En diagnóstico"
+# The app confirms the move in a dialog, which has to be dismissed before the
+# screen scrolls again.
+- extendedWaitUntil:
+    visible: ".*ahora está en .En diagnóstico.*"
+    timeout: 30000
+- tapOn: "OK"
+
+# ── Record what was found ──────────────────────────────────────────────────
+# «Diagnóstico» sits ABOVE «Mover la orden» on this screen, so the way back to
+# it is up.
+- scrollUntilVisible:
+    element: "Registrar diagnóstico"
+    direction: UP
+    timeout: 20000
+- tapOn: "Registrar diagnóstico"
+
+- extendedWaitUntil:
+    visible: "Hallazgo"
+    timeout: 20000
+- tapOn:
+    below: "Hallazgo"
+- inputText: "QA Maestro: batería agotada."
+# DISMISS BY DRAGGING, not by tapping. These fields are multiline, so the
+# keyboard has no return key and `hideKeyboard` has nothing to press; the
+# screen dismisses on an interactive drag instead. Tapping some other text to
+# get rid of it is what went wrong first: «Guardar» sits BEHIND the keyboard,
+# so the tap landed on the letter under it and typed a «D» into the field.
+- swipe:
+    direction: DOWN
+    duration: 600
+
+# «Acción recomendada» is what gets quoted, so the server asks for it.
+- scrollUntilVisible:
+    element: "Es lo que se cotiza."
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    below: "Acción recomendada"
+- inputText: "Cambiar la batería."
+- swipe:
+    direction: DOWN
+    duration: 600
+
+- scrollUntilVisible:
+    element: "Guardar"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Guardar"
+
+# The SERVER's answer, not the form's contents: a revision number only exists
+# once the diagnosis has been written and read back.
+- extendedWaitUntil:
+    visible: "Revisión #[0-9]+.*"
+    timeout: 45000
+- assertVisible: ".*batería agotada.*"
+- takeScreenshot: artifacts/10-diagnosis-saved

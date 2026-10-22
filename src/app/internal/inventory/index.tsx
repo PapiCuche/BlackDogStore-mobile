@@ -171,9 +171,23 @@ export default function InventoryHomeScreen() {
                     emphasis="value"
                   />
                   <Divider />
+                  {/* TWO NUMBERS, TWO UNITS. `stocked_count` counts STOCK
+                      ROWS with units on them — one row per product and branch —
+                      and `active_products` counts products in the company. The
+                      summary used to print them as one fraction, which read
+                      «4 de 3» for a shop with three products, one of them held
+                      in two branches. Each is shown with its own name now, and
+                      «registros» is the word the stock list already uses for a
+                      row. */}
                   <KeyValueRow
-                    label="Productos con stock"
-                    value={`${data.stockedCount} de ${data.activeProducts}`}
+                    label="Registros con stock"
+                    value={String(data.stockedCount)}
+                    emphasis="value"
+                  />
+                  <Divider />
+                  <KeyValueRow
+                    label="Productos activos"
+                    value={String(data.activeProducts)}
                     emphasis="value"
                   />
                   <Divider />

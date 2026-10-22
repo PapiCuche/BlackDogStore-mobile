@@ -1,0 +1,86 @@
+# WHAT THE REPAIR WILL COST, and what the customer decided.
+#
+# THIS FLOW WRITES: it creates a quote with one line, sends it to the customer
+# and records an approval, on the scratch backend.
+#
+# It builds on the diagnosis flow, so it always runs against an order it opened
+# itself and left in the right state — a quote is composed while the order is
+# being diagnosed.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 10-service-diagnosis.yaml
+
+# ── Open a quote ───────────────────────────────────────────────────────────
+- scrollUntilVisible:
+    element: "Crear cotización"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Crear cotización"
+
+# ── One line: what is done, how many, at what price ────────────────────────
+- extendedWaitUntil:
+    visible: "Descripción"
+    timeout: 20000
+- tapOn:
+    below: "Descripción"
+- inputText: "Cambio de batería"
+- swipe:
+    direction: DOWN
+    duration: 600
+
+# Cantidad is left at the 1 the form starts with: typing into it APPENDS, and
+# a line of eleven batteries is not what this proves.
+- scrollUntilVisible:
+    element: "El total de la línea lo calcula el servidor."
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    below: "Precio unitario"
+- inputText: "120"
+- swipe:
+    direction: DOWN
+    duration: 600
+
+# «Añadir línea» names TWO things: the caption over the type chips and the
+# button under the price. Tapping by name hits the caption, which does nothing,
+# so the button is addressed by where it sits — right under the price hint.
+- scrollUntilVisible:
+    element: "El total de la línea lo calcula el servidor."
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    below: "El total de la línea lo calcula el servidor."
+# The TOTAL is the server's: the app sends a description, a quantity and a unit
+# price, and the money comes back computed.
+- extendedWaitUntil:
+    visible: ".*120\\.00.*"
+    timeout: 30000
+- takeScreenshot: artifacts/11-quote-line
+
+# ── Send it, then record what the customer said ────────────────────────────
+- scrollUntilVisible:
+    element: "Enviar cotización al cliente"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Enviar cotización al cliente"
+# The app says what it is about to send and asks first; the confirming button
+# is «Enviar».
+- extendedWaitUntil:
+    visible: "Enviar la cotización"
+    timeout: 20000
+- tapOn: "Enviar"
+
+- extendedWaitUntil:
+    visible: "El cliente aprobó"
+    timeout: 45000
+# Recording the decision needs no dialog: the channel is «En persona» by
+# default, which is what the counter does.
+- tapOn: "El cliente aprobó"
+
+# «Aprobado» is the state the server puts the order in once the decision is
+# recorded; the ticket appears with it.
+- extendedWaitUntil:
+    visible: "Ticket de la cotización"
+    timeout: 45000
+- takeScreenshot: artifacts/11-quote-approved

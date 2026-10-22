@@ -1,0 +1,54 @@
+# THE REPAIR BOARD.
+#
+# Read-only. It proves the three things the board is for: the list loads for
+# this company, the status chips narrow it, and an order opens.
+#
+# The chips are the TENANT's own words — the server names its statuses and this
+# app never writes them down — so the flow taps «Todas», which is the one label
+# the screen itself owns.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Servicio técnico"
+    timeout: 30000
+- tapOn: "Servicio técnico"
+- extendedWaitUntil:
+    visible: "Ver órdenes"
+    timeout: 30000
+- tapOn: "Ver órdenes"
+
+- extendedWaitUntil:
+    visible: ".*órdenes ·.*|.*orden ·.*"
+    timeout: 30000
+- takeScreenshot: artifacts/08-service-board
+
+# ── Search narrows, and gives the board back ───────────────────────────────
+- tapOn: "Buscar por número, cliente o equipo"
+- inputText: "zzz-no-existe"
+- assertVisible: "zzz-no-existe"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: ".*Sin órdenes.*"
+    timeout: 20000
+- tapOn: "zzz-no-existe"
+- eraseText
+- hideKeyboard
+- extendedWaitUntil:
+    visible: ".*órdenes ·.*|.*orden ·.*"
+    timeout: 20000
+
+# ── One order, opened ──────────────────────────────────────────────────────
+# A card is one accessibility element: number, device and status together.
+- tapOn:
+    text: "SRV-.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "SRV-[0-9]+"
+    timeout: 30000
+- takeScreenshot: artifacts/08-service-order
