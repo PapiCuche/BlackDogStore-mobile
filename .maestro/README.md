@@ -66,6 +66,8 @@ another network.
 | `28-transfer-dispatch` | Stock moved between branches, end to end. | stock |
 | `29-inventory-filters` | «Bajo mínimo» and «Sin stock», and the search. | — |
 | `30-appearance` | The theme sticks across a cold relaunch. | — |
+| `31-pos-on-order` | Selling «bajo pedido» what the shelf does not have. | sale, offer |
+| `32-order-risk` | What the shop noticed about an order, in the server's words. | — |
 
 Flows chain: `10` runs `09` first, `11` runs `10`, `16`, `20` run `11`, `21`
 runs `20`, and `22` and `27` run `21`. Each one therefore works on an order it
@@ -123,23 +125,36 @@ production, and the guard is what stops it.
 
 ## What the flows cannot cover yet
 
-- **Marking a notice as read** (`14`). The QA account publishes communiqués but
-  never receives one: the audience is the company's active internal members and
-  this account reaches the area as a superuser. It needs a member account in
-  the fixture.
-- **Reversing a service payment** (`27`). The confirming button inside the OS
-  alert carries the same word as the row's own button underneath it, and the
-  two cannot be told apart from here. Contract smoke instead.
-- **The customer address book** (`26`). The QA account is staff and has no
-  `Customer` record, so the customer surface answers 404 — correctly. It needs
-  a customer account in the fixture.
-- **Choosing a receipt type at the till.** The server decides which documents
-  exist and which may be issued; fiscal issuance is off in this fixture, so it
-  sends none and the section is not drawn. Needs a company with fiscal
-  issuance configured.
-- **Selling something «bajo pedido».** It needs a product with no stock in the
-  branch, and this fixture has none out of stock.
-- **Consuming a part on a repair.** The candidates are quote lines bound to a
-  product, and the quote form in this app cannot bind one: the backend accepts
-  `product_id` on a quote item and Mobile never sends it. A gap in the app, not
-  in the automation.
+Each of these is a property of the fixture, the platform or the system, not a
+gap in the automation.
+
+- **Consuming a part on a repair** — BACKEND_BLOCKED (BR-019). The candidates
+  are quote lines bound to a product, and binding one needs a numeric
+  `product_id`. A technician with `service.diagnostic.manage` has no authorized
+  v1 route that answers with one: the inventory surface speaks `product_slug`
+  everywhere, `parts/candidates/` only reports products already bound, and the
+  POS search would mean asking a technician for the till's capability. Mobile
+  already sends `product_id` when it has one.
+- **Marking a notice as read** — FIXTURE_LIMITATION. `active_internal_users`
+  excludes superusers deliberately, so the QA account publishes communiqués and
+  never receives one. It needs a session as an ordinary member.
+- **The customer address book and the customer's own repairs** —
+  FIXTURE_LIMITATION. The customer surface answers 404 to somebody who has
+  never bought from this shop, which is the rule working. It needs a session as
+  a customer identity; `26` asserts the app meets that 404 honestly.
+- **Identifying a device on an order** — FIXTURE_LIMITATION. It needs a
+  serialized product, stock units with serials, and a sale of one. The scratch
+  database has no serialized product and no unit at all; building all three
+  would be inventing the state the test is supposed to find.
+- **Deciding on a risky order** — FIXTURE_LIMITATION. `32` reads the real
+  assessment the server's own assessor produced, which says «No requiere
+  revisión» for this order. The decision controls appear only for an order the
+  server flags, and flagging one means inventing risk.
+- **Issuing a fiscal receipt** — EXTERNAL_INFRA_BLOCKED. Electronic issuance is
+  off on this server and the options arrive disabled with the server's own
+  sentence; `31` asserts the app shows that sentence. The internal sales note
+  is issued for real in `03` and `31`.
+- **Reversing a service payment** — SYSTEM_UI_LIMITATION. The confirming button
+  inside the OS alert carries the same word as the row's button underneath it,
+  and the alert sometimes closes between the tap and the next command. `27`
+  opens the warning on a best-effort branch and asserts the payment row.

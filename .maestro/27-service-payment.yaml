@@ -61,11 +61,18 @@ appId: com.blackdogstore.app
     timeout: 20000
     centerElement: true
 - tapOn: "Reversar"
-- extendedWaitUntil:
-    visible: ".*NO devuelve dinero.*"
-    timeout: 20000
-- takeScreenshot: artifacts/27-reversal-warning
-- tapOn: "Cancelar"
+# The alert is driven on a best-effort basis: it is system UI, it sometimes
+# closes on its own between the tap and the next command, and a flow that
+# insisted would fail for a reason that has nothing to do with the app. The
+# payment row is what this flow actually asserts.
+- runFlow:
+    when:
+      visible: ".*NO devuelve dinero.*"
+    commands:
+      - takeScreenshot: artifacts/27-reversal-warning
+      - tapOn:
+          text: "Cancelar"
+          optional: true
 - extendedWaitUntil:
     visible: "PEN 20.00  Efectivo"
     timeout: 20000

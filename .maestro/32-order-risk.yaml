@@ -1,0 +1,58 @@
+# WHAT THE SHOP NOTICED ABOUT AN ORDER, and what somebody decided.
+#
+# THIS FLOW WRITES: it records a review decision on the fixture's online order,
+# on the scratch backend. The decision is a fact about the shop's own judgement
+# and does not move the order or take money.
+#
+# The assessment itself was produced by the SERVER's own assessor
+# (`order_risk.assess`), the same one checkout calls — the level, the score and
+# the signals are its words. Nothing about risk is decided in this app.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Pedidos"
+    timeout: 30000
+- tapOn: "Pedidos"
+- extendedWaitUntil:
+    visible: ".*pedidos ·.*|.*pedido ·.*"
+    timeout: 30000
+- tapOn: ".*QA Pedido Online.*"
+- extendedWaitUntil:
+    visible: "Pedido #[0-9]+"
+    timeout: 30000
+
+# ── What was noticed ───────────────────────────────────────────────────────
+- scrollUntilVisible:
+    element: "Revisión del pedido"
+    direction: DOWN
+    timeout: 25000
+    centerElement: true
+# The level is a badge the server labelled; the reasons are its sentences.
+- assertVisible: ".*Nivel de riesgo.*"
+# The reasons are sentences the server wrote, not codes this app translates.
+- assertVisible: ".*primera compra.*"
+- takeScreenshot: artifacts/32-risk
+
+# ── And what somebody decided about it ─────────────────────────────────────
+# CONDITIONAL ON PURPOSE. The decision controls exist only while the server
+# says this order needs reviewing and this reader may decide; a low-risk order
+# reads «No requiere revisión» and offers nothing to press. Forcing an order
+# into a reviewable state would mean inventing risk, so the flow takes the
+# branch when the server offers it and skips when it does not.
+#
+# «Aprobar» records a judgement. It does not pay, ship or cancel anything.
+- runFlow:
+    when:
+      visible: "Aprobar"
+    commands:
+      - tapOn: "Aprobar"
+      - extendedWaitUntil:
+          visible: ".*dev_master.*|.*Aprobad.*"
+          timeout: 45000
+      - takeScreenshot: artifacts/32-risk-reviewed
