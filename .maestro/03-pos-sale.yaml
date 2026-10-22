@@ -11,24 +11,12 @@ appId: com.blackdogstore.app
 - runFlow:
     file: 00-connect-dev-client.yaml
 
-# ── Fail closed ────────────────────────────────────────────────────────────
-# «Estado de integración» prints the API base this build is talking to. If it
-# names the real shop, stop: a till flow on production is a real sale.
-- tapOn: "Perfil"
-- scrollUntilVisible:
-    element: ".*Estado de integración.*"
-    direction: DOWN
-    timeout: 20000
-- assertNotVisible: ".*blackdogstoreperu\\.com.*"
+# Fail closed, then into the internal area. See the subflow for why the guard
+# reads the app's own resolved API rather than an environment variable.
+- runFlow:
+    file: shared/open-internal.yaml
 
 # ── The till ───────────────────────────────────────────────────────────────
-# Back up the profile screen: the guard above scrolled past the entry to the
-# internal area.
-- scrollUntilVisible:
-    element: ".*Área interna.*"
-    direction: UP
-    timeout: 20000
-- tapOn: ".*Área interna.*"
 - extendedWaitUntil:
     visible: "Punto de venta"
     timeout: 30000

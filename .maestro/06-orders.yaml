@@ -1,0 +1,67 @@
+# THE ORDERS A SHOP ACTUALLY WORKS FROM.
+#
+# Read-only on purpose at this stage: it opens the list, proves the search
+# narrows it and comes back, then opens one order and checks that the three
+# facts staff need are on the screen — what was bought, who ordered it, and
+# where the delivery stands.
+#
+# Changing the fulfilment state is NOT driven here. Those buttons are labelled
+# with the status names the SERVER returns for this order, so a flow that taps
+# one has to know today's fixture; it would fail on a different backend for a
+# reason that is not a defect. The transition itself is covered by a contract
+# smoke.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Pedidos"
+    timeout: 30000
+- tapOn: "Pedidos"
+
+# The header counts what the server returned, so this asserts the list loaded
+# rather than that some card happens to be on screen.
+- extendedWaitUntil:
+    visible: ".*pedidos ·.*|.*pedido ·.*"
+    timeout: 30000
+- takeScreenshot: artifacts/06-orders-list
+
+# ── Search narrows, and gives the list back ────────────────────────────────
+- tapOn: "Buscar por cliente, correo o número"
+- inputText: "zzz-no-existe"
+# The WHOLE word has to survive. Searching changes the query key, and while
+# the screen replaced itself with a skeleton on every keystroke this field was
+# unmounted mid-word: everything after the first letter was lost.
+- assertVisible: "zzz-no-existe"
+# The keyboard covers the middle of the list, and an element behind it does not
+# count as visible.
+- hideKeyboard
+# `EmptyState` reads its title and message out as ONE accessibility label, so
+# the match has to be a regex rather than the title on its own.
+- extendedWaitUntil:
+    visible: ".*Sin pedidos.*"
+    timeout: 20000
+- tapOn: "zzz-no-existe"
+- eraseText
+- hideKeyboard
+- extendedWaitUntil:
+    visible: ".*pedidos ·.*|.*pedido ·.*"
+    timeout: 20000
+
+# ── One order, opened ──────────────────────────────────────────────────────
+# A card is ONE accessibility element: number, total, customer and both
+# statuses are read out together, so the match is made on the shape of that
+# whole line rather than on the order number.
+- tapOn:
+    text: ".*Pago:.*Entrega:.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Productos"
+    timeout: 30000
+- assertVisible: "Cliente"
+- assertVisible: "Entrega"
+- takeScreenshot: artifacts/06-order-detail

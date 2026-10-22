@@ -1,0 +1,56 @@
+# FINDING THE PERSON AT THE COUNTER.
+#
+# Read-only. The screen answers three questions staff ask while somebody is
+# standing there: who is this, what have they brought in before, and can I
+# start an intake for them now.
+#
+# Searching is DEBOUNCED here and the field stays mounted while the list
+# reloads, so the whole term has to survive the typing — that is asserted, not
+# assumed.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Clientes"
+    timeout: 30000
+- tapOn: "Clientes"
+
+# Without a term the server answers with the most recently registered people,
+# and the screen says so rather than looking empty.
+- extendedWaitUntil:
+    visible: ".*Sin búsqueda se muestran los últimos registrados.*"
+    timeout: 30000
+- takeScreenshot: artifacts/07-customers-initial
+
+# ── A term that matches nobody ─────────────────────────────────────────────
+- tapOn: "Nombre, documento o teléfono"
+- inputText: "zzz-no-existe"
+- assertVisible: "zzz-no-existe"
+- hideKeyboard
+- extendedWaitUntil:
+    visible: ".*Sin resultados.*"
+    timeout: 20000
+
+# ── Back to the list, then one person opened ───────────────────────────────
+- tapOn: "zzz-no-existe"
+- eraseText
+- hideKeyboard
+- extendedWaitUntil:
+    visible: ".*Sin búsqueda se muestran los últimos registrados.*"
+    timeout: 20000
+# A card is labelled with the person's NAME and nothing else, which is theirs
+# and not something a flow should hard-code. The first one is addressed by
+# where it sits instead: directly under the hint line.
+- tapOn:
+    below: "Sin búsqueda se muestran los últimos registrados."
+# Tapping a person expands what they have brought in. The intake button is the
+# reason this screen exists: it carries the customer into the service form.
+- extendedWaitUntil:
+    visible: "Recibir un equipo de este cliente"
+    timeout: 20000
+- takeScreenshot: artifacts/07-customer-devices
