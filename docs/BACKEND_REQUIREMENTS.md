@@ -49,6 +49,7 @@ y lo que queda de cada uno bloquea la superficie privada de negocio.
 | BR-016 | Consolas que **no tienen ninguna ruta v1** (catálogo, personas, ajustes, **devoluciones posventa**, alta de clientes) | INFORMATIVO — deja escrito por qué no están en la app |
 | BR-017 | **Documento impreso** de una venta de mostrador | ALTA — la app emite el comprobante y muestra su número, pero no puede entregarlo |
 | BR-018 | **Listado interno de productos** para `products.view` | ALTA — quien administra el catálogo no tiene ninguna pantalla de productos |
+| BR-019 | **Nombrar un producto** al cotizar un repuesto (`product_slug` en la línea de cotización) | ALTA — sin él ninguna línea queda ligada a un producto y el consumo de repuestos de M10 es inalcanzable desde Mobile |
 | REPORTS-01 | Las **cifras que la empresa ya calcula** (stock bajo/alto, lo más vendido, sin rotación, comisiones) | ALTA — solo `inventory/summary/` cruzó a v1; el resto es `/api/admin/` |
 
 ---
@@ -2053,6 +2054,107 @@ capacidad y un listado de catálogo no es donde se decide quién ve un costo.
 Un módulo «Productos» en el área interna para quien administra el catálogo,
 con búsqueda y ficha — hoy el catálogo solo se ve desde la caja o desde el
 stock, y cada uno pide una capacidad que esa persona puede no tener.
+
+---
+
+## BR-019 — Nombrar un producto al cotizar un repuesto
+
+**Estado:** abierto. **Superficie:** `/api/v1/internal/<empresa>/service/…`.
+**Verificado contra** `PapiCuche/BlackDogStore-web` `origin/master` `fb7fcee`
+(`store/v1_service_serializers.py`, `store/v1_service_views.py`,
+`store/v1_inventory_serializers.py`, `store/service_services.py`).
+
+### El hueco, desde el trabajo de una persona
+
+El consumo de repuestos existe entero en el backend y Mobile no puede llegar a
+él. La cadena es esta:
+
+```
+parts/candidates/  →  líneas de la cotización aprobada
+                      con item_type = PART y product NO nulo
+POST parts/        →  { quote_item_id, quantity, idempotency_key }
+```
+
+El consumo en sí NO pide `product_id`: pide la línea. El problema está una
+puerta antes — **esa línea nunca queda ligada a un producto**, porque la única
+forma de ligarla es `product_id` en la creación de la línea:
+
+```
+POST service/orders/<id>/quotes/<quote>/items/
+  { item_type, description, quantity, unit_price, product_id? }   ← numérico
+```
+
+Y quien cotiza (`service.diagnostic.manage`) no tiene ninguna ruta v1 que le
+devuelva ese número:
+
+- `inventory/stock/` (pide `inventory.view`) responde `product_slug` y
+  `product_name`; su `id` es el de `BranchStock`, no el del producto.
+- `inventory/adjustments/` y `inventory/transfers/<id>/items/` **escriben con
+  `product_slug`**: la superficie de inventario entera habla por slug.
+- `sales/pos/products/search/` sí devuelve `id`, pero pide `sales.pos.use`:
+  pedirle la capacidad de la caja a un técnico para que pueda cotizar un
+  repuesto es ampliar autoridad para rellenar un formulario.
+- `parts/candidates/` devuelve `product_id`, pero solo de líneas que YA están
+  ligadas — es circular.
+- El catálogo público solo lista lo publicado en la tienda; un repuesto de
+  taller no tiene por qué estarlo.
+
+Resultado hoy: la app puede cotizar «Cambio de batería» como mano de obra, y el
+taller no puede descontar la batería del stock desde el teléfono. El `PartUsage`
+y su movimiento `service_exit` quedan fuera de alcance, no por falta de pantalla
+sino por falta de un identificador obtenible.
+
+### Contrato mínimo requerido
+
+Lo más pequeño, y simétrico con el resto de la superficie interna: aceptar el
+**slug** en la línea de cotización.
+
+```
+POST internal/<empresa>/service/orders/<id>/quotes/<quote>/items/
+  { "item_type": "part", "description": "Batería iPhone 13",
+    "quantity": "1", "unit_price": "120.00",
+    "product_slug": "bateria-iphone-13" }        ← nuevo, alternativa a product_id
+```
+
+- Resuelto DENTRO de la empresa, como ya hace `product_id`: un slug de otra
+  empresa responde 404, no 403.
+- `product_id` sigue existiendo; esto es una alternativa, no un reemplazo.
+- Si se envían los dos y no coinciden, 400.
+
+Dos alternativas equivalentes, si el backend prefiere otra forma:
+
+1. añadir `product_id` a `V1StockRowSerializer` — una línea, pero expone el id
+   a `inventory.view`, que es más gente de la necesaria;
+2. una búsqueda de repuestos propia del servicio bajo
+   `service.diagnostic.manage`, con nombre, slug y stock de la sucursal de la
+   orden. Es la más cara y la más precisa.
+
+### Autoridad
+
+Ninguna capacidad nueva: `service.diagnostic.manage`, la que ya exige crear una
+línea de cotización. No debe exigir `inventory.view` ni `sales.pos.use`.
+
+### Qué NO debe incluir
+
+Costos ni márgenes. La línea ya lleva su `unit_price`, que es lo que el cliente
+aprueba; el costo del repuesto es `costs.view` y no se decide aquí.
+
+### Tests backend requeridos
+
+1. la línea acepta `product_slug` y queda ligada al producto correcto;
+2. un slug de otra empresa responde 404;
+3. `product_slug` y `product_id` contradictorios responden 400;
+4. crear la línea sigue exigiendo `service.diagnostic.manage` y nada más;
+5. `parts/candidates/` incluye esa línea cuando la cotización queda aprobada;
+6. `POST parts/` con esa línea descuenta stock y escribe el `service_exit`.
+
+### Trabajo Mobile que desbloquea
+
+El consumo de repuestos entero: elegir el repuesto al cotizar, y después
+descontarlo desde la pantalla de la reparación. Mobile ya envía `product_id`
+cuando lo tiene (`postServiceQuoteItem`), así que el día que exista una fuente
+autorizada del identificador el trabajo restante es la pantalla de búsqueda y
+su flujo de Maestro.
 
 ---
 

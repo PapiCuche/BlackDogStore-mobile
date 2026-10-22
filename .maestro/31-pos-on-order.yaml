@@ -1,0 +1,100 @@
+# SELLING SOMETHING THE SHELF DOES NOT HAVE — DC3, «bajo pedido».
+#
+# THIS FLOW WRITES: it charges a sale with an on-order line on the scratch
+# backend, which commits a unit of the supplier's offer.
+#
+# The fixture behind it is ordinary domain state, built with the backend's own
+# helpers: a product sold `stock_or_order` with no stock in the branch, a
+# supplier, and a valid offer with a lead time. Nothing was forced into the
+# database to make this pass.
+#
+# THE PRICE IS THE OFFER'S, not the shelf's: the shop has to buy this one in,
+# and the app prints what the server answered rather than the catalogue price.
+appId: com.blackdogstore.app
+---
+- runFlow:
+    file: 00-connect-dev-client.yaml
+
+- runFlow:
+    file: shared/open-internal.yaml
+
+- extendedWaitUntil:
+    visible: "Punto de venta"
+    timeout: 30000
+- tapOn: "Punto de venta"
+
+- extendedWaitUntil:
+    visible: "Nombre o código de barras"
+    timeout: 30000
+- tapOn: "Nombre o código de barras"
+- inputText: "QA Batería"
+- hideKeyboard
+
+# The shelf is empty, so the row offers the order instead of «Agregar».
+- extendedWaitUntil:
+    visible: ".*0 en esta sucursal.*"
+    timeout: 30000
+- assertVisible: "Bajo pedido"
+- takeScreenshot: artifacts/31-on-order-offered
+- tapOn: "Bajo pedido"
+
+# What the shop may say out loud: the plazo and the on-order price. No cost,
+# no supplier.
+- extendedWaitUntil:
+    visible: ".*días.*"
+    timeout: 20000
+- tapOn: "Agregar bajo pedido"
+
+- scrollUntilVisible:
+    element: "Calcular total"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Calcular total"
+
+# The document the shop can always issue itself. The fiscal ones depend on a
+# provider this company has not configured, and the server says which is which.
+# The receipt chips sit ABOVE the payment block, so the way to them is up.
+- scrollUntilVisible:
+    element: "Nota de venta interna"
+    direction: UP
+    timeout: 25000
+- tapOn: "Nota de venta interna"
+# When the server sends a document it cannot issue, it sends the reason with
+# it, and the app prints that sentence instead of hiding the option. Fiscal
+# issuance is off on this server, so this is what a cashier reads.
+- runFlow:
+    when:
+      visible: ".*BETA.*"
+    commands:
+      - assertVisible: ".*no está habilitada en este servidor.*"
+
+- scrollUntilVisible:
+    element: "Efectivo recibido"
+    direction: DOWN
+    timeout: 25000
+    centerElement: true
+- tapOn:
+    below: "Efectivo recibido"
+- inputText: "200"
+- swipe:
+    direction: DOWN
+    duration: 600
+
+- scrollUntilVisible:
+    element: "Cobrar"
+    direction: DOWN
+    timeout: 20000
+    centerElement: true
+- tapOn: "Cobrar"
+- extendedWaitUntil:
+    visible: "Confirmar y cobrar"
+    timeout: 20000
+- tapOn: "Confirmar y cobrar"
+
+# The sale the server wrote, with its own number.
+- extendedWaitUntil:
+    visible: "Comprobante"
+    timeout: 60000
+- assertVisible: ".*NV-.*"
+- takeScreenshot: artifacts/31-on-order-sold
